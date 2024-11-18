@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import logo from './assets/mps_logo.jpg';
+import { useNavigate } from 'react-router-dom';
 
 const SignInPage = () => {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -13,6 +15,7 @@ const SignInPage = () => {
     e.preventDefault();
     // Handle sign-in logic here
     console.log('Form submitted:', formData);
+    navigate('/dashboard');
   };
 
   const handleChange = (e) => {
@@ -22,9 +25,14 @@ const SignInPage = () => {
       [name]: type === 'checkbox' ? checked : value,
     }));
   };
-
+  
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div
+    className="min-h-screen flex items-center justify-center bg-cover bg-center"
+    style={{
+      backgroundImage: `url('https://mps-gh.com/wp-content/uploads/elementor/thumbs/Cranes-STS-1-onu0r70cfdro22gv3j3r7coet6iuhy8k3sawsnfejy.jpg')`,
+    }}
+  >
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
         {/* Logo Section */}
         <div className="flex justify-center mb-0"> {/* Reduce margin-bottom to mb-4 */}
