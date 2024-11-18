@@ -11,8 +11,8 @@ function App() {
       <Routes>
         <Route path="/" element={<SignInPage />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        {/*<Route path="/view-permits" element={<ViewPermits />} />
-        <Route path="/approval-history" element={<ApprovalHistory />} />
+        <Route path="/view-permits" element={<ViewPermits />} />
+        {/*<Route path="/approval-history" element={<ApprovalHistory />} />
         <Route path="/view-jobs" element={<ViewJobs />} /> */}
       </Routes>
     </BrowserRouter>
