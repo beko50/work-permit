@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate,Routes,Route,useLocation } from 'react-router-dom';
+import { useNavigate,Routes,Route,useLocation,Outlet } from 'react-router-dom';
+import ViewPermits from './ViewPermits';
 import Home from './Home';
 
 const SidebarItem = ({ icon, label, isOpen, onClick, children, isActive, path }) => {
@@ -54,6 +55,10 @@ const Dashboard = () => {
 
   const toggleMenu = (menuName) => {
     setExpandedMenu(expandedMenu === menuName ? null : menuName);
+  };
+
+  const navigateToPath = (path) => {
+    navigate(path);
   };
 
   return (
@@ -144,7 +149,7 @@ const Dashboard = () => {
               >
                 <div 
                   className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
-                  onClick={() => navigate('/view-permits')}
+                  onClick={() => navigate('/dashboard/my-tasks/view-permits')}
                 >
                   View Permits
                 </div>
@@ -182,12 +187,7 @@ const Dashboard = () => {
 
         {/* Main Content Area */}
         <main className="flex-1 p-6">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/view-permits" element={<div>View Permits Content</div>} />
-            <Route path="/approval-history" element={<div>Approval History Content</div>} />
-            <Route path="/view-jobs" element={<div>View Jobs Content</div>} />
-          </Routes>
+            <Outlet />
         </main>
       </div>
     </div>

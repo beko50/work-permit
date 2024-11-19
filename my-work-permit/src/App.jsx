@@ -4,6 +4,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import SignInPage from './SignInPage';
 import Dashboard from './Dashboard';
+import Home from './Home';
 import ViewPermits from './ViewPermits';
 
 function App() {
@@ -11,10 +12,14 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<SignInPage />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/view-permits" element={<ViewPermits />} />
-        {/*<Route path="/approval-history" element={<ApprovalHistory />} />
-        <Route path="/view-jobs" element={<ViewJobs />} /> */}
+        <Route path="/dashboard" element={<Dashboard />}>
+          <Route index element={<Home />} />
+          <Route path="my-tasks">
+            <Route path="view-permits" element={<ViewPermits />} />
+            {/*<Route path="approval-history" element={<div>Approval History Content</div>} />
+            <Route path="view-jobs" element={<div>View Jobs Content</div>} /> */}
+          </Route>
+        </Route>
       </Routes>
     </BrowserRouter>
   );
