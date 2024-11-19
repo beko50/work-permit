@@ -4,6 +4,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import SignInPage from './SignInPage';
 import Dashboard from './Dashboard';
+import ViewPermits from './ViewPermits';
 
 function App() {
   return (

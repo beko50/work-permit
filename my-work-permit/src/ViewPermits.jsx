@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
-import { Button, IconButton } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/form';
-import { Table, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
-import { ExportToExcel } from '@/components/ui/export';
-import { Refresh, Withdraw, Delete, PreventEmail } from '@/components/ui/actions';
+import { Card, CardHeader, CardContent, CardTitle } from './components/ui/card';
+import { Button, IconButton } from './components/ui/button';
+import { Input, Select } from './components/ui/form';
+import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
+import { ExportToExcel } from './components/ui/export';
+import { Refresh, Withdraw, Delete, PreventEmail } from './components/ui/actions';
 
 const ViewPermits = () => {
   const location = useLocation();
