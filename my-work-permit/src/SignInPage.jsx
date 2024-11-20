@@ -152,11 +152,11 @@ const SignInPage = () => {
       Sign In
     </button>
     <div className="text-sm text-center">
-      <span>New User? </span>
-      <a href="#" className="font-medium text-blue-600 hover:text-blue-500 underline">
-        SIGN UP
-      </a>
-    </div>
+    <span>New User? </span>
+    <a href="/sign-up" className="font-medium text-blue-600 hover:text-blue-500 underline">
+      SIGN UP
+    </a>
+  </div>
   </form>
 </div>
     </div>

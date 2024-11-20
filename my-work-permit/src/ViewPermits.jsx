@@ -14,16 +14,16 @@ const ViewPermits = () => {
   });
 
   const permits = [
-    { id: 'C95-1', status: 'Expired', statusCn: '规流', company: 'Yau Lee Construction', jobDescription: 'engineer permit', po: '351', startDate: '2/20/2024', endDate: '7/12/2023', finishDate: '7/12/2023' },
-    { id: 'C96-1', status: 'Approved', statusCn: '已批准', company: 'Wan Chung Construction', jobDescription: 'engineer permit', po: '351', startDate: '8/28/2024', endDate: '7/12/2023', finishDate: '7/12/2023' },
-    { id: 'C97-1', status: 'For approval', statusCn: '待审批', company: 'Wan Chung Construction', jobDescription: 'engineer permit', po: '351', startDate: '10/30/2024', endDate: '7/12/2023', finishDate: '7/12/2023' }
+    { id: 'C95-1', status: 'Rejected', company: 'MPS Ghana Ltd', jobDescription: 'Internal job', receiverName: 'Bernard Ofori', startDate: '2/20/2024', endDate: '7/12/2023', finishDate: '7/12/2023' },
+    { id: 'C96-1', status: 'Approved', company: 'MTN Ghana', jobDescription: 'Fix Network', receiverName: 'Yaw Sarpong', startDate: '8/28/2024', endDate: '7/12/2023', finishDate: '7/12/2023' },
+    { id: 'C97-1', status: 'Pending', company: 'Epsin Company', jobDescription: 'Check RTG and STS', receiverName: 'Dennis Appiah', startDate: '10/30/2024', endDate: '7/12/2023', finishDate: '7/12/2023' }
   ];
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Expired': return 'text-red-500';
+      case 'Rejected': return 'text-red-500';
       case 'Approved': return 'text-green-500';
-      case 'For approval': return 'text-orange-500';
+      case 'Pending': return 'text-orange-500';
       default: return 'text-gray-500';
     }
   };
@@ -73,7 +73,7 @@ const ViewPermits = () => {
                 <TableCell>Request#</TableCell>
                 <TableCell>Company</TableCell>
                 <TableCell>Job Description</TableCell>
-                <TableCell>PO</TableCell>
+                <TableCell>Permit Receiver</TableCell>
                 <TableCell>Start Date</TableCell>
                 <TableCell>End Date</TableCell>
                 <TableCell>Finish Date</TableCell>
@@ -92,7 +92,7 @@ const ViewPermits = () => {
                   </TableCell>
                   <TableCell>{permit.company}</TableCell>
                   <TableCell>{permit.jobDescription}</TableCell>
-                  <TableCell>{permit.po}</TableCell>
+                  <TableCell>{permit.receiverName}</TableCell>
                   <TableCell>{permit.startDate}</TableCell>
                   <TableCell>{permit.endDate}</TableCell>
                   <TableCell>{permit.finishDate}</TableCell>
