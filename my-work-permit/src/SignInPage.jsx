@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import logo from './assets/mps_logo.jpg';
+import backgroundImage from './assets/background_1.jpg';
 import { useNavigate } from 'react-router-dom';
 
 const SignInPage = () => {
@@ -29,12 +30,13 @@ const SignInPage = () => {
 
   
   return (
-    <div
-    className="min-h-screen flex items-center justify-center bg-cover bg-center"
-    // style={{
-    // backgroundImage: `url('https://mps-gh.com/wp-content/uploads/elementor/thumbs/Cranes-STS-1-onu0r70cfdro22gv3j3r7coet6iuhy8k3sawsnfejy.jpg')`,
-    // }}
-  >
+      <div
+        className="min-h-screen flex items-center justify-center bg-cover bg-center"
+        style={{
+          backgroundImage: `url(${backgroundImage})`,
+        }}
+      >
+
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
         {/* Logo Section */}
         <div className="flex justify-center mb-0"> {/* Reduce margin-bottom to mb-4 */}
