@@ -7,6 +7,7 @@ import Dashboard from './Dashboard';
 import Home from './Home';
 import ViewPermits from './ViewPermits';
 import JobPermit from './JobPermit';
+import PermitForm from './PermitForm';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route index element={<Home />} />
           <Route path="permits">
             <Route path="job-permits" element={<JobPermit />} />
+            <Route path="job-permits/create" element={<PermitForm />} />
             <Route path="permit-to-work" element={<div>Permit to Work Content</div>} />
           </Route>
           <Route path="my-tasks">

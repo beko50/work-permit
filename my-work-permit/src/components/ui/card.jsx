@@ -4,8 +4,10 @@ export const Card = ({ children, className = '' }) => (
   <div className={`bg-white rounded-lg shadow ${className}`}>{children}</div>
 );
 
-export const CardHeader = ({ children }) => (
-  <div className="px-6 py-4 border-b">{children}</div>
+export const CardHeader = ({ children, className = '' }) => (
+  <div className={`flex justify-between items-center px-6 py-4 border-b ${className}`}>
+    {children}
+  </div>
 );
 
 export const CardContent = ({ children }) => (

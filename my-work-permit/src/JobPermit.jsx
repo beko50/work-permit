@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Input, Select } from './components/ui/form';
@@ -6,7 +7,9 @@ import { Table, TableHead, TableBody, TableRow, TableCell } from './components/u
 import { RefreshCw, PlusCircle, XCircle } from 'lucide-react';
 
 const JobPermit = () => {
+  const navigate = useNavigate();
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isPermitFormOpen, setIsPermitFormOpen] = useState(false);
   const [searchParams, setSearchParams] = useState({
     requestId: '', 
     contractor: '',
@@ -15,6 +18,9 @@ const JobPermit = () => {
     startDate: '11/18/2023',
     endDate: '12/18/2024'
   });
+  const handleCreatePermit = () => {
+    navigate('/dashboard/permits/job-permits/create');
+  };
 
   const permits = [
     { id: 'C95-1', status: 'Rejected', company: 'MPS Ghana Ltd', jobDescription: 'Internal job', receiverName: 'Bernard Ofori', startDate: '2/20/2024', endDate: '7/12/2023', finishDate: '7/12/2023' },
@@ -127,7 +133,7 @@ const JobPermit = () => {
             <Button
               variant='secondary' 
               className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
-              onClick={() => console.log('create')}
+              onClick={handleCreatePermit}
             >
               <PlusCircle className="w-4 h-4" />
               CREATE PERMIT
