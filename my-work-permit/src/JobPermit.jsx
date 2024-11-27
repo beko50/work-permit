@@ -5,6 +5,7 @@ import { Button } from './components/ui/button';
 import { Input, Select } from './components/ui/form';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
 import { RefreshCw, PlusCircle, XCircle } from 'lucide-react';
+import PermitForm from './PermitForm';
 
 const JobPermit = () => {
   const navigate = useNavigate();
