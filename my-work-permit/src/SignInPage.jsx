@@ -56,7 +56,7 @@ const SignInPage = () => {
       {/* Add email input field */}
       <input
         id="email"
-        type="text"
+        type="email"
         name="email"
         value={formData.email}
         onChange={handleChange}

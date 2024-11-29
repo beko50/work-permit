@@ -154,7 +154,7 @@ const JobPermit = () => {
             <TableHead>
               <TableRow>
                 <TableCell className="w-8">
-                  <input type="checkbox" className="rounded border-gray-300" />
+                  <input type="checkbox" className="cursor-pointer rounded border-gray-300" />
                 </TableCell>
                 <TableCell>
                 <Button variant="ghost" className="text-sm font-medium">
@@ -173,7 +173,7 @@ const JobPermit = () => {
               <TableBody>
                 {permits.map((permit) => (
                   <TableRow key={permit.id}>
-                    <TableCell><input type="checkbox" className="rounded border-gray-300" /></TableCell>
+                    <TableCell><input type="checkbox" className=" cursor-pointer rounded border-gray-300" /></TableCell>
                     <TableCell><Button variant="ghost" className="text-sm">ACTIONS ▼</Button></TableCell>
                     <TableCell>
                       <div className="flex flex-col">

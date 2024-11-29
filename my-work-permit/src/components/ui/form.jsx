@@ -25,7 +25,7 @@ export const Select = ({ label, value, onChange, options, placeholder }) => (
       onChange={onChange}
       className="px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
     >
-      {placeholder && <option value="">{placeholder}</option>}
+      {placeholder && <option value="" disabled className=' cursor-not-allowed bg-gray-500 bg-opacity-30 text-white' >{placeholder}</option>}
       {options.map((option, index) => (
         <option key={index} value={option}>
           {option}
