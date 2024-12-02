@@ -61,6 +61,10 @@ const Dashboard = () => {
     navigate(path);
   };
 
+  const toggleSidebar = () => {
+    setIsSidebarOpen(!isSidebarOpen);
+  };
+  
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
@@ -170,7 +174,7 @@ const Dashboard = () => {
                 </div>
                 <div 
                   className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
-                  onClick={() => navigate('/approval-history')}
+                  onClick={() => navigate('/dashboard/my-tasks/approval-history')}
                 >
                   Approval History
                 </div>

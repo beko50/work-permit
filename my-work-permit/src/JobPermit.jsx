@@ -86,7 +86,7 @@ const JobPermit = () => {
                   />
                 </div>
                 <div className="col-span-6 flex items-center gap-2 pl-20">
-                  <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Sort date:</span>
+                  <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Filter date:</span>
                   <div className="flex-1 flex gap-2">
                     <Input 
                       type="date" 

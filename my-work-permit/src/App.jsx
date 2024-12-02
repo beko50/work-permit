@@ -8,6 +8,7 @@ import Home from './Home';
 import ViewPermits from './ViewPermits';
 import JobPermit from './JobPermit';
 import PermitForm from './PermitForm';
+import ApprovalHistory from './ApprovalHistory';
 
 function App() {
   return (
@@ -24,7 +25,7 @@ function App() {
           </Route>
           <Route path="my-tasks">
             <Route path="view-permits" element={<ViewPermits />} />
-            <Route path="approval-history" element={<div>Approval History Content</div>} />
+            <Route path="approval-history" element={<ApprovalHistory />} />
           </Route>
         </Route>
       </Routes>
