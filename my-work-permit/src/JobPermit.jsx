@@ -12,7 +12,7 @@ const JobPermit = () => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isPermitFormOpen, setIsPermitFormOpen] = useState(false);
   const [searchParams, setSearchParams] = useState({
-    requestId: '', 
+    permitId: '', 
     contractor: '',
     company: '',
     status: '',
@@ -47,9 +47,9 @@ const JobPermit = () => {
             <div className="flex gap-4">
               <div className="flex-1">
                 <Input 
-                  placeholder="Search permit ID number" 
-                  value={searchParams.requestId} 
-                  onChange={(e) => setSearchParams({ ...searchParams, requestId: e.target.value })} 
+                  placeholder="Search Permit ID number" 
+                  value={searchParams.permitId} 
+                  onChange={(e) => setSearchParams({ ...searchParams, permitId: e.target.value })} 
                   className="w-full"
                 />
               </div>
