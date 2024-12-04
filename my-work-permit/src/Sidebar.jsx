@@ -3,9 +3,9 @@ import { useNavigate,Routes,Route,useLocation,Outlet } from 'react-router-dom';
 import ViewPermits from './ViewPermits';
 import Home from './Home';
 
-const SidebarItem = ({ icon, label, isOpen, onClick, children, isActive, path }) => {
-    const activeClass = isActive ? 'border-r-4 border-blue-500 bg-blue-50' : '';
-    const activeTextClass = isActive ? 'text-blue-500' : 'text-gray-700';
+const SidebarItem = ({ icon, label, isOpen, onClick, children, isActive, path, isCreatePermitActive }) => {
+    const activeClass = isActive || isCreatePermitActive ? 'border-r-4 border-blue-500 bg-blue-50' : '';
+    const activeTextClass = isActive || isCreatePermitActive ? 'text-blue-500' : 'text-gray-700';
 
 
   return (
@@ -62,7 +62,7 @@ const Dashboard = () => {
   };
 
   const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
+    setSidebarOpen(!isSidebarOpen);
   };
   
   return (
@@ -72,7 +72,7 @@ const Dashboard = () => {
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center space-x-4">
             <button 
-              onClick={() => setSidebarOpen(!isSidebarOpen)}
+              onClick={toggleSidebar}
               className="p-2 rounded-md hover:bg-gray-100 lg:hidden"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -133,17 +133,18 @@ const Dashboard = () => {
                         <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
                     </svg>
                 } 
-                label="Permits"
+                label="Permits Request"
                 isOpen={expandedMenu === 'permits'}
                 onClick={() => toggleMenu('permits')}
                 isActive={['/dashboard/permits/job-permits', '/dashboard/permits/permit-to-work'].includes(location.pathname)}
+                isCreatePermitActive={location.pathname === '/dashboard/permits/job-permits/create'}
                 path={location.pathname}
               >
                 <div 
                     className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
                     onClick={() => navigate('/dashboard/permits/job-permits')}
                 >
-                    Job Permits
+                    Job Safety Permits
                 </div>
                 <div 
                     className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
@@ -163,7 +164,7 @@ const Dashboard = () => {
                 label="My Tasks"
                 isOpen={expandedMenu === 'myTasks'}
                 onClick={() => toggleMenu('myTasks')}
-                isActive={['/view-permits', '/approval-history', '/view-jobs'].includes(location.pathname)}
+                isActive={['/view-permits','/permit-to-work', '/approval-history', '/view-jobs'].includes(location.pathname)}
                 path={location.pathname}
               >
                 <div 
@@ -196,6 +197,26 @@ const Dashboard = () => {
               ©2024 Copyright version 0.1
             </div>
           </div>
+          {/* Toggle button */}
+          <button
+            onClick={toggleSidebar}
+            className="absolute top-5 -right-4 bg-white p-2 rounded-full shadow hover:bg-gray-100 focus:outline-none z-10"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d={isSidebarOpen ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'}
+              />
+            </svg>
+          </button>
         </aside>
 
         {/* Main Content Area */}

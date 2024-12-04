@@ -457,10 +457,15 @@ const handleInputChange = (field, value) => {
   const handleSubmit = async () => {
     try {
       setIsSubmitting(true);
-      // Save form data to database
       console.log('Submitting form data:', formData);
-      // Navigate to next page
-      navigate('/dashboard/permits/job-permits/create/step2', { state: { formData } });
+  
+      // Simulate saving form data to the database
+      await new Promise(resolve => setTimeout(resolve, 1000));
+  
+      // Navigate to success page with success status
+      navigate('/dashboard/permits/job-permits/success', { 
+        state: { success: true } 
+      });
     } catch (error) {
       console.error('Error creating permit:', error);
     } finally {

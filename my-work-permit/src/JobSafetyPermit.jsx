@@ -7,7 +7,7 @@ import { Table, TableHead, TableBody, TableRow, TableCell } from './components/u
 import { RefreshCw, PlusCircle, XCircle } from 'lucide-react';
 import PermitForm from './PermitForm';
 
-const JobPermit = () => {
+const JobSafetyPermit = () => {
   const navigate = useNavigate();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isPermitFormOpen, setIsPermitFormOpen] = useState(false);
@@ -24,9 +24,9 @@ const JobPermit = () => {
   };
 
   const permits = [
-    { id: 'C95-1', status: 'Rejected', company: 'MPS Ghana Ltd', jobDescription: 'Internal job', receiverName: 'Bernard Ofori', startDate: '2/20/2024', endDate: '7/12/2023', finishDate: '7/12/2023' },
-    { id: 'C96-1', status: 'Approved', company: 'MTN Ghana', jobDescription: 'Fix Network', receiverName: 'Yaw Sarpong', startDate: '8/28/2024', endDate: '7/12/2023', finishDate: '7/12/2023' },
-    { id: 'C97-1', status: 'Pending', company: 'Epsin Company', jobDescription: 'Check RTG and STS', receiverName: 'Dennis Appiah', startDate: '10/30/2024', endDate: '7/12/2023', finishDate: '7/12/2023' }
+    { id: 'C95-1', status: 'Rejected', company: 'MPS Ghana Ltd', jobDescription: 'Internal job', receiverName: 'Bernard Ofori', submissionDate: '2/20/2024'},
+    { id: 'C96-1', status: 'Approved', company: 'MTN Ghana', jobDescription: 'Fix Network', receiverName: 'Yaw Sarpong', submissionDate: '8/28/2024'},
+    { id: 'C97-1', status: 'Pending', company: 'Epsin Company', jobDescription: 'Check RTG and STS', receiverName: 'Dennis Appiah', submissionDate: '10/30/2024'}
   ];
 
   const getStatusColor = (status) => {
@@ -118,7 +118,7 @@ const JobPermit = () => {
       {/* Main Content Card */}
       <Card>
         <CardHeader>
-          <h1 className="text-2xl font-semibold">Job Permits</h1>
+          <h1 className="text-2xl font-semibold">Job Safety Permits</h1>
         </CardHeader>
         <CardContent className="p-4">
           {/* Action Buttons */}
@@ -165,9 +165,8 @@ const JobPermit = () => {
                 <TableCell className="text-base font-medium">Company</TableCell>
                 <TableCell className="text-base font-medium">Job Description</TableCell>
                 <TableCell className="text-base font-medium">Permit Receiver</TableCell>
-                <TableCell className="text-base font-medium">Start Date</TableCell>
-                <TableCell className="text-base font-medium">End Date</TableCell>
-                <TableCell className="text-base font-medium">Finish Date</TableCell>
+                <TableCell className="text-base font-medium">Submission Date</TableCell>
+                
               </TableRow>
             </TableHead>
               <TableBody>
@@ -184,9 +183,7 @@ const JobPermit = () => {
                     <TableCell>{permit.company}</TableCell>
                     <TableCell>{permit.jobDescription}</TableCell>
                     <TableCell>{permit.receiverName}</TableCell>
-                    <TableCell>{permit.startDate}</TableCell>
-                    <TableCell>{permit.endDate}</TableCell>
-                    <TableCell>{permit.finishDate}</TableCell>
+                    <TableCell>{permit.submissionDate}</TableCell>
                   </TableRow>
                   ))}
                 </TableBody>
@@ -201,4 +198,4 @@ const JobPermit = () => {
   );
 };
 
-export default JobPermit;
+export default JobSafetyPermit;

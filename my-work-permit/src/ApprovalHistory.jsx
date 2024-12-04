@@ -124,22 +124,18 @@ const ApprovalHistory = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell className="w-8">
-                  <input type="checkbox" className="rounded border-gray-300" />
-                </TableCell>
                 <TableCell className="text-base font-medium">Approvals</TableCell>
-                <TableCell className="text-base font-medium">Permit Type</TableCell>
                 <TableCell className="text-base font-medium">Permit ID</TableCell>
+                <TableCell className="text-base font-medium">Permit Type</TableCell>
                 <TableCell className="text-base font-medium">Task Name</TableCell>
                 <TableCell className="text-base font-medium">Content </TableCell>
-                <TableCell className="text-base font-medium">Approver</TableCell>
+                <TableCell className="text-base font-medium">Approver(s)</TableCell>
                 <TableCell className="text-base font-medium">Received Date</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {approvalHistory.map((item, index) => (
                 <TableRow key={index}>
-                  <TableCell><input type="checkbox" className="rounded border-gray-300" /></TableCell>
                   <TableCell>
                   <Button
                   variant="primary"
@@ -148,8 +144,8 @@ const ApprovalHistory = () => {
                   <Eye size={14} className="mr-1" /> View
                 </Button>
                   </TableCell>
-                  <TableCell>{item.workflowName}</TableCell>
                   <TableCell>{item.permitId}</TableCell>
+                  <TableCell>{item.workflowName}</TableCell>
                   <TableCell>{item.taskName}</TableCell>
                   <TableCell>{item.content}</TableCell>
                   <TableCell>{item.approver}</TableCell>

@@ -5,10 +5,10 @@ const StatusCard = ({ title, data }) => {
   const totalSummary = data.reduce((total, item) => total + item.summary, 0);
 
   return (
-    <div className="bg-white rounded-lg shadow border">
-      <div className="p-4 border-b">
+    <div className="bg-white rounded-lg shadow-md border-gray-200 border">
+      <div className="p-4 border-b border-gray-200">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-semibold">
+          <h2 className="text-lg font-semibold text-gray-900">
             {title} <span className="text-gray-500 text-sm">({totalSummary})</span>
           </h2>
         </div>
@@ -18,11 +18,11 @@ const StatusCard = ({ title, data }) => {
         </div>
       </div>
       <div className="p-4">
-        <div className="divide-y">
+        <div className="divide-y divide-gray-200">
           {data.map(({ status, summary }) => (
-            <div key={status} className="py-2 flex justify-between">
-              <span className="text-gray-600">{status}</span>
-              <span className="font-medium">{summary}</span>
+            <div key={status} className="py-2 flex justify-between items-center">
+              <span className="text-gray-600 font-medium">{status}</span>
+              <span className="font-medium text-gray-800">{summary}</span>
             </div>
           ))}
         </div>
@@ -46,21 +46,12 @@ const Home = () => {
   ];
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-2">Welcome to your Dashboard</h1>
-        <p className="text-gray-600">Here's an overview of your Permits to Work and Jobs in the last 30 days</p>
-      </div>
-      
+    <div className="p-6">
+      <h1 className="text-2xl font-semibold text-gray-900 mb-4">Welcome to your Dashboard</h1>
+      <p className="text-gray-600 mb-3">Here's an overview of your Permits to Work and Jobs in the last 30 days</p>
       <div className="grid md:grid-cols-2 gap-6">
-        <StatusCard 
-          title="Permit To Work"  
-          data={ptw}
-        />
-        <StatusCard 
-          title="Jobs" 
-          data={jobs}
-        />
+        <StatusCard title="Permit To Work" data={ptw} />
+        <StatusCard title="Jobs" data={jobs} />
       </div>
     </div>
   );

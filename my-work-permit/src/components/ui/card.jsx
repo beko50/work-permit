@@ -17,3 +17,7 @@ export const CardContent = ({ children }) => (
 export const CardTitle = ({ children }) => (
   <h3 className="text-xl font-semibold text-gray-900">{children}</h3>
 );
+
+export const CardFooter = ({ children, className = '' }) => (
+  <div className={`border-t p-4 ${className}`}>{children}</div>
+);
