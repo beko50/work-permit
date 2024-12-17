@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent, CardFooter } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
+import { RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
 import Tabs from './components/ui/tabs';
 
 const PermitToWork = () => {
@@ -50,6 +51,87 @@ const PermitToWork = () => {
     { value: 'revoked-rejected', label: 'Revoked/Rejected' }
   ];
 
+  const Dropdown = ({ 
+    children, 
+    options, 
+    onSelect, 
+    className = '' 
+  }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleSelect = (selectedOption) => {
+    onSelect(selectedOption);
+    setIsOpen(false);
+  };
+  
+  return (
+    <div ref={dropdownRef} className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+      >
+        <span className="text-sm font-medium">Actions</span>
+        <ChevronDown className="h-5 w-5 text-blue-500" />
+      </button>
+      {isOpen && (
+        <ul className="absolute z-10 w-48 border rounded-md mt-2 bg-gray-50 shadow-lg overflow-auto">
+          {options.map((option) => (
+            <li
+              key={option}
+              onClick={() => handleSelect(option)}
+              className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+            >
+              {option}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Rejected': return 'text-red-500';
+      case 'Approved': return 'text-green-500';
+      case 'Pending': return 'text-orange-500';
+      default: return 'text-gray-500';
+    }
+  };
+
+  const handleDropdownAction = (action, permitId) => {
+    switch (action) {
+      case 'View':
+        console.log(`Viewing permit: ${permitId}`);
+        break;
+      case 'Request PTW':
+        console.log(`Requesting permit: ${permitId}`);
+        navigate(`/dashboard/permits/job-permits/ptw/${permitId}`);
+        break;
+      case 'Print':
+        console.log(`Printing permit: ${permitId}`);
+        // Add your print logic here
+        break;
+      default:
+        console.log(`Unknown action: ${action}`);
+    }
+  };
+
   return (
     <div className="mt-6">
       <Card>
@@ -80,7 +162,13 @@ const PermitToWork = () => {
                 approvedSafetyPermits.map((permit) => (
                   <TableRow key={permit.id}>
                     <TableCell>
-                      <Button variant="ghost" className="text-sm">ACTIONS ▼</Button>
+                    <Dropdown
+                      options={['View','Edit / Permit Extension']}
+                      onSelect={(action) => handleDropdownAction(action, permit.id)}
+                      className="text-sm font-medium"
+                    >
+                      Actions
+                    </Dropdown>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">

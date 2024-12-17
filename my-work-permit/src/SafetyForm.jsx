@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader } from "./components/ui/card";
 import { Button } from "./components/ui/button";
+import { Dialog } from './components/ui/dialog';
 import Input from "./components/ui/input";
 import { X, CloudUpload } from 'lucide-react';
 import { Dropdown } from './components/ui/dropdown';
@@ -9,15 +10,17 @@ import logo from './assets/mps_logo.jpg';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { addMinutes, format } from 'date-fns';
+import { Formik, Form, Field } from 'formik';
+import SafetyFormValidation, { calculatePermitDuration } from './SafetyFormValidation';
 
-const PermitForm = () => {
+const SafetyForm = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     // Section 1 fields
-    startDate: new Date(),
-    startTime: new Date(),
-    endDate: new Date(),
-    endTime: new Date(),
+    startDate: null,
+    startTime: null,
+    endDate: null,
+    endTime: null,
     permitDuration: '',
     department: '',
     jobLocation: '',
@@ -31,7 +34,7 @@ const PermitForm = () => {
     staffID: '',
     riskAssessment: [],
     permitRequired: [],
-    numberofWorkers:'',
+    numberOfWorkers:'',
     workerDetails:[],
     // Section 3 fields
     hazardIdentification:[],
@@ -46,6 +49,7 @@ const PermitForm = () => {
     breakPreparation:[],
   });
 
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [currentSection, setCurrentSection] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fileToUpload, setFileToUpload] = useState([]);
@@ -59,6 +63,7 @@ const PermitForm = () => {
 
 
   const departmentOptions = ['IT', 'Operations', 'Asset Maintenance', 'QHSSE'];
+  const jobLocationOptions = ['Gates','Authorities Building','MPS Admin Building','Workshop Building','Scanners Area','OCR Area','Inspection Platform','Yard','Quayside','Powerhouse','Fuel Station']
   const jobCompanyOptions = ['Contract Company','MPS Employee'];
   const permitTypes = ['Civil Work','Excavation','Confined Space','Electrical Work','Work at Height','Hazardous/Dangerous Substance','On/Near Water','Hot Work','Pressure Systems'];
   const hazardOptions = ['Fall from-height','Hazardous substances','Buried Services','Gas/Fumes','Environmental Pollution','Lone working','Overhead Services','Oxygen deficiency','Improper Communication',
@@ -84,7 +89,9 @@ const PermitForm = () => {
   const breakPreparationOptions = ['Clean','Depressurize','Drain/Vent','Cool/Warm','Purge free from hazardous substances','Other (Specify)']
   
 
-const handleInputChange = (field, value) => {
+const handleInputChange = (field, value,setFieldValue) => {
+    setFieldValue(field, value);
+
     // Existing logic for other input changes
     if (field === 'numberOfWorkers') {
       // When number of workers changes, update worker details array
@@ -201,18 +208,75 @@ const handleInputChange = (field, value) => {
     }
   };
 
+  // Function to handle date/time change and recalculate permit duration
+  const handleDateChange = (field, value, setFieldValue) => {
+    // Update form data
+    setFormData(prevData => {
+      const updatedData = { ...prevData, [field]: value };
+      
+      // Recalculate permit duration
+      const duration = calculatePermitDuration(updatedData.startDate, updatedData.endDate);
+      updatedData.permitDuration = duration;
+      
+      return updatedData;
+    });
+  
+    // Update Formik values
+    setFieldValue(field, value);
+    setFieldValue('permitDuration', calculatePermitDuration(
+      field === 'startDate' ? value : formData.startDate, 
+      field === 'endDate' ? value : formData.endDate
+    ));
+  };
+
   const handleClose = () => {
     navigate('/dashboard/permits/job-permits');
   };
 
-  const handlePrevious = () => {
-    setCurrentSection(currentSection - 1);
+  const handleSaveDraft = () => {
+    // Implement your save draft logic here
+    // For example:
+    // savePermitDraft(formData);
+    setIsSubmitting(true);
   };
 
-  const handleNext = () => {
-    setCurrentSection(currentSection + 1);
+  const handleInitiateClose = () => {
+    setIsDialogOpen(true);
   };
 
+  const handlePrevious = (e) => {
+    e.preventDefault(); // Prevent form submission
+    if (currentSection > 1) {
+      setCurrentSection(currentSection - 1);
+    }
+  };
+
+  const handleNext = async (e, validateForm, setTouched) => {
+    e.preventDefault();
+  
+    try {
+      // Wait for validation
+      await validateForm();
+  
+      // Check for errors after validation
+      const errors = await validateForm();
+      if (Object.keys(errors).length === 0) {
+        // No validation errors; proceed to the next section
+        setCurrentSection(currentSection + 1);
+      } else {
+        // Mark all fields as touched to show validation errors
+        setTouched(
+          Object.keys(errors).reduce((acc, field) => {
+            acc[field] = true;
+            return acc;
+          }, {})
+        );
+      }
+    } catch (error) {
+      console.error("Validation error:", error);
+    }
+  };
+  
   const handleFileUpload = (event) => {
     const newFiles = Array.from(event.target.files);
     setFileToUpload((prev) => [...prev, ...newFiles]);
@@ -454,6 +518,7 @@ const handleInputChange = (field, value) => {
     }
   };
 
+
   const handleSubmit = async () => {
     try {
       setIsSubmitting(true);
@@ -480,16 +545,60 @@ const handleInputChange = (field, value) => {
           <img src={logo} alt="Company Logo" className="h-[80px] w-[80px]" />
           <h1 className="text-xl font-semibold flex-grow text-center">JOB SAFETY PERMIT</h1>
           <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={isSubmitting}
-            className="absolute top-2 right-2"
-          >
-            <X className="h-5 w-5" />
-          </Button>
+          variant="outline"
+          onClick={handleInitiateClose}
+          disabled={isSubmitting}
+          className="absolute top-2 right-2 transition-transform duration-300 hover:scale-110 group"
+        >
+          <X className="h-5 w-5 group-hover:h-6 group-hover:w-6 transition-all duration-300" />
+        </Button>
         </CardHeader>
 
+        {/* Confirmation Dialog */}
+        {isDialogOpen && (
+          <Dialog
+            isOpen={isDialogOpen}
+            onClose={() => setIsDialogOpen(false)} // Handles dialog closing
+            onSaveDraft={handleSaveDraft}
+            title="Confirm Close"
+          >
+            <div className="text-center">
+              <p className="mb-4 text-gray-700">Are you sure you want to close this?</p>
+              <div className="flex justify-center space-x-4">
+                <Button 
+                  variant="primary" 
+                  onClick={() => {
+                    handleSaveDraft();
+                    handleClose();
+                  }}
+                >
+                  Save as Draft and Close
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  onClick={handleClose}
+                >
+                  Close Without Saving
+                </Button>
+              </div>
+            </div>
+          </Dialog>
+        )}
+
         <CardContent className="p-6">
+        <Formik
+          initialValues={formData}
+          validationSchema={SafetyFormValidation}
+          onSubmit={(values) => {
+            console.log('Form Submitted:', values);
+            navigate('/success');
+          }}
+          validateOnChange={true}
+          validationContext={{ currentSection }}
+          validateOnBlur={true}
+        >
+          {({ errors, touched, setFieldValue,validateForm,setTouched}) => (
+            <Form>
             {currentSection === 1 && (
                 <div className="space-y-6">
                 {/* Section 1 */}
@@ -504,42 +613,58 @@ const handleInputChange = (field, value) => {
                 </h2>
     
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-6">
-                      {/* Start Date and Time */}
-                      <div className="border p-4 rounded-lg">
-                        <div className="flex items-center mb-2">
-                          <label className="block text-sm font-medium mr-32">Start Date <span className="text-red-600">*</span></label>
-                          <label className="block text-sm font-medium">Time</label>
-                        </div>
-                        <div className="flex gap-4">
-                          {/* Start Date */}
-                          <div className="flex-1">
-                            <DatePicker
-                              id="startDateInput"
-                              selected={formData.startDate}
-                              onChange={(date) => handleInputChange('startDate', date)}
-                              className="border rounded-lg px-3 py-2 w-full"
-                              dateFormat="yyyy-MM-dd"
-                            />
-                          </div>
-    
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Start Date and Time */}
+                    <div className="border p-4 rounded-lg">
+                      <div className="flex items-center mb-2">
+                        <label className="block text-sm font-medium mr-32">Start Date <span className="text-red-600">*</span></label>
+                        <label className="block text-sm font-medium">Time</label>
+                      </div>
+                      <div className="flex gap-4">
+                        {/* Start Date */}
+                         <div className="flex-1">
+                           <DatePicker
+                             id="startDateInput"
+                             selected={formData.startDate}
+                             placeholderText="Select date"
+                             onChange={(date) => handleDateChange('startDate', date,setFieldValue)}
+                             className={`border rounded-lg px-3 py-2 w-full ${
+                               errors.startDate && touched.startDate 
+                                 ? 'border-red-500 bg-red-50' 
+                                 : 'border-gray-300'
+                             }`}
+                      
+                             dateFormat="yyyy-MM-dd"                         
+                           />
+                           {errors.startDate && touched.startDate && (
+                          <div className="text-red-600 text-sm mt-1">{errors.startDate}</div>
+                           )}
+                         </div>
+
                           {/* Start Time */}
                           <div className="flex-1">
                             <DatePicker
                               id="startTimeInput"
                               selected={formData.startTime}
-                              onChange={(date) => handleInputChange('startTime', date)}
+                              onChange={(date) => handleDateChange('startTime', date,setFieldValue)}
                               showTimeSelect
                               showTimeSelectOnly
-                              timeIntervals={15}
                               timeCaption="Time"
                               dateFormat="h:mm aa"
-                              className="border rounded-lg px-3 py-2 w-full"
+                              placeholderText="Select time"
+                              className={`border rounded-lg px-3 py-2 w-full ${
+                                errors.startTime && touched.startTime 
+                                  ? 'border-red-500 bg-red-50' 
+                                  : 'border-gray-300'
+                              }`}
                             />
+                            {errors.startTime && touched.startTime && (
+                          <div className="text-red-600 text-sm mt-1">{errors.startTime}</div>
+                           )}
                           </div>
                         </div>
                       </div>
-    
+                          
                       {/* End Date and Time */}
                       <div className="border p-4 rounded-lg">
                         <div className="flex items-center mb-2">
@@ -548,45 +673,68 @@ const handleInputChange = (field, value) => {
                         </div>
                         <div className="flex gap-4">
                           {/* End Date */}
-                          <div className="flex-1">
-                            <DatePicker
-                              id="endDateInput"
-                              selected={formData.endDate}
-                              onChange={(date) => handleInputChange('endDate', date)}
-                              className="border rounded-lg px-3 py-2 w-full"
-                              dateFormat="yyyy-MM-dd"
-                            />
-                          </div>
-    
+                            <div className="flex-1">
+                              <DatePicker
+                                id="endDateInput"
+                                selected={formData.endDate}
+                                placeholderText="Select date"
+                                onChange={(date) => handleDateChange('endDate', date,setFieldValue)}
+                                className={`border rounded-lg px-3 py-2 w-full ${
+                                  errors.endDate && touched.endDate 
+                                    ? 'border-red-500 bg-red-50' 
+                                    : 'border-gray-300'
+                                }`}
+                                dateFormat="yyyy-MM-dd"
+                              />
+                            </div>
+                    
                           {/* End Time */}
                           <div className="flex-1">
                             <DatePicker
                               id="endTimeInput"
                               selected={formData.endTime}
-                              onChange={(date) => handleInputChange('endTime', date)}
+                              onChange={(date) => handleDateChange('endTime', date,setFieldValue)}
                               showTimeSelect
                               showTimeSelectOnly
-                              timeIntervals={15}
                               timeCaption="Time"
                               dateFormat="h:mm aa"
-                              className="border rounded-lg px-3 py-2 w-full"
+                              placeholderText="Select time"
+                              className={`border rounded-lg px-3 py-2 w-full ${
+                                errors.endTime && touched.endTime
+                                  ? 'border-red-500 bg-red-50' 
+                                  : 'border-gray-300'
+                              }`}                             
                             />
+                            {errors.endTime && touched.endTime && (
+                          <div className="text-red-600 text-sm mt-1">{errors.endTime}</div>
+                           )}
                           </div>
                         </div>
                       </div>
                     </div>
     
                     <div className="grid grid-cols-2 gap-6">
-                      <div>
+                    <div>
                         <label className="block text-sm font-medium mb-1">
                           Permit Duration <span className="text-gray-500 font-normal">(Max 7 days)</span>
                         </label>
                         <Input
                           type="text"
+                          name="permitDuration"
                           value={formData.permitDuration}
-                          onChange={(e) => handleInputChange('permitDuration', e.target.value)}
+                          readOnly
+                          className={`border rounded-lg px-3 py-2 w-full bg-gray-100 cursor-not-allowed ${
+                            errors.permitDuration && touched.permitDuration 
+                              ? 'border-red-500 bg-red-50' 
+                              : 'bg-gray-100'
+                          }`}
                         />
+                        {errors.permitDuration && touched.permitDuration && (
+                          <div className="text-red-600 text-sm mt-1">{errors.permitDuration}</div>
+                        )}
                       </div>
+
+                      {/* Department Dropdown */}
                       <div>
                         <label className="block text-sm font-medium mb-1">
                           Department <span className="text-red-600">*</span>
@@ -594,45 +742,87 @@ const handleInputChange = (field, value) => {
                         <Dropdown
                           options={departmentOptions}
                           value={formData.department}
-                          onChange={(value) => handleInputChange('department', value)}
-                          className="w-full"
+                          onChange={(value) => {
+                            handleInputChange('department', value, setFieldValue);
+                          }}
+                          className={`w-full ${
+                            errors.department && touched.department 
+                              ? 'border-red-500 bg-red-50' 
+                              : ''
+                          }`}
                           dropdownIcon="▾"
                         />
+                        {errors.department && touched.department && (
+                          <div className="text-red-600 text-sm mt-1">{errors.department}</div>
+                        )}
                       </div>
                     </div>
     
                     <div className="grid grid-cols-2 gap-6">
+                     {/* Job Location Dropdown */}
                       <div>
                         <label className="block text-sm font-medium mb-1">
                           Job Location <span className="text-red-600">*</span>
                         </label>
-                        <Input
-                          type="text"
+                        <Dropdown
+                          name="jobLocation"
+                          options={jobLocationOptions}
                           value={formData.jobLocation}
-                          onChange={(e) => handleInputChange('jobLocation', e.target.value)}
+                          onChange={(value) => {
+                            handleInputChange('jobLocation', value, setFieldValue);
+                          }}
+                          className={`w-full ${
+                            errors.jobLocation && touched.jobLocation 
+                              ? 'border-red-500 bg-red-50' 
+                              : ''
+                          }`}
+                          dropdownIcon="▾"
                         />
+                        {errors.jobLocation && touched.jobLocation && (
+                          <div className="text-red-600 text-sm mt-1">{errors.jobLocation}</div>
+                        )}
                       </div>
+                      {/* Sub Location Input */}
                       <div>
                         <label className="block text-sm font-medium mb-1">
                           Sub Location <span className="text-red-600">*</span>
                         </label>
                         <Input
                           type="text"
+                          name="subLocation"
                           value={formData.subLocation}
-                          onChange={(e) => handleInputChange('subLocation', e.target.value)}
+                          onChange={(e) => {
+                            handleInputChange('subLocation', e.target.value, setFieldValue);
+                          }}
+                          placeholder="Enter specific location"
+                          className={`w-full ${
+                            errors.subLocation && touched.subLocation 
+                              ? 'border-red-500 bg-red-50' 
+                              : ''
+                          }`}
                         />
                       </div>
                     </div>
     
+                   {/* Plant/Location/Equipment Detail */}
                     <div className="grid grid-cols-1 gap-6">
                       <div>
                         <label className="block text-sm font-medium mb-1">
-                          Plant/Equipment Detail <span className="text-red-600">*</span>
+                          Plant/Location/Equipment Detail <span className="text-red-600">*</span>
                         </label>
                         <Input
                           type="text"
+                          name="plantDetail"
                           value={formData.plantDetail}
-                          onChange={(e) => handleInputChange('plantDetail', e.target.value)}
+                          onChange={(e) => {
+                            handleInputChange('plantDetail', e.target.value, setFieldValue);
+                          }}
+                          placeholder="Enter details of the job location"
+                          className={`w-full ${
+                            errors.plantDetail && touched.plantDetail 
+                              ? 'border-red-500 bg-red-50' 
+                              : ''
+                          }`}
                         />
                       </div>
                     </div>
@@ -642,218 +832,301 @@ const handleInputChange = (field, value) => {
             )}
           
           {currentSection === 2 && (
-              <div className="space-y-6"> 
-                {/* Section 2 */}
-                <div> 
-                <h2 className="font-semibold mb-4 relative">
-                    <span className="relative after:content-[''] after:block after:w-full after:h-1 after:bg-gray-500 after:mb-1 after:shadow-md">
-                    2. NATURE OF WORK
-                    </span>
-                    <span className="block text-sm text-red-600">
-                    * indicates must-fill field
-                    </span>
-                </h2>
+  <div className="space-y-6"> 
+    {/* Section 2 */}
+    <div> 
+    <h2 className="font-semibold mb-4 relative">
+        <span className="relative after:content-[''] after:block after:w-full after:h-1 after:bg-gray-500 after:mb-1 after:shadow-md">
+        2. NATURE OF WORK
+        </span>
+        <span className="block text-sm text-red-600">
+        * indicates must-fill field
+        </span>
+    </h2>
 
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          Job Description <span className="text-red-600">*</span>
-                        </label>
-                        <Input
-                          type="text"
-                          value={formData.jobDescription}
-                          onChange={(e) => handleInputChange('jobDescription', e.target.value)}
-                          placeholder="Provide detailed description of the job"
-                        />
-                      </div>
-                    </div>
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-6">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Job Description <span className="text-red-600">*</span>
+            </label>
+            <Input
+              type="text"
+              name="jobDescription"
+              value={formData.jobDescription}
+              onChange={(e) => {
+                handleInputChange('jobDescription', e.target.value, setFieldValue);
+              }}
+              placeholder="Enter detailed description of the job"
+              className={`w-full ${
+                errors.jobDescription && touched.jobDescription 
+                  ? 'border-red-500 bg-red-50' 
+                  : ''
+              }`}
+            />
+            {errors.jobDescription && touched.jobDescription && (
+              <div className="text-red-600 text-sm mt-1">{errors.jobDescription}</div>
+            )}
+          </div>
+        </div>
 
-                    <div className="grid grid-cols-1 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          Permit Receiver <span className="text-red-600">*</span>
-                        </label>
-                        <Input
-                          type="text"
-                          value={formData.permitReceiver}
-                          onChange={(e) => handleInputChange('permitReceiver', e.target.value)}
-                          placeholder="Name of permit receiver"
-                        />
-                      </div>
-                    </div>
+        <div className="grid grid-cols-1 gap-6">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Permit Receiver <span className="text-red-600">*</span>
+            </label>
+            <Input
+              type="text"
+              name="permitReceiver"
+              value={formData.permitReceiver}
+              onChange={(e) => {
+                handleInputChange('permitReceiver', e.target.value, setFieldValue);
+              }}
+              placeholder="Name of permit receiver"
+              className={`w-full ${
+                errors.permitReceiver && touched.permitReceiver 
+                  ? 'border-red-500 bg-red-50' 
+                  : ''
+              }`}
+            />
+            {errors.permitReceiver && touched.permitReceiver && (
+              <div className="text-red-600 text-sm mt-1">{errors.permitReceiver}</div>
+            )}
+          </div>
+        </div>
 
-                    <div className="grid grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium mb-1">
-                            Job Company <span className="text-red-600">*</span>
-                          </label>
-                          <Dropdown
-                            options={jobCompanyOptions}
-                            value={formData.jobCompany}
-                            onChange={(value) => handleInputChange('jobCompany', value)}
-                            className="w-full"
-                            dropdownIcon="▾"
-                          />
-                        </div>
-
-                        {formData.jobCompany === 'Contract Company' && (
-                          <div>
-                            <label className="block text-sm font-medium mb-1">
-                              Company Name <span className="text-red-600">*</span>
-                            </label>
-                            <Input
-                              type="text"
-                              value={formData.contractCompanyName || ''}
-                              onChange={(e) => handleInputChange('contractCompanyName', e.target.value)}
-                              placeholder="Enter contract company name"
-                            />
-                          </div>
-                        )}
-                        </div>
-                      
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          Staff ID <span className="text-red-600">*</span>
-                        </label>
-                        <Input
-                          type="text"
-                          value={formData.staffID}
-                          onChange={(e) => handleInputChange('staffID', e.target.value)}
-                          placeholder="Enter staff ID"
-                        />
-                      </div>   
-                        <div>
-                          <label className="block text-sm font-medium mb-1">
-                            Number of Workers <span className="text-red-600">*</span>
-                          </label>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="20"
-                            value={formData.numberOfWorkers}
-                            onChange={(e) => handleInputChange('numberOfWorkers', e.target.value)}
-                            placeholder="Enter number of workers"
-                          />
-                        </div>
-                    </div>                  
-                
-                    
-                    <div className="border p-4 rounded-lg">
-                        <label className="block text-sm font-medium mb-1">
-                          Risk Assessment/Job Safety Analysis <span className="text-red-600">*</span>
-                        </label>
-                        <div
-                          className="flex flex-col items-center justify-center w-full h-32 bg-gray-100 rounded-lg cursor-pointer border-dashed border-2 border-blue-400"
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={handleFileDrop}
-                        >
-                          <input
-                            type="file"
-                            id="riskAssessmentUpload"
-                            multiple
-                            onChange={handleFileUpload}
-                            className="hidden"
-                          />
-                          <label
-                            htmlFor="riskAssessmentUpload"
-                            className="flex flex-col items-center space-y-2"
-                          >
-                            <CloudUpload className="h-8 w-8 text-blue-500" />
-                            <span className="text-blue-500 font-medium">Click To Upload Documents</span>
-                          </label>
-                        </div>
-
-                        {fileToUpload.length > 0 && (
-                          <div className="mt-4">
-                            <h4 className="text-sm font-semibold mb-2">Uploaded Documents</h4>
-                            <div className="space-y-2">
-                              {fileToUpload.map((file, index) => (
-                                <div
-                                  key={index}
-                                  className="flex items-center justify-between bg-gray-200 p-2 rounded-lg"
-                                >
-                                  <div className="flex items-center space-x-2">
-                                    {/* Show a PDF or image icon based on file type */}
-                                    <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
-                                      {file.name.split('.').pop().toUpperCase()}
-                                    </span>
-                                    <span className="text-sm text-gray-700 truncate">
-                                      {file.name}
-                                    </span>
-                                  </div>
-                                  <button
-                                    className="text-red-500 hover:text-red-700"
-                                    onClick={() => handleFileRemove(index)}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                    </div>
-                       
-                    <div>
-                        <label className="block text-sm font-medium mb-3">
-                          Permit(s) Required <span className="text-red-600">*</span>
-                        </label>
-                        <div className="grid grid-cols-3 gap-4">
-                          {permitTypes.map((permitType) => (
-                            <label key={permitType} className="inline-flex items-center">
-                              <input
-                                type="checkbox"
-                                value={permitType}
-                                checked={formData.permitRequired.includes(permitType)}
-                                onChange={(e) => {
-                                  const updatedPermits = e.target.checked
-                                    ? [...formData.permitRequired, permitType]
-                                    : formData.permitRequired.filter(p => p !== permitType);
-                                  handleInputChange('permitRequired', updatedPermits);
-                                }}
-                                className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded mr-2 align-middle"
-                              />
-                              <span className="text-sm">{permitType}</span>
-                            </label>
-                          ))}
-                        </div>
-                    </div>
-
-              {/* Worker Details Table */}
-              {formData.numberOfWorkers > 0 && (
-                <div className="border p-4 rounded-lg">
-                  <h4 className="text-sm font-semibold mb-3">Worker Details</h4>
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border p-2 text-center">S/N</th>
-                        <th className="border p-2 text-center">Workers Name *</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {formData.workerDetails.map((worker, index) => (
-                        <tr key={index}>
-                          <td className="border p-2 text-center">{index + 1}</td>
-                          <td className="border p-2">
-                            <Input
-                              type="text"
-                              value={worker.name}
-                              onChange={(e) => handleInputChange(`workerName_${index}`, e.target.value)}
-                              placeholder={`Enter worker ${index + 1} name`}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+        <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Job Company <span className="text-red-600">*</span>
+              </label>
+              <Dropdown
+                name="jobCompany"
+                options={jobCompanyOptions}
+                value={formData.jobCompany}
+                onChange={(value) => {
+                  handleInputChange('jobCompany', value, setFieldValue);
+                }}
+                className={`w-full ${
+                  errors.jobCompany && touched.jobCompany 
+                    ? 'border-red-500 bg-red-50' 
+                    : ''
+                }`}
+                dropdownIcon="▾"
+              />
+              {errors.jobCompany && touched.jobCompany && (
+                <div className="text-red-600 text-sm mt-1">{errors.jobCompany}</div>
               )}
-                </div>
+            </div>
+
+            {formData.jobCompany === 'Contract Company' && (
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Company Name <span className="text-red-600">*</span>
+                </label>
+                <Input
+                  type="text"
+                  name="contractCompanyName"
+                  value={formData.contractCompanyName || ''}
+                  onChange={(e) => {
+                    handleInputChange('contractCompanyName', e.target.value, setFieldValue);
+                  }}
+                  placeholder="Enter contract company name"
+                  className={`w-full ${
+                    errors.contractCompanyName && touched.contractCompanyName 
+                      ? 'border-red-500 bg-red-50' 
+                      : ''
+                  }`}
+                />
+                {errors.contractCompanyName && touched.contractCompanyName && (
+                  <div className="text-red-600 text-sm mt-1">{errors.contractCompanyName}</div>
+                )}
+              </div>
+            )}
+        </div>
+          
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Staff ID 
+            </label>
+            <Input
+              type="text"
+              name="staffID"
+              value={formData.staffID}
+              onChange={(e) => {
+                handleInputChange('staffID', e.target.value, setFieldValue);
+              }}
+              placeholder="Enter staff ID"
+            />
+          </div>   
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Number of Workers <span className="text-red-600">*</span>
+              </label>
+              <Input
+                type="number"
+                name="numberOfWorkers"
+                min="0"
+                max="20"
+                value={formData.numberOfWorkers}
+                onChange={(e) => {
+                  handleInputChange('numberOfWorkers', e.target.value, setFieldValue);
+                }}
+                placeholder="Enter number of workers"
+                className={`w-full ${
+                  errors.numberOfWorkers && touched.numberOfWorkers 
+                    ? 'border-red-500 bg-red-50' 
+                    : ''
+                }`}
+              />
+              {errors.numberOfWorkers && touched.numberOfWorkers && (
+                <div className="text-red-600 text-sm mt-1">{errors.numberOfWorkers}</div>
+              )}
+            </div>
+        </div>                  
+    
+        <div className="border p-4 rounded-lg">
+            <label className="block text-sm font-medium mb-1">
+              Risk Assessment/Job Safety Analysis <span className="text-red-600">*</span>
+            </label>
+            <p className="text-xs text-gray-600 mt-1 mb-1">
+              Uploaded documents must have one of the following extensions: 
+              <span className="font-bold"> jpg, jpeg, png, doc, docx, pdf </span> 
+              and <span className="font-bold">not larger than 4MB</span> each.
+            </p>
+            <div
+              className={`flex flex-col items-center justify-center w-full h-32 bg-gray-100 rounded-lg cursor-pointer border-dashed border-2 ${
+                errors.riskAssessment && touched.riskAssessment
+                  ? 'border-red-500'
+                  : 'border-blue-400'
+              }`}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleFileDrop}
+            >
+              <input
+                type="file"
+                id="riskAssessmentUpload"
+                multiple
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <label
+                htmlFor="riskAssessmentUpload"
+                className="flex flex-col items-center space-y-2"
+              >
+                <CloudUpload className="h-8 w-8 text-blue-500" />
+                <span className="text-blue-500 font-medium">Click To Upload Documents</span>
+              </label>
+            </div>
+            {errors.riskAssessment && touched.riskAssessment && (
+              <div className="text-red-600 text-sm mt-1">{errors.riskAssessment}</div>
+            )}
+
+            {fileToUpload.length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-sm font-semibold mb-2">Uploaded Documents</h4>
+                <div className="space-y-2">
+                  {fileToUpload.map((file, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between bg-gray-200 p-2 rounded-lg"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                          {file.name.split('.').pop().toUpperCase()}
+                        </span>
+                        <span className="text-sm text-gray-700 truncate">
+                          {file.name}
+                        </span>
+                      </div>
+                      <button
+                        className="text-red-500 hover:text-red-700"
+                        onClick={() => handleFileRemove(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
-            )}   
+            )}
+        </div>
+           
+        <div>
+            <label className="block text-sm font-medium mb-3">
+              Permit(s) Required <span className="text-red-600">*</span>
+            </label>
+            <div className="grid grid-cols-3 gap-4">
+              {permitTypes.map((permitType) => (
+                <label key={permitType} className="inline-flex items-center">
+                  <input
+                    type="checkbox"
+                    value={permitType}
+                    checked={formData.permitRequired.includes(permitType)}
+                    onChange={(e) => {
+                      const updatedPermits = e.target.checked
+                        ? [...formData.permitRequired, permitType]
+                        : formData.permitRequired.filter(p => p !== permitType);
+                      handleInputChange('permitRequired', updatedPermits, setFieldValue);
+                    }}
+                    className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
+                  />
+                  <span className="text-sm">{permitType}</span>
+                </label>
+              ))}
+            </div>
+            {errors.permitRequired && touched.permitRequired && (
+              <div className="text-red-600 text-sm mt-1">{errors.permitRequired}</div>
+            )}
+        </div>
+
+        {/* Worker Details Table */}
+        {formData.numberOfWorkers > 0 && (
+          <div className="border p-4 rounded-lg">
+            <h4 className="text-sm font-semibold mb-3">Worker Details</h4>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border p-2 text-center">S/N</th>
+                  <th className="border p-2 text-center">Workers Name *</th>
+                </tr>
+              </thead>
+              <tbody>
+                {formData.workerDetails.map((worker, index) => (
+                  <tr key={index}>
+                    <td className="border p-2 text-center">{index + 1}</td>
+                    <td className="border p-2">
+                      <Input
+                        type="text"
+                        name={`workerDetails.${index}.name`}
+                        value={worker.name}
+                        onChange={(e) => {
+                          handleInputChange(`workerName_${index}`, e.target.value, setFieldValue);
+                        }}
+                        placeholder={`Enter worker ${index + 1} name`}
+                        className={`w-full ${
+                          errors.workerDetails?.[index]?.name && touched.workerDetails?.[index]?.name
+                            ? 'border-red-500 bg-red-50'
+                            : ''
+                        }`}
+                      />
+                      {errors.workerDetails?.[index]?.name && touched.workerDetails?.[index]?.name && (
+                        <div className="text-red-600 text-sm mt-1">
+                          {errors.workerDetails[index].name}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        </div>
+        </div>
+      </div>
+    )}   
 
             {currentSection === 3 && (
                 <div className="space-y-6">
@@ -874,7 +1147,7 @@ const handleInputChange = (field, value) => {
                             value={hazard}
                             checked={formData.hazardIdentification.includes(hazard)}
                             onChange={(e) => handleCheckboxChange(hazard, e.target.checked)}
-                            className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded mr-2 align-middle"
+                            className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                         />
                         <span className="text-sm">{hazard}</span>
                         </label>
@@ -909,7 +1182,7 @@ const handleInputChange = (field, value) => {
                             value={requirement}
                             checked={formData.jobRequirement.includes(requirement)}
                             onChange={(e) => handleJobRequirementCheckboxChange(requirement, e.target.checked)}
-                            className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded mr-2 align-middle"
+                            className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                           />
                           <span className="text-sm">{requirement}</span>
                         </label>
@@ -945,7 +1218,7 @@ const handleInputChange = (field, value) => {
                         value={ppe}
                         checked={formData.ppeRequirement.includes(ppe)}
                         onChange={(e) => handlePPECheckboxChange(ppe, e.target.checked)}
-                        className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded mr-2 align-middle"
+                        className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                       />
                       <span className="text-sm">{ppe}</span>
                     </label>
@@ -990,7 +1263,7 @@ const handleInputChange = (field, value) => {
                           value={measure}
                           checked={formData.precautionaryMeasure.includes(measure)}
                           onChange={(e) => handlePrecautionaryMeasureCheckboxChange(measure, e.target.checked)}
-                          className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded mr-2 align-middle"
+                          className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                         />
                         <span className="text-sm">{measure}</span>
                       </label>
@@ -1013,7 +1286,7 @@ const handleInputChange = (field, value) => {
                        value={precaution}
                        checked={formData.precaution.includes(precaution)}
                        onChange={(e) => handlePrecautionCheckboxChange(precaution, e.target.checked)}
-                       className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded mr-2 align-middle"
+                       className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                      />
                      {precaution === 'Additional Controls (Specify)' ? (
                        <span className="text-sm font-semibold">{precaution}</span>
@@ -1053,7 +1326,7 @@ const handleInputChange = (field, value) => {
                           value={energy}
                           checked={formData.hazardousEnergies.includes(energy)}
                           onChange={(e) => handleHazardousEnergiesCheckboxChange(energy, e.target.checked)}
-                          className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded mr-2 align-middle"
+                          className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                         />
                         <span className="text-sm">{energy}</span>
                       </label>
@@ -1086,7 +1359,7 @@ const handleInputChange = (field, value) => {
                             value={option}
                             checked={formData.breakPreparation.includes(option)}
                             onChange={(e) => handleBreakPreparationCheckboxChange(option, e.target.checked)}
-                            className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded mr-2"
+                            className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2"
                           />
                           <span className="text-sm">{option}</span>
                         </label>
@@ -1117,7 +1390,7 @@ const handleInputChange = (field, value) => {
                               value={option}
                               checked={formData.acVoltageDe.includes(option)}
                               onChange={(e) => handleAcVoltageDeCheckboxChange(option, e.target.checked)}
-                              className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded mr-2"
+                              className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2"
                             />
                             <span className="text-sm">{option}</span>
                           </label>
@@ -1135,7 +1408,7 @@ const handleInputChange = (field, value) => {
                                 value={option}
                                 checked={formData.dcVoltageDe.includes(option)}
                                 onChange={(e) => handleDcVoltageDeCheckboxChange(option, e.target.checked)}
-                                className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded mr-2"
+                                className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2"
                               />
                               <span className="text-sm">{option}</span>
                             </label>
@@ -1146,7 +1419,27 @@ const handleInputChange = (field, value) => {
                   </div>
                 </div>
                 )}
-                </div>
+                {/* Disclaimer Section */}
+                <div>
+                  <div className="mt-8 p-4 border border-red-500 bg-red-100">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="terms-checkbox"
+                        className="form-checkbox h-4 w-4 text-green-600 cursor-pointer border-gray-300 rounded mr-2"
+                      />
+                      <span className="text-sm font-medium">
+                        I agree to the safety precautions stated above
+                      </span>
+                    </label>
+                    <p className="text-sm mt-2 text-red-600">
+                      By checking this box, I confirm that I have thoroughly reviewed the hazard identifications and job requirements,
+                      possess the necessary personal protective equipment (PPE), and have taken all appropriate precautionary measures. 
+                      I also acknowledge that the organization is not liable for any consequences resulting from my negligence.
+                    </p>
+                  </div>
+               </div>
+              </div>
               </div>
             )}
 
@@ -1154,8 +1447,9 @@ const handleInputChange = (field, value) => {
           <div className="flex justify-center gap-4 mt-6">
             {currentSection > 1 && (
               <Button
+                type="button"
                 variant="secondary"
-                onClick={handlePrevious}
+                onClick={(e) => handlePrevious(e)}
                 className="bg-gray-600 text-white hover:bg-gray-700"
               >
                 Previous
@@ -1164,7 +1458,7 @@ const handleInputChange = (field, value) => {
             {currentSection < 4 && (
               <Button
                 variant="secondary"
-                onClick={handleNext}
+                onClick={(e) => handleNext(e,validateForm, setTouched)}
                 className="bg-blue-600 text-white hover:bg-blue-700"
               >
                 Next
@@ -1181,10 +1475,13 @@ const handleInputChange = (field, value) => {
               </Button>
             )}
             </div>
+            </Form>
+            )}
+          </Formik>
         </CardContent>
       </Card>
     </div>
   );
 };
 
-export default PermitForm;
+export default SafetyForm;

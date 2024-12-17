@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronDown } from 'lucide-react'; // Modern icon
+import React, { useState, useRef, useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 export const Dropdown = ({ 
   options, 
@@ -9,6 +9,20 @@ export const Dropdown = ({
   placeholder = 'Select...' 
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleSelect = (selectedOption) => {
     onChange(selectedOption);
@@ -16,7 +30,7 @@ export const Dropdown = ({
   };
 
   return (
-    <div className={`relative ${className}`}>
+    <div ref={dropdownRef} className={`relative ${className}`}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
