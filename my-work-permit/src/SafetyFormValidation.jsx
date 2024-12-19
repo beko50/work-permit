@@ -68,101 +68,42 @@ const SafetyFormValidation = Yup.object().shape({
   jobLocation: Yup.string().required('Job Location is required'),
   subLocation: Yup.string().required('Sub Location is required'),
   plantDetail: Yup.string().required('Plant/Location/Equipment Detail is required'),
+  
+  // Section 2 Validations
+  jobDescription: Yup.string().required('Job Description is required'),
+  permitReceiver: Yup.string().required('Permit Receiver is required'),
+  contractType: Yup.string().required('Job Company is required'),
+  contractCompanyName: Yup.string().when('contractType', {
+    is: 'External / Contract Company',
+    then: () => Yup.string().required('Contract Company Name is required'),
+    otherwise: () => Yup.string().notRequired(),
+  }),
+  staffID: Yup.string().when('contractType', {
+    is: 'Internal / MPS',
+    then: () => Yup.string().required('Staff ID is required for MPS staff'),
+    otherwise: () => Yup.string().notRequired(),
+  }),
+  numberOfWorkers: Yup.number()
+    .min(0, 'Number of Workers cannot be less than 0')
+    .max(20, 'Number of Workers cannot exceed 20')
+    .required('Number of Workers is required'),
+  riskAssessment: Yup.array()
+    .min(1, 'At least one Risk Assessment document is required')
+    .test('file-size', 'Each file must not exceed 4MB', (files) =>
+      files.every((file) => file.size <= 4 * 1024 * 1024)
+    )
+    .test('file-type', 'Unsupported file type', (files) =>
+      files.every((file) => ['jpg', 'jpeg', 'png', 'doc', 'docx', 'pdf'].includes(file.name.split('.').pop().toLowerCase()))
+    ),
+  permitRequired: Yup.array().min(1, 'At least one Permit is required'),
 
-  // Section-specific validations
-  jobDescription: Yup.string().when('$currentSection', {
-    is: 2,
-    then: (schema) =>
-      schema
-        .required('Job Description is required')
-        .min(10, 'Job Description must be at least 10 characters long')
-        .max(500, 'Job Description cannot exceed 500 characters'),
-    otherwise: (schema) => schema.notRequired(),
-  }),
-  permitReceiver: Yup.string().when('$currentSection', {
-    is: 2,
-    then: (schema) =>
-      schema
-        .required('Permit Receiver is required')
-        .min(2, 'Permit Receiver name must be at least 2 characters long')
-        .max(100, 'Permit Receiver name cannot exceed 100 characters')
-        .matches(/^[a-zA-Z\s]+$/, 'Permit Receiver name can only contain letters and spaces'),
-    otherwise: (schema) => schema.notRequired(),
-  }),
-  jobCompany: Yup.string().when('currentSection', {
-    is: 2,
-    then: (schema) => schema.required('Job Company is required'),
-  }),
-  contractCompanyName: Yup.string().when('currentSection', {
-    is: 2,
-    then: (schema) =>
-      Yup.string().when('jobCompany', {
-        is: 'Contract Company',
-        then: (schema) =>
-          schema
-            .required('Contract Company Name is required')
-            .min(2, 'Company name must be at least 2 characters long')
-            .max(100, 'Company name cannot exceed 100 characters'),
-      }),
-  }),
-  staffID: Yup.string().when('currentSection', {
-    is: 2,
-    then: (schema) => schema.max(20, 'Staff ID cannot exceed 20 characters'),
-  }),
-  numberOfWorkers: Yup.number().when('currentSection', {
-    is: 2,
-    then: (schema) =>
-      schema
-        .required('Number of Workers is required')
-        .min(1, 'At least one worker is required')
-        .max(20, 'Maximum 20 workers allowed'),
-  }),
-  riskAssessment: Yup.array().when('currentSection', {
-    is: 2,
-    then: (schema) =>
-      schema
-        .required('At least one Risk Assessment document is required')
-        .min(1, 'At least one Risk Assessment document is required')
-        .test('file-type', 'Invalid file type. Allowed types: jpg, jpeg, png, doc, docx, pdf', (files) => {
-          return files.every((file) => {
-            const allowedTypes = ['jpg', 'jpeg', 'png', 'doc', 'docx', 'pdf'];
-            const fileExt = file.name.split('.').pop().toLowerCase();
-            return allowedTypes.includes(fileExt);
-          });
-        })
-        .test('file-size', 'Files must be not larger than 4MB each', (files) => {
-          return files.every((file) => file.size <= 4 * 1024 * 1024);
-        }),
-  }),
-  permitRequired: Yup.array().when('currentSection', {
-    is: 2,
-    then: (schema) =>
-      schema.required('At least one Permit Type must be selected').min(1, 'At least one Permit Type must be selected'),
-  }),
-  workerDetails: Yup.array().when('currentSection', {
-    is: 2,
-    then: (schema) =>
-      Yup.array().when('numberOfWorkers', {
-        is: (numberOfWorkers) => numberOfWorkers > 0,
-        then: (schema) =>
-          schema
-            .of(
-              Yup.object().shape({
-                name: Yup.string()
-                  .required('Worker name is required')
-                  .min(2, 'Worker name must be at least 2 characters long')
-                  .max(100, 'Worker name cannot exceed 100 characters'),
-              })
-            )
-            .min(1, 'Worker details are required')
-            .test('correct-number-of-workers', 'Worker details must match the number of workers specified', function (
-              workerDetails
-            ) {
-              const { numberOfWorkers } = this.parent;
-              return workerDetails.length === Number(numberOfWorkers);
-            }),
-      }),
-  }),
+  workerDetails: Yup.array()
+    .of(
+      Yup.object().shape({
+        name: Yup.string().required('Worker Name is required'),
+      })
+    )
+    .min(1, 'At least one worker must be listed if workers are present'),
 });
 
 export default SafetyFormValidation;

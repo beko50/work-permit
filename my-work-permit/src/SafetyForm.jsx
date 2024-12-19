@@ -29,7 +29,7 @@ const SafetyForm = () => {
     // Section 2 fields
     jobDescription: '',
     permitReceiver: '',
-    jobCompany: '',
+    contractType: '',
     contractCompanyName: '',
     staffID: '',
     riskAssessment: [],
@@ -64,7 +64,7 @@ const SafetyForm = () => {
 
   const departmentOptions = ['IT', 'Operations', 'Asset Maintenance', 'QHSSE'];
   const jobLocationOptions = ['Gates','Authorities Building','MPS Admin Building','Workshop Building','Scanners Area','OCR Area','Inspection Platform','Yard','Quayside','Powerhouse','Fuel Station']
-  const jobCompanyOptions = ['Contract Company','MPS Employee'];
+  const contractTypeOptions = ['Internal / MPS','External / Contract Company'];
   const permitTypes = ['Civil Work','Excavation','Confined Space','Electrical Work','Work at Height','Hazardous/Dangerous Substance','On/Near Water','Hot Work','Pressure Systems'];
   const hazardOptions = ['Fall from-height','Hazardous substances','Buried Services','Gas/Fumes','Environmental Pollution','Lone working','Overhead Services','Oxygen deficiency','Improper Communication',
     'High/Low Temperature','Container falling from truck','Adverse weather','Noise','Sharp Objects','Poor Lighting','Slip/Trip/Falls','High/Low Pressure','Electricity','Falling Objects','Explosives','Work over water',
@@ -90,7 +90,7 @@ const SafetyForm = () => {
   
 
 const handleInputChange = (field, value,setFieldValue) => {
-    setFieldValue(field, value);
+    setFieldValue(field, value,true);
 
     // Existing logic for other input changes
     if (field === 'numberOfWorkers') {
@@ -201,7 +201,7 @@ const handleInputChange = (field, value,setFieldValue) => {
       setFormData(prev => ({
         ...prev,
         [field]: value,
-        ...(field === 'jobCompany' && value !== 'Contract Company' 
+        ...(field === 'contractType' && value !== 'External / Contract Company' 
           ? { contractCompanyName: '' } 
           : {})
       }));
@@ -255,19 +255,31 @@ const handleInputChange = (field, value,setFieldValue) => {
     e.preventDefault();
   
     try {
-      // Wait for validation
-      await validateForm();
+      // Determine fields to validate based on the current section
+      const fieldsToValidate =
+        currentSection === 1
+          ? ['startDate', 'startTime', 'endDate', 'endTime', 'permitDuration', 'department', 'jobLocation', 'subLocation', 'plantDetail']
+          : ['jobDescription', 'permitReceiver', 'contractType', ...(formData.contractType === ' External / Contract Company' ? ['contractCompanyName'] : []), 'numberOfWorkers', 'workerDetails', 'riskAssessment', 'permitRequired'];
   
-      // Check for errors after validation
+      // Validate only fields in the current section
       const errors = await validateForm();
-      if (Object.keys(errors).length === 0) {
-        // No validation errors; proceed to the next section
+  
+      // Filter errors to only those in the current section
+      const sectionErrors = Object.keys(errors).reduce((acc, field) => {
+        if (fieldsToValidate.includes(field)) {
+          acc[field] = errors[field];
+        }
+        return acc;
+      }, {});
+  
+      if (Object.keys(sectionErrors).length === 0) {
+        // No validation errors for the current section; proceed
         setCurrentSection(currentSection + 1);
       } else {
-        // Mark all fields as touched to show validation errors
+        // Mark relevant fields as touched
         setTouched(
-          Object.keys(errors).reduce((acc, field) => {
-            acc[field] = true;
+          fieldsToValidate.reduce((acc, field) => {
+            if (sectionErrors[field]) acc[field] = true;
             return acc;
           }, {})
         );
@@ -277,33 +289,25 @@ const handleInputChange = (field, value,setFieldValue) => {
     }
   };
   
-  const handleFileUpload = (event) => {
+  const handleFileUpload = (event, setFieldValue) => {
     const newFiles = Array.from(event.target.files);
-    setFileToUpload((prev) => [...prev, ...newFiles]);
-    setFormData((prev) => ({
-      ...prev,
-      riskAssessment: [...prev.riskAssessment, ...newFiles],
-    }));
+    const updatedFiles = [...fileToUpload, ...newFiles];  // Merge with existing files
+    setFileToUpload(updatedFiles);  // Update local state
+    setFieldValue('riskAssessment', updatedFiles);  // Update Formik state with array directly
   };
-
-  const handleFileDrop = (event) => {
+  
+  const handleFileDrop = (event, setFieldValue) => {
     event.preventDefault();
     const newFiles = Array.from(event.dataTransfer.files);
-    setFileToUpload((prev) => [...prev, ...newFiles]);
-    setFormData((prev) => ({
-      ...prev,
-      riskAssessment: [...prev.riskAssessment, ...newFiles],
-    }));
+    const updatedFiles = [...fileToUpload, ...newFiles];  // Merge with existing files
+    setFileToUpload(updatedFiles);  // Update local state
+    setFieldValue('riskAssessment', updatedFiles);  // Update Formik state with array directly
   };
-
-  const handleFileRemove = (index) => {
-    const updatedFiles = [...fileToUpload];
-    updatedFiles.splice(index, 1);
+  
+  const handleFileRemove = (index, setFieldValue) => {
+    const updatedFiles = fileToUpload.filter((_, i) => i !== index);
     setFileToUpload(updatedFiles);
-    setFormData((prev) => ({
-      ...prev,
-      riskAssessment: updatedFiles,
-    }));
+    setFieldValue('riskAssessment', updatedFiles);
   };
 
   //Hazard Checkboxes change
@@ -896,70 +900,79 @@ const handleInputChange = (field, value,setFieldValue) => {
         </div>
 
         <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Job Company <span className="text-red-600">*</span>
-              </label>
-              <Dropdown
-                name="jobCompany"
-                options={jobCompanyOptions}
-                value={formData.jobCompany}
-                onChange={(value) => {
-                  handleInputChange('jobCompany', value, setFieldValue);
-                }}
-                className={`w-full ${
-                  errors.jobCompany && touched.jobCompany 
-                    ? 'border-red-500 bg-red-50' 
-                    : ''
-                }`}
-                dropdownIcon="▾"
-              />
-              {errors.jobCompany && touched.jobCompany && (
-                <div className="text-red-600 text-sm mt-1">{errors.jobCompany}</div>
-              )}
-            </div>
+  <div>
+    <label className="block text-sm font-medium mb-1">
+      Contract Type <span className="text-red-600">*</span>
+    </label>
+    <Dropdown
+      name="contractType"
+      options={contractTypeOptions}
+      value={formData.contractType}
+      onChange={(value) => {
+        handleInputChange('contractType', value, setFieldValue);
+      }}
+      className={`w-full ${
+        errors.contractType && touched.contractType 
+          ? 'border-red-500 bg-red-50' 
+          : ''
+      }`}
+      dropdownIcon="▾"
+    />
+    {errors.contractType && touched.contractType && (
+      <div className="text-red-600 text-sm mt-1">{errors.contractType}</div>
+    )}
+  </div>
 
-            {formData.jobCompany === 'Contract Company' && (
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Company Name <span className="text-red-600">*</span>
-                </label>
-                <Input
-                  type="text"
-                  name="contractCompanyName"
-                  value={formData.contractCompanyName || ''}
-                  onChange={(e) => {
-                    handleInputChange('contractCompanyName', e.target.value, setFieldValue);
-                  }}
-                  placeholder="Enter contract company name"
-                  className={`w-full ${
-                    errors.contractCompanyName && touched.contractCompanyName 
-                      ? 'border-red-500 bg-red-50' 
-                      : ''
-                  }`}
-                />
-                {errors.contractCompanyName && touched.contractCompanyName && (
-                  <div className="text-red-600 text-sm mt-1">{errors.contractCompanyName}</div>
-                )}
-              </div>
-            )}
-        </div>
+  {formData.contractType === 'External / Contract Company' && (
+    <div>
+      <label className="block text-sm font-medium mb-1">
+        Company Name <span className="text-red-600">*</span>
+      </label>
+      <Input
+        type="text"
+        name="contractCompanyName"
+        value={formData.contractCompanyName || ''}
+        onChange={(e) => {
+          handleInputChange('contractCompanyName', e.target.value, setFieldValue);
+        }}
+        placeholder="Enter contract company name"
+        className={`w-full ${
+          errors.contractCompanyName && touched.contractCompanyName 
+            ? 'border-red-500 bg-red-50' 
+            : ''
+        }`}
+      />
+      {errors.contractCompanyName && touched.contractCompanyName && (
+        <div className="text-red-600 text-sm mt-1">{errors.contractCompanyName}</div>
+      )}
+    </div>
+  )}
+</div>
           
         <div className="grid grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Staff ID 
-            </label>
-            <Input
-              type="text"
-              name="staffID"
-              value={formData.staffID}
-              onChange={(e) => {
-                handleInputChange('staffID', e.target.value, setFieldValue);
-              }}
-              placeholder="Enter staff ID"
-            />
-          </div>   
+        <div>
+    <label className="block text-sm font-medium mb-1">
+      Staff ID {formData.contractType === 'Internal / MPS' && <span className="text-red-600">*</span>}
+      {formData.contractType !== 'Internal / MPS' && <span className="text-gray-500 font-normal">(Optional)</span>}
+    </label>
+    <Input
+      type="text"
+      name="staffID"
+      value={formData.staffID}
+      onChange={(e) => {
+        handleInputChange('staffID', e.target.value, setFieldValue);
+      }}
+      placeholder="Enter staff ID"
+      className={`w-full ${
+        errors.staffID && touched.staffID 
+          ? 'border-red-500 bg-red-50' 
+          : ''
+      }`}
+    />
+    {errors.staffID && touched.staffID && (
+      <div className="text-red-600 text-sm mt-1">{errors.staffID}</div>
+    )}
+  </div>  
             <div>
               <label className="block text-sm font-medium mb-1">
                 Number of Workers <span className="text-red-600">*</span>
@@ -987,71 +1000,80 @@ const handleInputChange = (field, value,setFieldValue) => {
         </div>                  
     
         <div className="border p-4 rounded-lg">
-            <label className="block text-sm font-medium mb-1">
-              Risk Assessment/Job Safety Analysis <span className="text-red-600">*</span>
-            </label>
-            <p className="text-xs text-gray-600 mt-1 mb-1">
-              Uploaded documents must have one of the following extensions: 
-              <span className="font-bold"> jpg, jpeg, png, doc, docx, pdf </span> 
-              and <span className="font-bold">not larger than 4MB</span> each.
-            </p>
-            <div
-              className={`flex flex-col items-center justify-center w-full h-32 bg-gray-100 rounded-lg cursor-pointer border-dashed border-2 ${
-                errors.riskAssessment && touched.riskAssessment
-                  ? 'border-red-500'
-                  : 'border-blue-400'
-              }`}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleFileDrop}
-            >
-              <input
-                type="file"
-                id="riskAssessmentUpload"
-                multiple
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <label
-                htmlFor="riskAssessmentUpload"
-                className="flex flex-col items-center space-y-2"
-              >
-                <CloudUpload className="h-8 w-8 text-blue-500" />
-                <span className="text-blue-500 font-medium">Click To Upload Documents</span>
-              </label>
-            </div>
-            {errors.riskAssessment && touched.riskAssessment && (
-              <div className="text-red-600 text-sm mt-1">{errors.riskAssessment}</div>
-            )}
+  <label className="block text-sm font-medium mb-1">
+    Risk Assessment/Job Safety Analysis <span className="text-red-600">*</span>
+  </label>
+  <p className="text-xs text-gray-600 mt-1 mb-1">
+    Uploaded documents must have one of the following extensions: 
+    <span className="font-bold"> jpg, jpeg, png, doc, docx, pdf </span> 
+    and <span className="font-bold">not larger than 4MB</span> each.
+  </p>
+  <div
+    className={`flex flex-col items-center justify-center w-full h-32 bg-gray-100 rounded-lg cursor-pointer border-dashed border-2 ${
+      errors.riskAssessment && touched.riskAssessment
+        ? 'border-red-500'
+        : 'border-blue-400'
+    }`}
+    onDragOver={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }}
+    onDrop={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleFileDrop(e,setFieldValue);
+    }}
+  >
+    <input
+      type="file"
+      id="riskAssessmentUpload"
+      multiple
+      onChange={(e) => handleFileUpload(e, setFieldValue)}
+      className="hidden"
+      accept=".jpg,.jpeg,.png,.doc,.docx,.pdf"
+    />
+    <label
+      htmlFor="riskAssessmentUpload"
+      className="flex flex-col items-center space-y-2"
+    >
+      <CloudUpload className="h-8 w-8 text-blue-500" />
+      <span className="text-blue-500 font-medium">Click To Upload Documents</span>
+    </label>
+  </div>
+  {errors.riskAssessment && touched.riskAssessment && (
+    <div className="text-red-600 text-sm mt-1">{errors.riskAssessment}</div>
+  )}
 
-            {fileToUpload.length > 0 && (
-              <div className="mt-4">
-                <h4 className="text-sm font-semibold mb-2">Uploaded Documents</h4>
-                <div className="space-y-2">
-                  {fileToUpload.map((file, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between bg-gray-200 p-2 rounded-lg"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
-                          {file.name.split('.').pop().toUpperCase()}
-                        </span>
-                        <span className="text-sm text-gray-700 truncate">
-                          {file.name}
-                        </span>
-                      </div>
-                      <button
-                        className="text-red-500 hover:text-red-700"
-                        onClick={() => handleFileRemove(index)}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-        </div>
+  {fileToUpload.length > 0 && (
+    <div className="mt-4">
+      <h4 className="text-sm font-semibold mb-2">Uploaded Documents</h4>
+      <div className="space-y-2">
+        {fileToUpload.map((file, index) => (
+          <div
+            key={index}
+            className="flex items-center justify-between bg-gray-200 p-2 rounded-lg"
+          >
+            <div className="flex items-center space-x-2">
+              <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                {file.name.split('.').pop().toUpperCase()}
+              </span>
+              <span className="text-sm text-gray-700 truncate">
+                {file.name}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="text-red-500 hover:text-red-700"
+              onClick={() => handleFileRemove(index, setFieldValue)}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</div>
            
         <div>
             <label className="block text-sm font-medium mb-3">
@@ -1102,7 +1124,12 @@ const handleInputChange = (field, value,setFieldValue) => {
                         name={`workerDetails.${index}.name`}
                         value={worker.name}
                         onChange={(e) => {
-                          handleInputChange(`workerName_${index}`, e.target.value, setFieldValue);
+                          const updatedWorkerDetails = [...formData.workerDetails];
+                          updatedWorkerDetails[index] = { 
+                            ...updatedWorkerDetails[index], 
+                            name: e.target.value 
+                          };
+                          handleInputChange('workerDetails', updatedWorkerDetails, setFieldValue);
                         }}
                         placeholder={`Enter worker ${index + 1} name`}
                         className={`w-full ${
