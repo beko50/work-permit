@@ -72,17 +72,21 @@ const SafetyFormValidation = Yup.object().shape({
   // Section 2 Validations
   jobDescription: Yup.string().required('Job Description is required'),
   permitReceiver: Yup.string().required('Permit Receiver is required'),
-  contractType: Yup.string().required('Job Company is required'),
+  contractType: Yup.string()
+    .required('Contract Type is required'),
+    
   contractCompanyName: Yup.string().when('contractType', {
-    is: 'External / Contract Company',
-    then: () => Yup.string().required('Contract Company Name is required'),
-    otherwise: () => Yup.string().notRequired(),
+    is: (val) => val === 'External / Contract Company',
+    then: (schema) => schema.required('Contract Company Name is required'),
+    otherwise: (schema) => schema.notRequired(),
   }),
+  
   staffID: Yup.string().when('contractType', {
-    is: 'Internal / MPS',
-    then: () => Yup.string().required('Staff ID is required for MPS staff'),
-    otherwise: () => Yup.string().notRequired(),
+    is: (val) => val === 'Internal / MPS',
+    then: (schema) => schema.required('Staff ID is required for MPS staff'),
+    otherwise: (schema) => schema.notRequired(),
   }),
+
   numberOfWorkers: Yup.number()
     .min(0, 'Number of Workers cannot be less than 0')
     .max(20, 'Number of Workers cannot exceed 20')
@@ -98,12 +102,109 @@ const SafetyFormValidation = Yup.object().shape({
   permitRequired: Yup.array().min(1, 'At least one Permit is required'),
 
   workerDetails: Yup.array()
-    .of(
-      Yup.object().shape({
-        name: Yup.string().required('Worker Name is required'),
-      })
-    )
-    .min(1, 'At least one worker must be listed if workers are present'),
+  .of(
+    Yup.object().shape({
+      name: Yup.string()
+        .required('Worker Name is required')
+        .min(1, 'Worker Name is required')
+        .test('not-empty', 'Worker Name is required', 
+          value => value && value.trim().length > 0)
+    })
+  )
+  .min(1, 'At least one worker must be listed if workers are present')
+  .test('all-names-filled', 'All worker names must be filled', function(value) {
+    return value?.every(worker => worker.name && worker.name.trim().length > 0) ?? false;
+  }),
+
+  // Section 3 Validations
+  hazardIdentification: Yup.array()
+    .min(1, 'At least one hazard must be checked')
+    .required('Hazard identification is required'),
+  otherHazardText: Yup.string()
+    .test('other-hazard-required', 'Please specify other hazard', function(value) {
+      const hazards = this.parent.hazardIdentification;
+      return !hazards?.includes('Other (Specify)') || (hazards?.includes('Other (Specify)') && !!value);
+    }),
+
+  jobRequirement: Yup.array()
+    .min(1, 'At least one Job Requirement must be checked')
+    .required('Job requirements are required'),
+  otherGasesText: Yup.string()
+    .test('other-gases-required', 'Please specify other gases', function(value) {
+      const requirements = this.parent.jobRequirement;
+      return !requirements?.includes('List other gases detected') || (requirements?.includes('List other gases detected') && !!value);
+    }),
+
+  ppeRequirement: Yup.array()
+    .min(1, 'At least one PPE Requirement must be checked')
+    .required('PPE requirements are required'),
+  otherPPEText: Yup.string()
+    .test('other-ppe-required', 'Please specify other PPE', function(value) {
+      const ppe = this.parent.ppeRequirement;
+      return !ppe?.includes('Other (Specify)') || (ppe?.includes('Other (Specify)') && !!value);
+    }),
+
+  //Section 4 Validations
+  precautionaryMeasure: Yup.array()
+    .min(1, 'At least one Precautionary Measure must be checked')
+    .required('Precautionary measures are required'),
+
+  precaution: Yup.array()
+    .min(1, 'At least one Precaution must be checked')
+    .required('Precautions are required'),
+  otherControlsText: Yup.string()
+    .test('other-controls-required', 'Please specify additional controls', function(value) {
+      const precautions = this.parent.precaution;
+      return !precautions?.includes('Additional Controls (Specify)') || 
+        (precautions?.includes('Additional Controls (Specify)') && !!value);
+    }),
+
+  hazardousEnergies: Yup.array()
+    .min(1, 'At least one Hazardous Energy must be checked')
+    .required('Hazardous energies are required'),
+  otherDangerousGoodsText: Yup.string()
+    .test('dangerous-goods-required', 'Please specify dangerous goods', function(value) {
+      const energies = this.parent.hazardousEnergies;
+      return !energies?.includes('Dangerous goods/chemicals (Specify)') || 
+        (energies?.includes('Dangerous goods/chemicals (Specify)') && !!value);
+    }),
+  otherHazardousEnergyText: Yup.string()
+    .test('other-energy-required', 'Please specify other hazardous energy', function(value) {
+      const energies = this.parent.hazardousEnergies;
+      return !energies?.includes('Other(Specify)') || 
+        (energies?.includes('Other(Specify)') && !!value);
+    }),
+
+  breakPreparation: Yup.array(),
+
+  otherBreakPreparationText: Yup.string()
+    .test('other-break-required', 'Please specify other break preparation', function(value) {
+      const preparations = this.parent.breakPreparation;
+      return !preparations?.includes('Other (Specify)') || 
+        (preparations?.includes('Other (Specify)') && !!value);
+    }),
+
+    acVoltageDe: Yup.array()
+  .when('hazardousEnergies', {
+    is: (energies) => energies?.includes('Electricity'),
+    then: () => Yup.array()
+      .min(1, 'At least one A.C/D.C Voltage must be selected when Electricity is checked')
+      .required('A.C Voltage is required when Electricity is checked'),
+    otherwise: () => Yup.array().notRequired(),
+  }),
+
+dcVoltageDe: Yup.array()
+  .when('hazardousEnergies', {
+    is: (energies) => energies?.includes('Electricity'),
+    then: () => Yup.array()
+      .min(1, 'At least one A.C/D.C Voltage must be selected when Electricity is checked')
+      .required('D.C Voltage is required when Electricity is checked'),
+    otherwise: () => Yup.array().notRequired(),
+  }),
+
+  disclaimerAccepted: Yup.boolean()
+    .oneOf([true], 'You must agree to the safety precautions')
+    .required('You must agree to the safety precautions')
 });
 
 export default SafetyFormValidation;

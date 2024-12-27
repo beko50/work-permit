@@ -10,7 +10,7 @@ import logo from './assets/mps_logo.jpg';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { addMinutes, format } from 'date-fns';
-import { Formik, Form, Field } from 'formik';
+import { Formik, Form, Field,getIn } from 'formik';
 import SafetyFormValidation, { calculatePermitDuration } from './SafetyFormValidation';
 
 const SafetyForm = () => {
@@ -89,124 +89,103 @@ const SafetyForm = () => {
   const breakPreparationOptions = ['Clean','Depressurize','Drain/Vent','Cool/Warm','Purge free from hazardous substances','Other (Specify)']
   
 
-const handleInputChange = (field, value,setFieldValue) => {
-    setFieldValue(field, value,true);
-
-    // Existing logic for other input changes
-    if (field === 'numberOfWorkers') {
-      // When number of workers changes, update worker details array
-      const numWorkers = parseInt(value, 10) || 0;
-      const currentWorkers = formData.workerDetails;
-      
-      if (numWorkers > currentWorkers.length) {
-        // Add new worker rows
-        const newWorkers = Array.from({ length: numWorkers - currentWorkers.length }, () => ({
-          name: '',
-        }));
-        setFormData(prev => ({
-          ...prev,
-          [field]: value,
-          workerDetails: [...currentWorkers, ...newWorkers]
-        }));
-      } else if (numWorkers < currentWorkers.length) {
-        // Remove extra worker rows
-        setFormData(prev => ({
-          ...prev,
-          [field]: value,
-          workerDetails: currentWorkers.slice(0, numWorkers)
-        }));
-      } else {
-        // Just update the number of workers
-        setFormData(prev => ({
-          ...prev,
-          [field]: value
-        }));
-      }
-    } else if (field.startsWith('workerName_')) {
-      // Update specific worker name
-      const index = parseInt(field.split('_')[1], 10);
-      const updatedWorkerDetails = [...formData.workerDetails];
-      updatedWorkerDetails[index] = { ...updatedWorkerDetails[index], name: value };
-      
+  const handleInputChange = (field, value, setFieldValue) => {
+  setFieldValue(field, value, true);
+  
+  // Special handling for contract type changes
+  if (field === 'contractType') {
+    if (value === 'Internal / MPS') {
+      setFieldValue('contractCompanyName', '', true);
       setFormData(prev => ({
         ...prev,
-        workerDetails: updatedWorkerDetails
+        contractCompanyName: '',
+        staffID: ''
       }));
-    } else if (field === 'permitRequired') {
-        // New permit required logic
-        const updatedPermits = value;
-        setFormData(prev => ({
-          ...prev,
-          [field]: updatedPermits
-        }));
-      } else if (field === 'hazardIdentification') {
-        // New hazard identification logic
-        const updatedHazards = value;
-        setFormData(prev => ({
-          ...prev,
-          [field]: updatedHazards
-        }));
-      } else if (field === 'jobRequirement') {
-            // New job requirement logic
-            const updatedJobRequirements = value;
-            setFormData(prev => ({
-              ...prev,
-              [field]: updatedJobRequirements
-            }));
-      } else if (field === 'ppeRequirement') {
-        // New PPE requirement logic
-        const updatedPPERequirements = value;
-        setFormData(prev => ({
-          ...prev,
-          [field]: updatedPPERequirements
-        }));
-      } else if (field === 'precautionaryMeasure') {
-        // Precautionary measure logic
-        const updatedPrecautionaryMeasures = value;
-        setFormData(prev => ({
-          ...prev,
-          [field]: updatedPrecautionaryMeasures
-        }));
-      } else if (field === 'precaution') {
-        // Precautions logic
-        const updatedPrecaution = value;
-        setFormData(prev => ({
-          ...prev,
-          [field]: updatedPrecaution
-        }));
-      } else if (field === 'hazardousEnergies') {
-        // Hazardous Energies logic
-        const updatedPrecaution = value;
-        setFormData(prev => ({
-          ...prev,
-          [field]: updatedPrecaution
-        }));
-      } else if (field === 'acVoltageDe') {
-        setFormData(prev => ({
-          ...prev,
-          [field]: value
-        }));
-      } else if (field === 'dcVoltageDe') {
-        setFormData(prev => ({
-          ...prev,
-          [field]: value
-        }));
-      } else if (field === 'breakPreparation') {
-        setFormData(prev => ({
-          ...prev,
-          [field]: value
-        }));
-      } else {
-      // Existing input change logic
+    } else if (value === 'External / Contract Company') {
+      setFieldValue('staffID', '', true);
+      setFormData(prev => ({
+        ...prev,
+        staffID: ''
+      }));
+    }
+  }
+  
+  // Number of workers handling
+  if (field === 'numberOfWorkers') {
+    const numWorkers = parseInt(value, 10) || 0;
+    const currentWorkers = formData.workerDetails;
+    
+    if (numWorkers > currentWorkers.length) {
+      const newWorkers = Array.from(
+        { length: numWorkers - currentWorkers.length },
+        () => ({ name: '' })
+      );
+      const updatedWorkers = [...currentWorkers, ...newWorkers];
+      
       setFormData(prev => ({
         ...prev,
         [field]: value,
-        ...(field === 'contractType' && value !== 'External / Contract Company' 
-          ? { contractCompanyName: '' } 
-          : {})
+        workerDetails: updatedWorkers
       }));
+      
+      setFieldValue('numberOfWorkers', value, true);
+      setFieldValue('workerDetails', updatedWorkers, true);
+      
+      // Initialize touched state for new workers
+      updatedWorkers.forEach((_, index) => {
+        setFieldValue(`workerDetails.${index}.name`, '', true);
+      });
+    } else if (numWorkers < currentWorkers.length) {
+      const updatedWorkers = currentWorkers.slice(0, numWorkers);
+      
+      setFormData(prev => ({
+        ...prev,
+        [field]: value,
+        workerDetails: updatedWorkers
+      }));
+      
+      setFieldValue('numberOfWorkers', value, true);
+      setFieldValue('workerDetails', updatedWorkers, true);
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [field]: value
+      }));
+      setFieldValue('numberOfWorkers', value, true);
     }
-  };
+  } 
+  // Worker name handling - updated for Formik field paths
+  else if (field.includes('workerDetails.') && field.endsWith('.name')) {
+    const index = parseInt(field.split('.')[1], 10);
+    const updatedWorkerDetails = [...formData.workerDetails];
+    updatedWorkerDetails[index] = { ...updatedWorkerDetails[index], name: value };
+    
+    setFormData(prev => ({
+      ...prev,
+      workerDetails: updatedWorkerDetails
+    }));
+    setFieldValue('workerDetails', updatedWorkerDetails, true);
+    setFieldValue(field, value, true);
+  }
+  // Array field handling
+  else if (['permitRequired', 'hazardIdentification', 'jobRequirement', 
+            'ppeRequirement', 'precautionaryMeasure', 'precaution', 
+            'hazardousEnergies'].includes(field)) {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+    setFieldValue(field, value, true);
+  }
+  // Simple field handling
+  else {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+    setFieldValue(field, value, true);
+  }
+};
 
   // Function to handle date/time change and recalculate permit duration
   const handleDateChange = (field, value, setFieldValue) => {
@@ -259,9 +238,15 @@ const handleInputChange = (field, value,setFieldValue) => {
       const fieldsToValidate =
         currentSection === 1
           ? ['startDate', 'startTime', 'endDate', 'endTime', 'permitDuration', 'department', 'jobLocation', 'subLocation', 'plantDetail']
-          : ['jobDescription', 'permitReceiver', 'contractType', ...(formData.contractType === ' External / Contract Company' ? ['contractCompanyName'] : []), 'numberOfWorkers', 'workerDetails', 'riskAssessment', 'permitRequired'];
+          : currentSection === 2
+          ? ['jobDescription', 'permitReceiver', 'contractType', ...(formData.contractType === 'External / Contract Company' ? ['contractCompanyName'] : []), ...(formData.contractType === 'Internal / MPS' ? ['staffID'] : []), 'numberOfWorkers', 'workerDetails', 'riskAssessment', 'permitRequired']
+          : currentSection === 3
+          ? ['hazardIdentification', 'jobRequirement', 'ppeRequirement', 'otherHazardText', 'otherGasesText', 'otherPPEText']
+          : currentSection === 4
+          ? ['precautionaryMeasure', 'precaution', 'hazardousEnergies', 'breakPreparation', 'otherControlsText', 'otherDangerousGoodsText', 'otherHazardousEnergyText', 'otherBreakPreparationText', 'acVoltageDe', 'dcVoltageDe']
+          : [];
   
-      // Validate only fields in the current section
+      // Validate the entire form
       const errors = await validateForm();
   
       // Filter errors to only those in the current section
@@ -272,22 +257,41 @@ const handleInputChange = (field, value,setFieldValue) => {
         return acc;
       }, {});
   
-      if (Object.keys(sectionErrors).length === 0) {
-        // No validation errors for the current section; proceed
-        setCurrentSection(currentSection + 1);
-      } else {
-        // Mark relevant fields as touched
-        setTouched(
-          fieldsToValidate.reduce((acc, field) => {
-            if (sectionErrors[field]) acc[field] = true;
-            return acc;
-          }, {})
-        );
+      // Set all relevant fields as touched
+      const touchedFields = fieldsToValidate.reduce((acc, field) => {
+        if (field === 'workerDetails' && formData.numberOfWorkers > 0) {
+          acc[field] = formData.workerDetails.map(() => ({
+            name: true,
+          }));
+        } else {
+          acc[field] = true;
+        }
+        return acc;
+      }, {});
+  
+      // Set all relevant fields as touched
+      setTouched(touchedFields, true);
+  
+      // If there are any validation errors, prevent proceeding
+      if (Object.keys(sectionErrors).length > 0) {
+        console.log(`Section ${currentSection} validation errors:`, sectionErrors);
+        return false; // Return false to indicate validation failed
       }
+  
+      // If we're in section 4 and no errors, proceed with submission
+      if (currentSection === 4) {
+        return true; // Return true to indicate validation passed
+      }
+  
+      // For other sections, proceed to next section
+      setCurrentSection(currentSection + 1);
+      return true; // Return true to indicate validation passed
     } catch (error) {
-      console.error("Validation error:", error);
+      console.error('Validation error:', error);
+      return false; // Return false on error
     }
   };
+  
   
   const handleFileUpload = (event, setFieldValue) => {
     const newFiles = Array.from(event.target.files);
@@ -311,35 +315,37 @@ const handleInputChange = (field, value,setFieldValue) => {
   };
 
   //Hazard Checkboxes change
-  const handleCheckboxChange = (hazard, checked) => {
+  const handleCheckboxChange = (hazard, checked, setFieldValue, setFieldTouched) => {
     let updatedHazards;
     if (checked) {
       updatedHazards = [...formData.hazardIdentification, hazard];
     } else {
       updatedHazards = formData.hazardIdentification.filter(h => h !== hazard);
       
-      // If unchecking 'Other (Specify)', clear the text
       if (hazard === 'Other (Specify)') {
         setOtherHazardText('');
+        setFieldValue('otherHazardText', '');
       }
     }
     
-    handleInputChange('hazardIdentification', updatedHazards);
+    handleInputChange('hazardIdentification', updatedHazards, setFieldValue);
+    setFieldTouched('hazardIdentification', true, false);
   };
 
-  const handleOtherHazardTextChange = (e) => {
+  const handleOtherHazardTextChange = (e, setFieldValue, setFieldTouched) => {
     const text = e.target.value;
     setOtherHazardText(text);
-
-    // Ensure 'Other (Specify)' is added to hazards when text is entered
+    setFieldValue('otherHazardText', text);
+    setFieldTouched('otherHazardText', true, false);
+  
     const isOtherInHazards = formData.hazardIdentification.includes('Other (Specify)');
     if (text.trim() && !isOtherInHazards) {
-      handleInputChange('hazardIdentification', [...formData.hazardIdentification, 'Other (Specify)']);
+      handleInputChange('hazardIdentification', [...formData.hazardIdentification, 'Other (Specify)'], setFieldValue);
     }
   };
 
   //Job Requirement Checkbox change
-  const handleJobRequirementCheckboxChange = (requirement, checked) => {
+  const handleJobRequirementCheckboxChange = (requirement, checked, setFieldValue, setFieldTouched) => {
     let updatedRequirements;
     if (checked) {
       updatedRequirements = [...formData.jobRequirement, requirement];
@@ -349,25 +355,28 @@ const handleInputChange = (field, value,setFieldValue) => {
       // If unchecking 'List other gases detected', clear the text
       if (requirement === 'List other gases detected') {
         setOtherGasesText('');
+        setFieldValue('otherGasesText', '');
       }
     }
     
-    handleInputChange('jobRequirement', updatedRequirements);
+    handleInputChange('jobRequirement', updatedRequirements, setFieldValue);
+    setFieldTouched('jobRequirement', true, false);
   };
-
-  const handleOtherGasesTextChange = (e) => {
+  
+  const handleOtherGasesTextChange = (e, setFieldValue, setFieldTouched) => {
     const text = e.target.value;
     setOtherGasesText(text);
+    setFieldValue('otherGasesText', text);
+    setFieldTouched('otherGasesText', true, false);
   
-    // Ensure 'List other gases' is added to job requirements when text is entered
     const isOtherGasesInRequirements = formData.jobRequirement.includes('List other gases detected');
     if (text.trim() && !isOtherGasesInRequirements) {
-      handleInputChange('jobRequirement', [...formData.jobRequirement, 'List other gases detected']);
+      handleInputChange('jobRequirement', [...formData.jobRequirement, 'List other gases detected'], setFieldValue);
     }
   };
 
   //PPE Requirements checkbox changes
-  const handlePPECheckboxChange = (ppe, checked) => {
+  const handlePPECheckboxChange = (ppe, checked, setFieldValue, setFieldTouched) => {
     let updatedPPE;
     if (checked) {
       updatedPPE = [...formData.ppeRequirement, ppe];
@@ -377,170 +386,161 @@ const handleInputChange = (field, value,setFieldValue) => {
       // If unchecking 'Other (Specify)', clear the text
       if (ppe === 'Other (Specify)') {
         setOtherPPEText('');
+        setFieldValue('otherPPEText', '');
       }
     }
     
-    handleInputChange('ppeRequirement', updatedPPE);
+    handleInputChange('ppeRequirement', updatedPPE, setFieldValue);
+    setFieldTouched('ppeRequirement', true, false);
   };
-
-  const handleOtherPPETextChange = (e) => {
+  
+  const handleOtherPPETextChange = (e, setFieldValue, setFieldTouched) => {
     const text = e.target.value;
     setOtherPPEText(text);
-
-    // Ensure 'Other (Specify)' is added to PPE requirements when text is entered
+    setFieldValue('otherPPEText', text);
+    setFieldTouched('otherPPEText', true, false);
+  
     const isOtherInPPE = formData.ppeRequirement.includes('Other (Specify)');
     if (text.trim() && !isOtherInPPE) {
-      handleInputChange('ppeRequirement', [...formData.ppeRequirement, 'Other (Specify)']);
+      handleInputChange('ppeRequirement', [...formData.ppeRequirement, 'Other (Specify)'], setFieldValue);
     }
   };
 
-  const handlePrecautionaryMeasureCheckboxChange = (measure, checked) => {
-    let updatedMeasures;
-    if (checked) {
-      updatedMeasures = [...formData.precautionaryMeasure, measure];
-    } else {
-      updatedMeasures = formData.precautionaryMeasure.filter(p => p !== measure);
-    }
+
+  // Precautionary Measures Checkbox Changes
+  const handlePrecautionaryMeasureCheckboxChange = (measure, checked, setFieldValue, setFieldTouched) => {
+    let updatedMeasures = checked 
+      ? [...(formData.precautionaryMeasure || []), measure]
+      : formData.precautionaryMeasure.filter(p => p !== measure);
     
-    handleInputChange('precautionaryMeasure', updatedMeasures);
+    // Update form data
+    handleInputChange('precautionaryMeasure', updatedMeasures, setFieldValue);
+    setFieldTouched('precautionaryMeasure', true, false); // Changed to false to prevent validation
   };
 
-  // PRECAUTION CHECKBOXES
-  const handlePrecautionCheckboxChange = (precaution, checked) => {
-    let updatedPrecautions;
-    if (checked) {
-      updatedPrecautions = [...formData.precaution, precaution];
-    } else {
-      updatedPrecautions = formData.precaution.filter(p => p !== precaution);
-      
-      // If unchecking 'Additional Controls (Specify)', clear the text
-      if (precaution === 'Additional Controls (Specify)') {
-        setOtherControlsText('');
-      }
-    }
-    
-    handleInputChange('precaution', updatedPrecautions);
-  };
+// PRECAUTION CHECKBOXES
+const handlePrecautionCheckboxChange = (precaution, checked, setFieldValue, setFieldTouched) => {
+  let updatedPrecautions = checked
+    ? [...(formData.precaution || []), precaution]
+    : formData.precaution.filter(p => p !== precaution);
+  
+  handleInputChange('precaution', updatedPrecautions, setFieldValue);
+  setFieldTouched('precaution', true, false); // Changed to false to prevent validation
 
-  const handleOtherControlsTextChange = (e) => {
-    const text = e.target.value;
-    setOtherControlsText(text);
-  
-    // Ensure 'Additional Controls (Specify)' is added when text is entered
-    const isAdditionalControlsInPrecautions = formData.precaution.includes('Additional Controls (Specify)');
-    if (text.trim() && !isAdditionalControlsInPrecautions) {
-      handleInputChange('precaution', [...formData.precaution, 'Additional Controls (Specify)']);
-    }
-  };
+  if (!checked && precaution === 'Additional Controls (Specify)') {
+    setOtherControlsText('');
+    setFieldValue('otherControlsText', '');
+    setFieldTouched('otherControlsText', true, false);
+  }
+};
 
-  const handleAcVoltageDeCheckboxChange = (option, checked) => {
-    let updatedAcVoltageDe;
-    if (checked) {
-      updatedAcVoltageDe = [option]; // Single selection
-    } else {
-      updatedAcVoltageDe = []; 
-    }
-    
-    handleInputChange('acVoltageDe', updatedAcVoltageDe);
-  };
-  
-  const handleDcVoltageDeCheckboxChange = (option, checked) => {
-    let updatedDcVoltageDe;
-    if (checked) {
-      updatedDcVoltageDe = [option]; // (single selection)
-    } else {
-      updatedDcVoltageDe = []; 
-    }
-    
-    handleInputChange('dcVoltageDe', updatedDcVoltageDe);
-  };
+const handleOtherControlsTextChange = (e, setFieldValue, setFieldTouched) => {
+  const text = e.target.value;
+  setOtherControlsText(text);
+  setFieldValue('otherControlsText', text);
+  setFieldTouched('otherControlsText', true);
 
-  //HAZARDOUS ENERGIES CHECKBOXES
-  const handleHazardousEnergiesCheckboxChange = (energy, checked) => {
-    let updatedEnergies;
-    if (checked) {
-      updatedEnergies = [...formData.hazardousEnergies, energy];
-    } else {
-      updatedEnergies = formData.hazardousEnergies.filter(e => e !== energy);
-      
-      // If unchecking 'Dangerous goods/chemicals (Specify)' or 'Other(Specify)', clear the text
-      if (energy === 'Dangerous goods/chemicals (Specify)') {
-        setOtherDangerousGoodsText('');
-      }
-      if (energy === 'Other(Specify)') {
-        setOtherHazardousEnergyText('');
-      }
-    }
-    
-    handleInputChange('hazardousEnergies', updatedEnergies);
-  };
+  const isAdditionalControlsInPrecautions = formData.precaution.includes('Additional Controls (Specify)');
+  if (text.trim() && !isAdditionalControlsInPrecautions) {
+    setFieldValue('precaution', [...formData.precaution, 'Additional Controls (Specify)']);
+    setFieldTouched('precaution', true);
+  }
+};
 
-  const handleOtherDangerousGoodsTextChange = (e) => {
-    const text = e.target.value;
-    setOtherDangerousGoodsText(text);
-  
-    const isDangerousGoodsInEnergies = formData.hazardousEnergies.includes('Dangerous goods/chemicals (Specify)');
-    if (text.trim() && !isDangerousGoodsInEnergies) {
-      handleInputChange('hazardousEnergies', [...formData.hazardousEnergies, 'Dangerous goods/chemicals (Specify)']);
-    }
-  };
-  
-  const handleOtherHazardousEnergyTextChange = (e) => {
-    const text = e.target.value;
-    setOtherHazardousEnergyText(text);
-  
-    const isOtherEnergyInEnergies = formData.hazardousEnergies.includes('Other(Specify)');
-    if (text.trim() && !isOtherEnergyInEnergies) {
-      handleInputChange('hazardousEnergies', [...formData.hazardousEnergies, 'Other(Specify)']);
-    }
-  };
+const handleAcVoltageDeCheckboxChange = (option, checked, setFieldValue, setFieldTouched) => {
+  let updatedAcVoltageDe = checked ? [option] : [];
+  handleInputChange('acVoltageDe', updatedAcVoltageDe, setFieldValue);
+  setFieldTouched('acVoltageDe', true, false); // Changed to false to prevent validation
+};
 
-  const handleBreakPreparationCheckboxChange = (breakPrep, checked) => {
-    let updatedBreakPreparation;
-    if (checked) {
-      updatedBreakPreparation = [...formData.breakPreparation, breakPrep];
-    } else {
-      updatedBreakPreparation = formData.breakPreparation.filter(h => h !== breakPrep);
-      
-      // If unchecking 'Other (Specify)', clear the text
-      if (breakPrep === 'Other (Specify)') {
-        setOtherBreakPreparationText('');
-      }
-    }
-    
-    handleInputChange('breakPreparation', updatedBreakPreparation);
-  };
-  
-  const handleOtherBreakPreparationTextChange = (e) => {
-    const text = e.target.value;
-    setOtherBreakPreparationText(text);
-  
-    // Ensure 'Other (Specify)' is added to break preparation when text is entered
-    const isOtherInBreakPreparation = formData.breakPreparation.includes('Other (Specify)');
-    if (text.trim() && !isOtherInBreakPreparation) {
-      handleInputChange('breakPreparation', [...formData.breakPreparation, 'Other (Specify)']);
-    }
-  };
+const handleDcVoltageDeCheckboxChange = (option, checked, setFieldValue, setFieldTouched) => {
+  let updatedDcVoltageDe = checked ? [option] : [];
+  handleInputChange('dcVoltageDe', updatedDcVoltageDe, setFieldValue);
+  setFieldTouched('dcVoltageDe', true, false); // Changed to false to prevent validation
+};
 
+// HAZARDOUS ENERGIES CHECKBOXES
+const handleHazardousEnergiesCheckboxChange = (energy, checked, setFieldValue, setFieldTouched) => {
+  let updatedEnergies = checked 
+    ? [...(formData.hazardousEnergies || []), energy] 
+    : formData.hazardousEnergies.filter(e => e !== energy);
+  
+  handleInputChange('hazardousEnergies', updatedEnergies, setFieldValue);
+  setFieldTouched('hazardousEnergies', true, false); // Changed to false to prevent validation
 
-  const handleSubmit = async () => {
-    try {
-      setIsSubmitting(true);
-      console.log('Submitting form data:', formData);
-  
-      // Simulate saving form data to the database
-      await new Promise(resolve => setTimeout(resolve, 1000));
-  
-      // Navigate to success page with success status
-      navigate('/dashboard/permits/job-permits/success', { 
-        state: { success: true } 
-      });
-    } catch (error) {
-      console.error('Error creating permit:', error);
-    } finally {
-      setIsSubmitting(false);
+  if (!checked) {
+    if (energy === 'Dangerous goods/chemicals (Specify)') {
+      setOtherDangerousGoodsText('');
+      setFieldValue('otherDangerousGoodsText', '');
+      setFieldTouched('otherDangerousGoodsText', true, false);
     }
-  };
+    if (energy === 'Other(Specify)') {
+      setOtherHazardousEnergyText('');
+      setFieldValue('otherHazardousEnergyText', '');
+      setFieldTouched('otherHazardousEnergyText', true, false);
+    }
+    if (energy === 'Electricity') {
+      handleInputChange('acVoltageDe', [], setFieldValue);
+      handleInputChange('dcVoltageDe', [], setFieldValue);
+      setFieldTouched('acVoltageDe', true, false);
+      setFieldTouched('dcVoltageDe', true, false);
+    }
+  }
+};
+
+const handleOtherDangerousGoodsTextChange = (e, setFieldValue, setFieldTouched) => {
+  const text = e.target.value;
+  setOtherDangerousGoodsText(text);
+  setFieldValue('otherDangerousGoodsText', text);
+  setFieldTouched('otherDangerousGoodsText', true);
+
+  const isDangerousGoodsInEnergies = formData.hazardousEnergies.includes('Dangerous goods/chemicals (Specify)');
+  if (text.trim() && !isDangerousGoodsInEnergies) {
+    setFieldValue('hazardousEnergies', [...formData.hazardousEnergies, 'Dangerous goods/chemicals (Specify)']);
+    setFieldTouched('hazardousEnergies', true);
+  }
+};
+
+const handleOtherHazardousEnergyTextChange = (e, setFieldValue, setFieldTouched) => {
+  const text = e.target.value;
+  setOtherHazardousEnergyText(text);
+  setFieldValue('otherHazardousEnergyText', text);
+  setFieldTouched('otherHazardousEnergyText', true);
+
+  const isOtherEnergyInEnergies = formData.hazardousEnergies.includes('Other(Specify)');
+  if (text.trim() && !isOtherEnergyInEnergies) {
+    setFieldValue('hazardousEnergies', [...formData.hazardousEnergies, 'Other(Specify)']);
+    setFieldTouched('hazardousEnergies', true);
+  }
+};
+
+const handleBreakPreparationCheckboxChange = (breakPrep, checked, setFieldValue, setFieldTouched) => {
+  let updatedBreakPreparation = checked
+      ? [...(formData.breakPreparation || []), breakPrep]
+      : formData.breakPreparation.filter(b => b !== breakPrep);
+
+  handleInputChange('breakPreparation', updatedBreakPreparation, setFieldValue);
+  setFieldTouched('breakPreparation', true);
+
+  if (!checked && breakPrep === 'Other (Specify)') {
+    setOtherBreakPreparationText('');
+    setFieldValue('otherBreakPreparationText', '');
+  }
+};
+
+const handleOtherBreakPreparationTextChange = (e, setFieldValue, setFieldTouched) => {
+  const text = e.target.value;
+  setOtherBreakPreparationText(text);
+  setFieldValue('otherBreakPreparationText', text);
+  setFieldTouched('otherBreakPreparationText', true);
+
+  const isOtherBreakPreparationInList = formData.breakPreparation.includes('Other (Specify)');
+  if (text.trim() && !isOtherBreakPreparationInList) {
+    setFieldValue('breakPreparation', [...formData.breakPreparation, 'Other (Specify)']);
+    setFieldTouched('breakPreparation', true);
+  }
+};
+
 
   return (
     <div className="p-4">
@@ -593,15 +593,25 @@ const handleInputChange = (field, value,setFieldValue) => {
         <Formik
           initialValues={formData}
           validationSchema={SafetyFormValidation}
-          onSubmit={(values) => {
-            console.log('Form Submitted:', values);
-            navigate('/success');
+          onSubmit={async (values, { setTouched }) => {
+            setIsSubmitting(true);
+            try {
+              console.log('Form Submitted:', values); // This will log the form data
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              navigate('/dashboard/permits/job-permits/success', { 
+                state: { success: true } 
+              });
+            } catch (error) {
+              console.error('Error creating permit:', error);
+            } finally {
+              setIsSubmitting(false);
+            }
           }}
           validateOnChange={true}
           validationContext={{ currentSection }}
           validateOnBlur={true}
         >
-          {({ errors, touched, setFieldValue,validateForm,setTouched}) => (
+          {({ errors, touched, setFieldValue,validateForm,setTouched,setFieldTouched}) => (
             <Form>
             {currentSection === 1 && (
                 <div className="space-y-6">
@@ -835,325 +845,326 @@ const handleInputChange = (field, value,setFieldValue) => {
               </div>
             )}
           
-          {currentSection === 2 && (
-  <div className="space-y-6"> 
-    {/* Section 2 */}
-    <div> 
-    <h2 className="font-semibold mb-4 relative">
-        <span className="relative after:content-[''] after:block after:w-full after:h-1 after:bg-gray-500 after:mb-1 after:shadow-md">
-        2. NATURE OF WORK
-        </span>
-        <span className="block text-sm text-red-600">
-        * indicates must-fill field
-        </span>
-    </h2>
+            {currentSection === 2 && (
+            <div className="space-y-6"> 
+                {/* Section 2 */}
+                <div> 
+                <h2 className="font-semibold mb-4 relative">
+                    <span className="relative after:content-[''] after:block after:w-full after:h-1 after:bg-gray-500 after:mb-1 after:shadow-md">
+                    2. NATURE OF WORK
+                    </span>
+                    <span className="block text-sm text-red-600">
+                    * indicates must-fill field
+                    </span>
+                </h2>
 
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-6">
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Job Description <span className="text-red-600">*</span>
-            </label>
-            <Input
-              type="text"
-              name="jobDescription"
-              value={formData.jobDescription}
-              onChange={(e) => {
-                handleInputChange('jobDescription', e.target.value, setFieldValue);
-              }}
-              placeholder="Enter detailed description of the job"
-              className={`w-full ${
-                errors.jobDescription && touched.jobDescription 
-                  ? 'border-red-500 bg-red-50' 
-                  : ''
-              }`}
-            />
-            {errors.jobDescription && touched.jobDescription && (
-              <div className="text-red-600 text-sm mt-1">{errors.jobDescription}</div>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6">
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Permit Receiver <span className="text-red-600">*</span>
-            </label>
-            <Input
-              type="text"
-              name="permitReceiver"
-              value={formData.permitReceiver}
-              onChange={(e) => {
-                handleInputChange('permitReceiver', e.target.value, setFieldValue);
-              }}
-              placeholder="Name of permit receiver"
-              className={`w-full ${
-                errors.permitReceiver && touched.permitReceiver 
-                  ? 'border-red-500 bg-red-50' 
-                  : ''
-              }`}
-            />
-            {errors.permitReceiver && touched.permitReceiver && (
-              <div className="text-red-600 text-sm mt-1">{errors.permitReceiver}</div>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-6">
-  <div>
-    <label className="block text-sm font-medium mb-1">
-      Contract Type <span className="text-red-600">*</span>
-    </label>
-    <Dropdown
-      name="contractType"
-      options={contractTypeOptions}
-      value={formData.contractType}
-      onChange={(value) => {
-        handleInputChange('contractType', value, setFieldValue);
-      }}
-      className={`w-full ${
-        errors.contractType && touched.contractType 
-          ? 'border-red-500 bg-red-50' 
-          : ''
-      }`}
-      dropdownIcon="▾"
-    />
-    {errors.contractType && touched.contractType && (
-      <div className="text-red-600 text-sm mt-1">{errors.contractType}</div>
-    )}
-  </div>
-
-  {formData.contractType === 'External / Contract Company' && (
-    <div>
-      <label className="block text-sm font-medium mb-1">
-        Company Name <span className="text-red-600">*</span>
-      </label>
-      <Input
-        type="text"
-        name="contractCompanyName"
-        value={formData.contractCompanyName || ''}
-        onChange={(e) => {
-          handleInputChange('contractCompanyName', e.target.value, setFieldValue);
-        }}
-        placeholder="Enter contract company name"
-        className={`w-full ${
-          errors.contractCompanyName && touched.contractCompanyName 
-            ? 'border-red-500 bg-red-50' 
-            : ''
-        }`}
-      />
-      {errors.contractCompanyName && touched.contractCompanyName && (
-        <div className="text-red-600 text-sm mt-1">{errors.contractCompanyName}</div>
-      )}
-    </div>
-  )}
-</div>
-          
-        <div className="grid grid-cols-2 gap-6">
-        <div>
-    <label className="block text-sm font-medium mb-1">
-      Staff ID {formData.contractType === 'Internal / MPS' && <span className="text-red-600">*</span>}
-      {formData.contractType !== 'Internal / MPS' && <span className="text-gray-500 font-normal">(Optional)</span>}
-    </label>
-    <Input
-      type="text"
-      name="staffID"
-      value={formData.staffID}
-      onChange={(e) => {
-        handleInputChange('staffID', e.target.value, setFieldValue);
-      }}
-      placeholder="Enter staff ID"
-      className={`w-full ${
-        errors.staffID && touched.staffID 
-          ? 'border-red-500 bg-red-50' 
-          : ''
-      }`}
-    />
-    {errors.staffID && touched.staffID && (
-      <div className="text-red-600 text-sm mt-1">{errors.staffID}</div>
-    )}
-  </div>  
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Number of Workers <span className="text-red-600">*</span>
-              </label>
-              <Input
-                type="number"
-                name="numberOfWorkers"
-                min="0"
-                max="20"
-                value={formData.numberOfWorkers}
-                onChange={(e) => {
-                  handleInputChange('numberOfWorkers', e.target.value, setFieldValue);
-                }}
-                placeholder="Enter number of workers"
-                className={`w-full ${
-                  errors.numberOfWorkers && touched.numberOfWorkers 
-                    ? 'border-red-500 bg-red-50' 
-                    : ''
-                }`}
-              />
-              {errors.numberOfWorkers && touched.numberOfWorkers && (
-                <div className="text-red-600 text-sm mt-1">{errors.numberOfWorkers}</div>
-              )}
-            </div>
-        </div>                  
-    
-        <div className="border p-4 rounded-lg">
-  <label className="block text-sm font-medium mb-1">
-    Risk Assessment/Job Safety Analysis <span className="text-red-600">*</span>
-  </label>
-  <p className="text-xs text-gray-600 mt-1 mb-1">
-    Uploaded documents must have one of the following extensions: 
-    <span className="font-bold"> jpg, jpeg, png, doc, docx, pdf </span> 
-    and <span className="font-bold">not larger than 4MB</span> each.
-  </p>
-  <div
-    className={`flex flex-col items-center justify-center w-full h-32 bg-gray-100 rounded-lg cursor-pointer border-dashed border-2 ${
-      errors.riskAssessment && touched.riskAssessment
-        ? 'border-red-500'
-        : 'border-blue-400'
-    }`}
-    onDragOver={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }}
-    onDrop={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      handleFileDrop(e,setFieldValue);
-    }}
-  >
-    <input
-      type="file"
-      id="riskAssessmentUpload"
-      multiple
-      onChange={(e) => handleFileUpload(e, setFieldValue)}
-      className="hidden"
-      accept=".jpg,.jpeg,.png,.doc,.docx,.pdf"
-    />
-    <label
-      htmlFor="riskAssessmentUpload"
-      className="flex flex-col items-center space-y-2"
-    >
-      <CloudUpload className="h-8 w-8 text-blue-500" />
-      <span className="text-blue-500 font-medium">Click To Upload Documents</span>
-    </label>
-  </div>
-  {errors.riskAssessment && touched.riskAssessment && (
-    <div className="text-red-600 text-sm mt-1">{errors.riskAssessment}</div>
-  )}
-
-  {fileToUpload.length > 0 && (
-    <div className="mt-4">
-      <h4 className="text-sm font-semibold mb-2">Uploaded Documents</h4>
-      <div className="space-y-2">
-        {fileToUpload.map((file, index) => (
-          <div
-            key={index}
-            className="flex items-center justify-between bg-gray-200 p-2 rounded-lg"
-          >
-            <div className="flex items-center space-x-2">
-              <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
-                {file.name.split('.').pop().toUpperCase()}
-              </span>
-              <span className="text-sm text-gray-700 truncate">
-                {file.name}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="text-red-500 hover:text-red-700"
-              onClick={() => handleFileRemove(index, setFieldValue)}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  )}
-</div>
-           
-        <div>
-            <label className="block text-sm font-medium mb-3">
-              Permit(s) Required <span className="text-red-600">*</span>
-            </label>
-            <div className="grid grid-cols-3 gap-4">
-              {permitTypes.map((permitType) => (
-                <label key={permitType} className="inline-flex items-center">
-                  <input
-                    type="checkbox"
-                    value={permitType}
-                    checked={formData.permitRequired.includes(permitType)}
-                    onChange={(e) => {
-                      const updatedPermits = e.target.checked
-                        ? [...formData.permitRequired, permitType]
-                        : formData.permitRequired.filter(p => p !== permitType);
-                      handleInputChange('permitRequired', updatedPermits, setFieldValue);
-                    }}
-                    className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
-                  />
-                  <span className="text-sm">{permitType}</span>
-                </label>
-              ))}
-            </div>
-            {errors.permitRequired && touched.permitRequired && (
-              <div className="text-red-600 text-sm mt-1">{errors.permitRequired}</div>
-            )}
-        </div>
-
-        {/* Worker Details Table */}
-        {formData.numberOfWorkers > 0 && (
-          <div className="border p-4 rounded-lg">
-            <h4 className="text-sm font-semibold mb-3">Worker Details</h4>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border p-2 text-center">S/N</th>
-                  <th className="border p-2 text-center">Workers Name *</th>
-                </tr>
-              </thead>
-              <tbody>
-                {formData.workerDetails.map((worker, index) => (
-                  <tr key={index}>
-                    <td className="border p-2 text-center">{index + 1}</td>
-                    <td className="border p-2">
-                      <Input
-                        type="text"
-                        name={`workerDetails.${index}.name`}
-                        value={worker.name}
-                        onChange={(e) => {
-                          const updatedWorkerDetails = [...formData.workerDetails];
-                          updatedWorkerDetails[index] = { 
-                            ...updatedWorkerDetails[index], 
-                            name: e.target.value 
-                          };
-                          handleInputChange('workerDetails', updatedWorkerDetails, setFieldValue);
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">
+                          Job Description <span className="text-red-600">*</span>
+                        </label>
+                        <Input
+                          type="text"
+                          name="jobDescription"
+                          value={formData.jobDescription}
+                          onChange={(e) => {
+                            handleInputChange('jobDescription', e.target.value, setFieldValue);
+                          }}
+                          placeholder="Enter detailed description of the job"
+                          className={`w-full ${
+                            errors.jobDescription && touched.jobDescription 
+                              ? 'border-red-500 bg-red-50' 
+                              : ''
+                          }`}
+                        />
+                        {errors.jobDescription && touched.jobDescription && (
+                          <div className="text-red-600 text-sm mt-1">{errors.jobDescription}</div>
+                        )}
+                      </div>
+                    </div>
+                      
+                    <div className="grid grid-cols-1 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">
+                          Permit Receiver <span className="text-red-600">*</span>
+                        </label>
+                        <Input
+                          type="text"
+                          name="permitReceiver"
+                          value={formData.permitReceiver}
+                          onChange={(e) => {
+                            handleInputChange('permitReceiver', e.target.value, setFieldValue);
+                          }}
+                          placeholder="Name of permit receiver"
+                          className={`w-full ${
+                            errors.permitReceiver && touched.permitReceiver 
+                              ? 'border-red-500 bg-red-50' 
+                              : ''
+                          }`}
+                        />
+                        {errors.permitReceiver && touched.permitReceiver && (
+                          <div className="text-red-600 text-sm mt-1">{errors.permitReceiver}</div>
+                        )}
+                      </div>
+                    </div>
+                      
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Contract Type <span className="text-red-600">*</span>
+                      </label>
+                      <Dropdown
+                        name="contractType"
+                        options={contractTypeOptions}
+                        value={formData.contractType}
+                        onChange={(value) => {
+                          handleInputChange('contractType', value, setFieldValue);
+                          setFieldValue('staffID', ''); // Reset related fields
+                          setFieldValue('contractCompanyName', '');
                         }}
-                        placeholder={`Enter worker ${index + 1} name`}
                         className={`w-full ${
-                          errors.workerDetails?.[index]?.name && touched.workerDetails?.[index]?.name
-                            ? 'border-red-500 bg-red-50'
+                          errors.contractType && touched.contractType 
+                            ? 'border-red-500 bg-red-50' 
                             : ''
                         }`}
                       />
-                      {errors.workerDetails?.[index]?.name && touched.workerDetails?.[index]?.name && (
-                        <div className="text-red-600 text-sm mt-1">
-                          {errors.workerDetails[index].name}
+                      {errors.contractType && touched.contractType && (
+                        <div className="text-red-600 text-sm mt-1">{errors.contractType}</div>
+                      )}
+                    </div>
+                    
+                    {formData.contractType === 'External / Contract Company' && (
+                      <div>
+                        <label className="block text-sm font-medium mb-1">
+                          Company Name <span className="text-red-600">*</span>
+                        </label>
+                        <Input
+                          type="text"
+                          name="contractCompanyName"
+                          value={formData.contractCompanyName || ''}
+                          onChange={(e) => {
+                            handleInputChange('contractCompanyName', e.target.value, setFieldValue);
+                          }}
+                          placeholder="Enter contract company name"
+                          className={`w-full ${
+                            errors.contractCompanyName && touched.contractCompanyName 
+                              ? 'border-red-500 bg-red-50' 
+                              : ''
+                          }`}
+                        />
+                        {errors.contractCompanyName && touched.contractCompanyName && (
+                          <div className="text-red-600 text-sm mt-1">{errors.contractCompanyName}</div>
+                        )}
+                      </div>
+                    )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Staff ID {formData.contractType === 'Internal / MPS' && <span className="text-red-600">*</span>}
+                        {formData.contractType !== 'Internal / MPS' && <span className="text-gray-500 font-normal">(Optional)</span>}
+                      </label>
+                      <Input
+                        type="text"
+                        name="staffID"
+                        value={formData.staffID || ''}
+                        onChange={(e) => {
+                          handleInputChange('staffID', e.target.value, setFieldValue);
+                        }}
+                        placeholder="Enter staff ID"
+                        className={`w-full ${
+                          errors.staffID && touched.staffID 
+                            ? 'border-red-500 bg-red-50' 
+                            : ''
+                        }`}
+                      />
+                      {errors.staffID && touched.staffID && (
+                        <div className="text-red-600 text-sm mt-1">{errors.staffID}</div>
+                      )}
+                      </div>
+                      <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Number of Workers <span className="text-red-600">*</span>
+                      </label>
+                      <Input
+                        type="number"
+                        name="numberOfWorkers"
+                        min="0"
+                        max="20"
+                        value={formData.numberOfWorkers}
+                        onChange={(e) => {
+                          handleInputChange('numberOfWorkers', e.target.value, setFieldValue);
+                        }}
+                        placeholder="Enter number of workers"
+                        className={`w-full ${
+                          errors.numberOfWorkers && touched.numberOfWorkers 
+                            ? 'border-red-500 bg-red-50' 
+                            : ''
+                        }`}
+                      />
+                      {errors.numberOfWorkers && touched.numberOfWorkers && (
+                        <div className="text-red-600 text-sm mt-1">{errors.numberOfWorkers}</div>
+                      )}
+                      </div>
+                    </div>                  
+    
+                    <div className="border p-4 rounded-lg">
+                      <label className="block text-sm font-medium mb-1">
+                        Risk Assessment/Job Safety Analysis <span className="text-red-600">*</span>
+                      </label>
+                      <p className="text-xs text-gray-600 mt-1 mb-1">
+                        Uploaded documents must have one of the following extensions: 
+                        <span className="font-bold"> jpg, jpeg, png, doc, docx, pdf </span> 
+                        and <span className="font-bold">not larger than 4MB</span> each.
+                      </p>
+                      <div
+                        className={`flex flex-col items-center justify-center w-full h-32 bg-gray-100 rounded-lg cursor-pointer border-dashed border-2 ${
+                          errors.riskAssessment && touched.riskAssessment
+                            ? 'border-red-500'
+                            : 'border-blue-400'
+                        }`}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleFileDrop(e,setFieldValue);
+                        }}
+                      >
+                        <input
+                          type="file"
+                          id="riskAssessmentUpload"
+                          multiple
+                          onChange={(e) => handleFileUpload(e, setFieldValue)}
+                          className="hidden"
+                          accept=".jpg,.jpeg,.png,.doc,.docx,.pdf"
+                        />
+                        <label
+                          htmlFor="riskAssessmentUpload"
+                          className="flex flex-col items-center space-y-2"
+                        >
+                          <CloudUpload className="h-8 w-8 text-blue-500" />
+                          <span className="text-blue-500 font-medium">Click To Upload Documents</span>
+                        </label>
+                      </div>
+                      {errors.riskAssessment && touched.riskAssessment && (
+                        <div className="text-red-600 text-sm mt-1">{errors.riskAssessment}</div>
+                      )}
+
+                      {fileToUpload.length > 0 && (
+                        <div className="mt-4">
+                          <h4 className="text-sm font-semibold mb-2">Uploaded Documents</h4>
+                          <div className="space-y-2">
+                            {fileToUpload.map((file, index) => (
+                              <div
+                                key={index}
+                                className="flex items-center justify-between bg-gray-200 p-2 rounded-lg"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                                    {file.name.split('.').pop().toUpperCase()}
+                                  </span>
+                                  <span className="text-sm text-gray-700 truncate">
+                                    {file.name}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="text-red-500 hover:text-red-700"
+                                  onClick={() => handleFileRemove(index, setFieldValue)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+           
+                <div>
+                    <label className="block text-sm font-medium mb-3">
+                      Permit(s) Required <span className="text-red-600">*</span>
+                      {errors.permitRequired && touched.permitRequired && (
+                      <div className="text-red-600 text-sm mt-1">{errors.permitRequired}</div>
+                    )}
+                    </label>
+                    <div className="grid grid-cols-3 gap-4">
+                      {permitTypes.map((permitType) => (
+                        <label key={permitType} className="inline-flex items-center">
+                          <input
+                            type="checkbox"
+                            value={permitType}
+                            checked={formData.permitRequired.includes(permitType)}
+                            onChange={(e) => {
+                              const updatedPermits = e.target.checked
+                                ? [...formData.permitRequired, permitType]
+                                : formData.permitRequired.filter(p => p !== permitType);
+                              handleInputChange('permitRequired', updatedPermits, setFieldValue);
+                            }}
+                            className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
+                          />
+                          <span className="text-sm">{permitType}</span>
+                        </label>
+                      ))}
+                    </div>
+                </div>
+
+                {/* Worker Details Table */}
+                {formData.numberOfWorkers > 0 && (
+                <div className="border p-4 rounded-lg">
+                  <h4 className="text-sm font-semibold mb-3">Worker Details</h4>
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border p-2 text-center">S/N</th>
+                        <th className="border p-2 text-center">Worker's Name *</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {formData.workerDetails.map((worker, index) => (
+                        <tr key={index}>
+                          <td className="border p-2 text-center">{index + 1}</td>
+                          <td className="border p-2">
+                          <Input
+                            type="text"
+                            name={`workerDetails.${index}.name`}
+                            value={worker.name}
+                            onChange={(e) => {
+                              handleInputChange(`workerDetails.${index}.name`, e.target.value, setFieldValue);
+                            }}
+                            onBlur={() => {
+                              setFieldTouched(`workerDetails.${index}.name`, true);
+                            }}
+                            placeholder={`Enter worker ${index + 1} name`}
+                            className={`w-full ${
+                              errors.workerDetails?.[index]?.name && 
+                              touched.workerDetails?.[index]?.name
+                                ? 'border-red-500 focus:ring-red-500 focus:border-red-500'
+                                : ''
+                            }`}
+                          />
+                            {errors.workerDetails?.[index]?.name && 
+                             touched.workerDetails?.[index]?.name && (
+                              <div className="text-red-600 text-xs mt-1">
+                                {errors.workerDetails[index].name}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                )}
+              </div>
+            </div>
           </div>
-        )}
-        </div>
-        </div>
-      </div>
-    )}   
+            )}   
 
             {currentSection === 3 && (
                 <div className="space-y-6">
@@ -1164,34 +1175,38 @@ const handleInputChange = (field, value,setFieldValue) => {
                     3. HAZARD IDENTIFICATION
                     </span>
                 </h2>
+                {errors.hazardIdentification && touched.hazardIdentification && (
+                <div className="text-red-500 text-sm mb-2">{errors.hazardIdentification}</div>
+                )}
                 <div>
                 <div className="grid grid-cols-4 gap-4">
-                    {hazardOptions.map((hazard) => (
+                  {hazardOptions.map((hazard) => (
                     <div key={hazard} className="relative">
-                        <label className="inline-flex items-center">
+                      <label className="inline-flex items-center">
                         <input
-                            type="checkbox"
-                            value={hazard}
-                            checked={formData.hazardIdentification.includes(hazard)}
-                            onChange={(e) => handleCheckboxChange(hazard, e.target.checked)}
-                            className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
+                          type="checkbox"
+                          value={hazard}
+                          checked={formData.hazardIdentification.includes(hazard)}
+                          onChange={(e) => handleCheckboxChange(hazard, e.target.checked, setFieldValue, setFieldTouched)}
+                          className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                         />
                         <span className="text-sm">{hazard}</span>
-                        </label>
-                        
-                        {/* Conditional text input for 'Other (Specify)' */}
-                        {hazard === 'Other (Specify)' && 
-                        formData.hazardIdentification.includes(hazard) && (
+                      </label>
+
+                      {hazard === 'Other (Specify)' && 
+                      formData.hazardIdentification.includes(hazard) && (
                         <input
-                            type="text"
-                            value={otherHazardText}
-                            onChange={handleOtherHazardTextChange}
-                            placeholder="Type other hazard"
-                            className="mt-1 block w-full border border-gray-300 rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                          type="text"
+                          value={otherHazardText}
+                          onChange={(e) => handleOtherHazardTextChange(e, setFieldValue,setFieldTouched)}
+                          placeholder="Type other hazard"
+                          className={`mt-1 block w-full border rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                            errors.otherHazardText && touched.otherHazardText ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                          }`}
                         />
-                        )}
+                      )}
                     </div>
-                    ))}
+                  ))}
                 </div>
                 </div>
                 <h2 className="font-semibold mt-7 mb-4 relative">
@@ -1199,6 +1214,9 @@ const handleInputChange = (field, value,setFieldValue) => {
                     4. JOB REQUIREMENTS
                     </span>
                 </h2>
+                {errors.jobRequirement && touched.jobRequirement && (
+                <div className="text-red-500 text-sm mb-2">{errors.jobRequirement}</div>
+                )}
                 <div>
                 <div className="grid grid-cols-3 gap-4">
                     {jobRequirementOptions.map((requirement) => (
@@ -1208,7 +1226,7 @@ const handleInputChange = (field, value,setFieldValue) => {
                             type="checkbox"
                             value={requirement}
                             checked={formData.jobRequirement.includes(requirement)}
-                            onChange={(e) => handleJobRequirementCheckboxChange(requirement, e.target.checked)}
+                            onChange={(e) => handleJobRequirementCheckboxChange(requirement, e.target.checked,setFieldValue,setFieldTouched)}
                             className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                           />
                           <span className="text-sm">{requirement}</span>
@@ -1220,9 +1238,11 @@ const handleInputChange = (field, value,setFieldValue) => {
                           <input
                             type="text"
                             value={otherGasesText}
-                            onChange={handleOtherGasesTextChange}
+                            onChange={(e) => handleOtherGasesTextChange(e, setFieldValue,setFieldTouched)}
                             placeholder="Type other gases"
-                            className="mt-1 block w-full border border-gray-300 rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            className={`mt-1 block w-full border rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                              errors.otherGasesText && touched.otherGasesText ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                            }`}
                           />
                         )}
                       </div>
@@ -1232,9 +1252,12 @@ const handleInputChange = (field, value,setFieldValue) => {
                 </div>
                 <h2 className="font-semibold mt-7 mb-4 relative">
                     <span className="relative after:content-[''] after:block after:w-full after:h-1 after:bg-gray-500 after:mb-1 after:shadow-md">
-                    4. PPE REQUIREMENTS
+                    5. PPE REQUIREMENTS
                     </span>
                 </h2>
+                {errors.ppeRequirement && touched.ppeRequirement && (
+                <div className="text-red-500 text-sm mb-2">{errors.ppeRequirement}</div>
+                )}
                 <div>
                 <div className="grid grid-cols-4 gap-4">
                   {ppeRequirementOptions.map((ppe) => (
@@ -1244,7 +1267,7 @@ const handleInputChange = (field, value,setFieldValue) => {
                         type="checkbox"
                         value={ppe}
                         checked={formData.ppeRequirement.includes(ppe)}
-                        onChange={(e) => handlePPECheckboxChange(ppe, e.target.checked)}
+                        onChange={(e) => handlePPECheckboxChange(ppe, e.target.checked,setFieldValue,setFieldTouched)}
                         className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                       />
                       <span className="text-sm">{ppe}</span>
@@ -1256,9 +1279,12 @@ const handleInputChange = (field, value,setFieldValue) => {
                       <input
                         type="text"
                         value={otherPPEText}
-                        onChange={handleOtherPPETextChange}
+
+                        onChange={(e) => handleOtherPPETextChange(e,setFieldValue,setFieldTouched)}
                         placeholder="Type other PPE"
-                        className="mt-1 block w-full border border-gray-300 rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        className={`mt-1 block w-full border rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                          errors.otherPPEText && touched.otherPPEText ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
                       />
                     )}
                   </div>
@@ -1281,6 +1307,9 @@ const handleInputChange = (field, value,setFieldValue) => {
                     </span>
                 </h2>
                 <div>
+                {errors.precautionaryMeasure && touched.precautionaryMeasure && (
+                <div className="text-red-500 text-sm mb-2">{errors.precautionaryMeasure}</div>
+                 )}
                 <div className="grid grid-cols-2 gap-4">
                     {precautionaryMeasureOptions.map((measure) => (
                     <div key={measure} className="relative">
@@ -1289,7 +1318,7 @@ const handleInputChange = (field, value,setFieldValue) => {
                           type="checkbox"
                           value={measure}
                           checked={formData.precautionaryMeasure.includes(measure)}
-                          onChange={(e) => handlePrecautionaryMeasureCheckboxChange(measure, e.target.checked)}
+                          onChange={(e) => handlePrecautionaryMeasureCheckboxChange(measure, e.target.checked,setFieldValue,setFieldTouched)}
                           className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                         />
                         <span className="text-sm">{measure}</span>
@@ -1303,6 +1332,9 @@ const handleInputChange = (field, value,setFieldValue) => {
                     7. PRECAUTIONS
                     </span>
                 </h2>
+                {errors.precaution && touched.precaution && (
+                <div className="text-red-500 text-sm mb-2">{errors.precaution}</div>
+                )}
                 <div>
                 <div className="grid grid-cols-3 gap-4">
                 {precautionOptions.map((precaution) => (
@@ -1312,7 +1344,7 @@ const handleInputChange = (field, value,setFieldValue) => {
                        type="checkbox"
                        value={precaution}
                        checked={formData.precaution.includes(precaution)}
-                       onChange={(e) => handlePrecautionCheckboxChange(precaution, e.target.checked)}
+                       onChange={(e) => handlePrecautionCheckboxChange(precaution, e.target.checked,setFieldValue,setFieldTouched)}
                        className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                      />
                      {precaution === 'Additional Controls (Specify)' ? (
@@ -1327,9 +1359,11 @@ const handleInputChange = (field, value,setFieldValue) => {
                      <input
                        type="text"
                        value={otherControlsText}
-                       onChange={handleOtherControlsTextChange}
+                       onChange={(e) => handleOtherControlsTextChange(e, setFieldValue, setFieldTouched)}
                        placeholder="Type additional controls"
-                       className="mt-1 block w-full border border-gray-300 rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                       className={`mt-1 block w-full border rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                        errors.otherControlsText && touched.otherControlsText ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                      }`}
                      />  //
                    )}
                  </div>
@@ -1343,6 +1377,9 @@ const handleInputChange = (field, value,setFieldValue) => {
                     8. HAZARDOUS ENERGIES
                     </span>
                 </h2>
+                {errors.hazardousEnergies && touched.hazardousEnergies&& (
+                <div className="text-red-500 text-sm mb-2">{errors.hazardousEnergies}</div>
+                )}
                 <div>
                 <div className="grid grid-cols-4 gap-4">
                   {hazardousEnergiesOptions.map((energy) => (
@@ -1352,7 +1389,7 @@ const handleInputChange = (field, value,setFieldValue) => {
                           type="checkbox"
                           value={energy}
                           checked={formData.hazardousEnergies.includes(energy)}
-                          onChange={(e) => handleHazardousEnergiesCheckboxChange(energy, e.target.checked)}
+                          onChange={(e) => handleHazardousEnergiesCheckboxChange(energy, e.target.checked, setFieldValue, setFieldTouched)}
                           className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2 align-middle"
                         />
                         <span className="text-sm">{energy}</span>
@@ -1363,13 +1400,21 @@ const handleInputChange = (field, value,setFieldValue) => {
                         <input
                           type="text"
                           value={energy === 'Dangerous goods/chemicals (Specify)' ? otherDangerousGoodsText : otherHazardousEnergyText}
-                          onChange={energy === 'Dangerous goods/chemicals (Specify)' ? handleOtherDangerousGoodsTextChange : handleOtherHazardousEnergyTextChange}
+                          onChange={(e) => energy === 'Dangerous goods/chemicals (Specify)'
+                             ? handleOtherDangerousGoodsTextChange(e, setFieldValue, setFieldTouched)
+                             : handleOtherHazardousEnergyTextChange(e, setFieldValue, setFieldTouched)
+                            }
                           placeholder={
                             energy === 'Dangerous goods/chemicals (Specify)' 
                               ? 'Type dangerous goods' 
                               : 'Type hazardous energies'
                           }
-                          className="mt-1 block w-full border border-gray-300 rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                          className={`mt-1 block w-full border rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                            (energy === 'Dangerous goods/chemicals (Specify)' && errors.otherDangerousGoodsText && touched.otherDangerousGoodsText) || 
+                            (energy === 'Other(Specify)' && errors.otherHazardousEnergyText && touched.otherHazardousEnergyText)
+                              ? 'border-red-500 bg-red-50' 
+                              : 'border-gray-300'
+                          }`}
                         />    
                       )}
                     </div>
@@ -1385,7 +1430,7 @@ const handleInputChange = (field, value,setFieldValue) => {
                             type="checkbox"
                             value={option}
                             checked={formData.breakPreparation.includes(option)}
-                            onChange={(e) => handleBreakPreparationCheckboxChange(option, e.target.checked)}
+                            onChange={(e) => handleBreakPreparationCheckboxChange(option, e.target.checked,setFieldValue,setFieldTouched)}
                             className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2"
                           />
                           <span className="text-sm">{option}</span>
@@ -1394,9 +1439,11 @@ const handleInputChange = (field, value,setFieldValue) => {
                           <input
                             type="text"
                             value={otherBreakPreparationText}
-                            onChange={handleOtherBreakPreparationTextChange}
+                            onChange={(e) => handleOtherBreakPreparationTextChange(e, setFieldValue, setFieldTouched)}
                             placeholder="Specify break preparation"
-                            className="mt-1 block w-full border border-gray-300 rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            className={`mt-1 block w-full border rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                              errors.otherBreakPreparationText && touched.otherBreakPreparationText ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                            }`}
                           />
                         )}
                       </div>
@@ -1406,6 +1453,11 @@ const handleInputChange = (field, value,setFieldValue) => {
                 {formData.hazardousEnergies.includes('Electricity') && (
                   <div className="mb-4 mt-4">
                   <p className="text-red-600 font-medium">Identify Voltage handle*</p>
+                  {((errors.acVoltageDe || errors.dcVoltageDe) && (touched.acVoltageDe || touched.dcVoltageDe)) && (
+                    <div className="text-red-500 text-sm mb-2">
+                      {errors.acVoltageDe || errors.dcVoltageDe}
+                    </div>
+                  )}
                   <div>
                     <div className="flex items-center">
                       <p className="border-b-2 border-black w-max mr-4 font-medium">A.C Voltage De-Energized : </p>
@@ -1416,7 +1468,7 @@ const handleInputChange = (field, value,setFieldValue) => {
                               type="checkbox"
                               value={option}
                               checked={formData.acVoltageDe.includes(option)}
-                              onChange={(e) => handleAcVoltageDeCheckboxChange(option, e.target.checked)}
+                              onChange={(e) => handleAcVoltageDeCheckboxChange(option, e.target.checked,setFieldValue,setFieldTouched)}
                               className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2"
                             />
                             <span className="text-sm">{option}</span>
@@ -1434,7 +1486,7 @@ const handleInputChange = (field, value,setFieldValue) => {
                                 type="checkbox"
                                 value={option}
                                 checked={formData.dcVoltageDe.includes(option)}
-                                onChange={(e) => handleDcVoltageDeCheckboxChange(option, e.target.checked)}
+                                onChange={(e) => handleDcVoltageDeCheckboxChange(option, e.target.checked,setFieldValue,setFieldTouched)}
                                 className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2"
                               />
                               <span className="text-sm">{option}</span>
@@ -1454,6 +1506,8 @@ const handleInputChange = (field, value,setFieldValue) => {
                         type="checkbox"
                         id="terms-checkbox"
                         className="form-checkbox h-4 w-4 text-green-600 cursor-pointer border-gray-300 rounded mr-2"
+                        checked={formData.disclaimerAccepted} // Ensure this is bound to the form state
+                        onChange={e => setFieldValue('disclaimerAccepted', e.target.checked)} // Update state on change
                       />
                       <span className="text-sm font-medium">
                         I agree to the safety precautions stated above
@@ -1464,6 +1518,14 @@ const handleInputChange = (field, value,setFieldValue) => {
                       possess the necessary personal protective equipment (PPE), and have taken all appropriate precautionary measures. 
                       I also acknowledge that the organization is not liable for any consequences resulting from my negligence.
                     </p>
+                    {errors.disclaimerAccepted && touched.disclaimerAccepted && (
+                      <div className="mt-2 flex items-center text-red-700">
+                        <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm font-semibold">{errors.disclaimerAccepted}</span>
+                      </div>
+                    )}
                   </div>
                </div>
               </div>
@@ -1493,13 +1555,13 @@ const handleInputChange = (field, value,setFieldValue) => {
             )}
             {currentSection === 4 && (
               <Button
-                variant="secondary"
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="bg-green-600 text-white hover:bg-green-700 flex items-center gap-2"
-              >
-                {isSubmitting ? 'Submitting...' : 'Submit'}
-              </Button>
+              type="submit"
+              variant="success"
+              className="bg-green-600 text-white hover:bg-green-700 flex items-center gap-2"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Submitting...' : 'Submit'}
+            </Button>
             )}
             </div>
             </Form>
