@@ -39,10 +39,6 @@ const SafetyFormValidation = Yup.object().shape({
     .test('is-greater-or-equal', 'End Date must be the same or after Start Date', function (value) {
       const { startDate } = this.parent;
       return value >= startDate;
-    })
-    .test('max-duration', function (value) {
-      const { startDate } = this.parent;
-      return calculatePermitDuration(startDate, value) <= 7;
     }),
   endTime: Yup.date()
     .required('End Time is required')
@@ -63,11 +59,11 @@ const SafetyFormValidation = Yup.object().shape({
       return true;
     }),
 
-  permitDuration: Yup.number().max(7, 'Permit duration cannot exceed 7 days').required('Permit duration is required'),
+  permitDuration: Yup.number().min(1, 'Permit duration must be at least 1 day').required('Permit duration is required'),
   department: Yup.string().required('Department is required'),
   jobLocation: Yup.string().required('Job Location is required'),
   subLocation: Yup.string().required('Sub Location is required'),
-  plantDetail: Yup.string().required('Plant/Location/Equipment Detail is required'),
+  locationDetail: Yup.string().required('Plant/Location/Equipment Detail is required'),
   
   // Section 2 Validations
   jobDescription: Yup.string().required('Job Description is required'),
@@ -99,7 +95,7 @@ const SafetyFormValidation = Yup.object().shape({
     .test('file-type', 'Unsupported file type', (files) =>
       files.every((file) => ['jpg', 'jpeg', 'png', 'doc', 'docx', 'pdf'].includes(file.name.split('.').pop().toLowerCase()))
     ),
-  permitRequired: Yup.array().min(1, 'At least one Permit is required'),
+  //permitRequired: Yup.array().min(1, 'At least one Permit is required'),
 
   workerDetails: Yup.array()
   .of(
@@ -120,11 +116,13 @@ const SafetyFormValidation = Yup.object().shape({
   hazardIdentification: Yup.array()
     .min(1, 'At least one hazard must be checked')
     .required('Hazard identification is required'),
-  otherHazardText: Yup.string()
-    .test('other-hazard-required', 'Please specify other hazard', function(value) {
-      const hazards = this.parent.hazardIdentification;
-      return !hazards?.includes('Other (Specify)') || (hazards?.includes('Other (Specify)') && !!value);
-    }),
+  otherHazardText: Yup.string().when(['hazardIdentification'], {
+    is: (hazardIdentification) => 
+      Array.isArray(hazardIdentification) && 
+      hazardIdentification.includes('Other (Specify)'),
+    then: () => Yup.string().required('Please specify other hazard'),
+    otherwise: () => Yup.string()
+  }),
 
   jobRequirement: Yup.array()
     .min(1, 'At least one Job Requirement must be checked')

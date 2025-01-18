@@ -1,6 +1,13 @@
 import React from 'react';
 
-export const Button = ({ onClick, children, className = '', variant = 'default' }) => {
+export const Button = ({ 
+  onClick, 
+  children, 
+  className = '', 
+  variant = 'default',
+  type = 'button', // Add default type prop
+  disabled = false // Also add disabled prop support
+}) => {
   const baseStyles = 'px-3 py-2 text-sm rounded transition-colors';
   const variantStyles = {
     default: 'bg-white border hover:bg-gray-50',
@@ -11,17 +18,27 @@ export const Button = ({ onClick, children, className = '', variant = 'default' 
 
   return (
     <button 
-      onClick={onClick} 
-      className={`${baseStyles} ${variantStyles[variant]} ${className}`}
+      onClick={onClick}
+      type={type} // Forward the type prop
+      disabled={disabled} // Forward the disabled prop
+      className={`${baseStyles} ${variantStyles[variant]} ${className} ${
+        disabled ? 'opacity-50 cursor-not-allowed' : ''
+      }`}
     >
       {children}
     </button>
   );
 };
 
-export const IconButton = ({ icon, onClick, className = '' }) => (
+export const IconButton = ({ 
+  icon, 
+  onClick, 
+  className = '',
+  type = 'button' // Add type prop here too for consistency
+}) => (
   <button 
-    onClick={onClick} 
+    onClick={onClick}
+    type={type} // Forward the type prop
     className={`p-2 rounded hover:bg-gray-100 ${className}`}
   >
     {icon}

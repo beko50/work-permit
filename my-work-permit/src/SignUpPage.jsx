@@ -2,23 +2,21 @@ import React, { useState } from 'react';
 import logo from './assets/mps_logo.jpg';
 import { useNavigate } from 'react-router-dom';
 import { FcGoogle } from 'react-icons/fc';
+import { api } from './services/api'
 
 const SignUpPage = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState(''); 
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
+    contractCompanyName: '',
     password: '',
     confirmPassword: '',
   });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Handle sign-up logic here
-    console.log('Form submitted:', formData);
-    navigate('/dashboard');
-  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -26,6 +24,50 @@ const SignUpPage = () => {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      setIsLoading(false);
+      return;
+    }
+
+    // Log the data being sent
+    console.log('Sending registration data:', {
+      ...formData,
+      password: '[HIDDEN]',
+      confirmPassword: '[HIDDEN]',
+    });
+
+    try {
+      const data = await api.register({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        password: formData.password,
+        contractCompanyName: formData.contractCompanyName,
+      });
+
+      console.log('Response data:', data);
+    
+    // If we get here, registration was successful
+    console.log('Registration successful:', data);
+    navigate('/'); // Navigate to sign in page
+    
+  } catch (err) {
+    // Handle specific error messages if they exist
+    const errorMessage = err.message || 'Network error or server is not responding';
+    setError(errorMessage);
+    console.error('Registration error:', err);
+  } finally {
+    setIsLoading(false);
+  }
   };
 
   return (
@@ -36,24 +78,43 @@ const SignUpPage = () => {
           <img src={logo} alt="Logo" className="h-[90px] w-[120px]" />
         </div>
         <h2 className="text-2xl font-semibold text-gray-800 mb-4">Sign Up</h2>
-
+        {/* Add error display */}
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+            {error}
+          </div>
+        )}
+        
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Name input */}
+          {/* FirstName input */}
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-              Name
+              First Name
             </label>
             <input
-              id="name"
+              id="firstName"
               type="text"
-              name="name"
-              value={formData.name}
+              name="firstName"
+              value={formData.firstName}
               onChange={handleChange}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               required
             />
           </div>
-
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+              Last Name
+            </label>
+            <input
+              id="lastName"
+              type="text"
+              name="lastName"
+              value={formData.lastName}
+              onChange={handleChange}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+          </div>
           {/* Email input */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700">
@@ -64,6 +125,22 @@ const SignUpPage = () => {
               type="email"
               name="email"
               value={formData.email}
+              onChange={handleChange}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+          </div>
+
+          {/* CompanyName input */}
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+              Contract Company Name
+            </label>
+            <input
+              id="contractCompanyName"
+              type="text"
+              name="contractCompanyName"
+              value={formData.contractCompanyName}
               onChange={handleChange}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               required
@@ -183,9 +260,10 @@ const SignUpPage = () => {
           {/* Sign up button */}
           <button
             type="submit"
+            disabled={isLoading}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-900 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
-            Sign Up
+            {isLoading ? 'Signing up...' : 'Sign Up'}
           </button>
 
           {/* Google Sign Up */}

@@ -207,7 +207,7 @@ const Sidebar = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <div className="text-lg font-semibold">HSE Management System</div>
+            <div className="text-lg font-semibold">QHSSE Management System</div>
           </div>
           <div className="flex items-center space-x-4">
             <button className="p-2">
