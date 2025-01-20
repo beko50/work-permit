@@ -10,16 +10,41 @@ const userModel = {
   },
 
   async createUser(userData, transaction) {
+    // Determine if user is internal based on email domain
+    const isInternalUser = userData.email.endsWith('@mps-gh.com');
+    
     const result = await transaction.request()
       .input('firstName', sql.VarChar, userData.firstName)
       .input('lastName', sql.VarChar, userData.lastName)
       .input('email', sql.VarChar, userData.email)
       .input('passwordHash', sql.VarChar, userData.passwordHash)
       .input('contractCompanyName', sql.VarChar, userData.contractCompanyName)
-      .input('userType', sql.VarChar, userData.userType)
+      .input('departmentId', sql.VarChar, isInternalUser ? userData.departmentId : null)
+      .input('roleId', sql.VarChar, userData.roleId)
+      .input('userType', sql.VarChar, isInternalUser ? 'Internal' : 'External')
       .query(`
-        INSERT INTO Users (FirstName, LastName, Email, PasswordHash, ContractCompanyName, UserType)
-        VALUES (@firstName, @lastName, @email, @passwordHash, @contractCompanyName, @userType);
+        INSERT INTO Users (
+          FirstName, 
+          LastName, 
+          Email, 
+          PasswordHash, 
+          ContractCompanyName, 
+          DepartmentID,
+          RoleID,
+          UserType,
+          Created
+        )
+        VALUES (
+          @firstName,
+          @lastName,
+          @email,
+          @passwordHash,
+          @contractCompanyName,
+          @departmentId,
+          @roleId,
+          @userType,
+          GETDATE()
+        );
         SELECT SCOPE_IDENTITY() AS userId;
       `);
     return result.recordset[0];
@@ -36,8 +61,9 @@ const userModel = {
           LastName, 
           Email, 
           DepartmentID, 
-          RoleID, 
+          RoleID,
           UserType,
+          ContractCompanyName,
           Created
         FROM Users 
         WHERE UserID = @userId

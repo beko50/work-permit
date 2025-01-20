@@ -67,60 +67,95 @@ const sectionItemsCache = {
 export const api = {
   // Existing auth endpoints
   async register(userData) {
-    const response = await fetch(`${API_URL}/users/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify(userData),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    try {
+      const response = await fetch(`${API_URL}/users/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(userData),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        // Throw error with the message from the server
+        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+      }
+      
+      return data;
+    } catch (error) {
+      // Re-throw the error with the proper message
+      throw error;
     }
-    return await response.json();
   },
 
   async login(credentials) {
-    const response = await fetch(`${API_URL}/users/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify(credentials),
-    });
+    try {
+      const response = await fetch(`${API_URL}/users/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(credentials),
+      });
 
-    const data = await response.json();
-  
-    if (!response.ok) {
-      throw new Error(data.message || `HTTP error! status: ${response.status}`);
-    }
-
-     // Store the token in localStorage
-  if (data.token) {
-    localStorage.setItem('token', data.token);
-  }
+      const data = await response.json();
     
-    return data;
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+      }
+
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
+      
+      return data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   async logout() {
-    localStorage.removeItem('token');
-    const response = await fetch(`${API_URL}/users/logout`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
-    });
-    return await response.json();
+    try {
+      localStorage.removeItem('token');
+      const response = await fetch(`${API_URL}/users/logout`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   async getUserProfile() {
-    const response = await fetch(`${API_URL}/users/profile`, {
-      credentials: 'include',
-    });
-    return await response.json();
+    try {
+      const response = await fetch(`${API_URL}/users/profile`, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   // New permit endpoints
@@ -184,19 +219,131 @@ export const api = {
     }
   },
 
-  async getPermits() {
-    const response = await fetch(`${API_URL}/permits`, {
-      method: 'GET',
-      credentials: 'include',
-      headers: getAuthHeaders(),
-    });
-
-    if (!response.ok) {
+  async getPermits(searchParams = {}) {
+    try {
+      // Build query string from search params
+      const queryParams = new URLSearchParams();
+      Object.entries(searchParams).forEach(([key, value]) => {
+        if (value) {
+          queryParams.append(key, value);
+        }
+      });
+  
+      // Make the request
+      const response = await fetch(`${API_URL}/permits?${queryParams.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+  
+      // Log the full response for debugging
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+  
+      // Check if response is OK
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+  
+      // Try to parse the response as JSON
       const data = await response.json();
-      throw new Error(data.message || `HTTP error! status: ${response.status}`);
+      console.log('Response data:', data);
+  
+      // Format the permits data
+      const formattedPermits = Array.isArray(data) ? data.map(permit => ({
+        JobPermitID: permit.JobPermitID,
+        PermitReceiver: permit.PermitReceiver,
+        ContractCompanyName: permit.ContractCompanyName || 'N/A',
+        Status: permit.Status,
+        Created: permit.Created,
+      })) : [];
+  
+      return {
+        data: formattedPermits,
+        total: formattedPermits.length,
+        success: true
+      };
+  
+    } catch (error) {
+      console.error('Error fetching permits:', error);
+      return {
+        data: [],
+        total: 0,
+        success: false,
+        error: error.message || 'Failed to fetch permits'
+      };
     }
+  },
 
-    return await response.json();
+  async getPermitById(permitId) {
+    try {
+      const response = await fetch(`${API_URL}/permits/${permitId}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return {
+        data,
+        success: true
+      };
+
+    } catch (error) {
+      console.error('Error fetching permit:', error);
+      return {
+        data: null,
+        success: false,
+        error: error.message || 'Failed to fetch permit'
+      };
+    }
+  },
+
+  // Add search permits method
+  async searchPermits(searchParams) {
+    try {
+      const queryParams = new URLSearchParams();
+      
+      // Map and add search parameters
+      Object.entries(searchParams).forEach(([key, value]) => {
+        if (value) {
+          queryParams.append(key, value);
+        }
+      });
+
+      const response = await fetch(`${API_URL}/permits/search?${queryParams.toString()}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      return {
+        data: data.permits,
+        total: data.total,
+        success: true
+      };
+
+    } catch (error) {
+      console.error('Error searching permits:', error);
+      return {
+        data: [],
+        total: 0,
+        success: false,
+        error: error.message || 'Failed to search permits'
+      };
+    }
   },
 
   async updatePermitStatus(permitId, status) {

@@ -5,6 +5,8 @@ import SignInPage from './SignInPage';
 import SignUpPage from './SignUpPage';
 import Dashboard from './Sidebar';
 import Home from './Home';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import JobSafetyPermit from './JobSafetyPermit';    //Job Safety Permits page
 import SafetyForm from './SafetyForm';      //Job Safety form with all checkboxes
 import PermitToWork from './PermitToWork';   //Permit to Work page
@@ -15,11 +17,19 @@ import SuccessPage from './SuccessPage';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
         <Route path="/" element={<SignInPage />} />
         <Route path="/sign-up" element={<SignUpPage />} />
-        <Route path="/dashboard" element={<Dashboard />}>
+        <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          >
           <Route index element={<Home />} />
           <Route path="permits">
             <Route path="job-permits" element={<JobSafetyPermit />} />
@@ -32,9 +42,10 @@ function App() {
             <Route path="view-permits" element={<ViewPermits />} />
             <Route path="approval-history" element={<ApprovalHistory />} />
           </Route>
-        </Route>
-      </Routes>
-    </BrowserRouter>
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

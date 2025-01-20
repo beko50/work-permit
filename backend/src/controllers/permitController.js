@@ -86,7 +86,7 @@ const permitController = {
             checkboxes: []
           };
           delete permits[row.JobPermitID].SectionItemID;
-          delete permits[row.JobPermitID].IsChecked;
+          delete permits[row.JobPermitID].Selected;
           delete permits[row.JobPermitID].TextInput;
           delete permits[row.JobPermitID].ItemLabel;
           delete permits[row.JobPermitID].SectionName;
@@ -97,7 +97,7 @@ const permitController = {
             sectionItemId: row.SectionItemID,
             sectionName: row.SectionName,
             label: row.ItemLabel,
-            isChecked: row.IsChecked === 'Yes',
+            selected: row.Selected === 'Yes',
             textInput: row.TextInput
           });
         }

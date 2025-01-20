@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import logo from './assets/mps_logo.jpg';
 import backgroundImage from './assets/background_1.jpg';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from './context/AuthContext';
 import { api } from './services/api';
 
 const SignInPage = () => {
   const navigate = useNavigate();
+  const { login,user } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -21,22 +23,18 @@ const SignInPage = () => {
     setIsLoading(true);
 
     try {
-      const data = await api.login({
-        email: formData.email,
-        password: formData.password,
-      });
-
-      // Store the token and user data
-      if (formData.rememberMe) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('userData', JSON.stringify(data.user));
+      const result = await login(formData.email, formData.password);
+      
+      if (result.success) {
+        // The token is already handled by the AuthContext
+        if (formData.rememberMe) {
+          localStorage.setItem('rememberMe', 'true');
+        }
+        navigate('/dashboard');
+        // window.location.reload()
       } else {
-        sessionStorage.setItem('token', data.token);
-        sessionStorage.setItem('userData', JSON.stringify(data.user));
+        setError(result.error);
       }
-
-      // Navigate to dashboard
-      navigate('/dashboard');
     } catch (error) {
       setError(error.message || 'Failed to sign in. Please try again.');
     } finally {

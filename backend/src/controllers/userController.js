@@ -9,29 +9,51 @@ const userController = {
     const transaction = pool.transaction();
 
     try {
-      const { firstName, lastName, email, password, contractCompanyName } = req.body;
+      const { 
+        firstName, 
+        lastName, 
+        email, 
+        password, 
+        contractCompanyName,
+        departmentId,
+        roleId
+      } = req.body;
 
       await transaction.begin();
 
+      // Check if user already exists
       const existingUser = await userModel.findByEmail(email);
       if (existingUser) {
         await transaction.rollback();
         return res.status(400).json({ message: 'Email already registered' });
       }
 
+      // Validate internal user requirements
+      const isInternalUser = email.endsWith('@mps-gh.com');
+      if (isInternalUser && !departmentId) {
+        await transaction.rollback();
+        return res.status(400).json({ message: 'Department ID is required for internal users' });
+      }
+
+      // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Prepare user data
       const userData = {
         firstName,
         lastName,
         email,
         passwordHash: hashedPassword,
         contractCompanyName,
-        userType: 'External'
+        departmentId,
+        roleId
       };
 
+      // Create user
       const result = await userModel.createUser(userData, transaction);
 
       await transaction.commit();
+      
       res.status(201).json({ 
         message: 'User registered successfully', 
         userId: result.userId 
@@ -64,7 +86,8 @@ const userController = {
         { 
           userId: user.UserID, 
           role: user.RoleID,
-          userType: user.UserType 
+          userType: user.UserType,
+          departmentId: user.DepartmentID 
         },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
@@ -75,11 +98,12 @@ const userController = {
         user: {
           id: user.UserID,
           email: user.Email,
-          role: user.RoleID,
+          roleId: user.RoleID,
           firstName: user.FirstName,
           lastName: user.LastName,
           departmentId: user.DepartmentID,
-          userType: user.UserType
+          userType: user.UserType,
+          contractCompanyName: user.ContractCompanyName
         }
       });
     } catch (error) {

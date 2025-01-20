@@ -7,19 +7,82 @@ import { Table, TableHead, TableBody, TableRow, TableCell } from './components/u
 import { RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
 import SafetyForm from './SafetyForm';
 import PermitToWorkForm from './PTWForm';
+import { api } from './services/api'
 
 const JobSafetyPermit = () => {
   const navigate = useNavigate();
+  const [permits, setPermits] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isPermitFormOpen, setIsPermitFormOpen] = useState(false);
+  
+  // Get user info from localStorage
+  const userInfo = JSON.parse(localStorage.getItem('user') || '{}');
+  const userRole = userInfo.role;
+  const userName = `${userInfo.firstName} ${userInfo.lastName}`;
+
   const [searchParams, setSearchParams] = useState({
-    permitId: '', 
-    contractor: '',
-    company: '',
+    jobPermitId: '',
+    permitReceiver: '',
+    contractCompanyName: '',
     status: '',
-    startDate: '11/18/2023',
-    endDate: '12/18/2024'
+    startDate: '',
+    endDate: '',
   });
+
+  // Fetch permits based on user role
+  const fetchPermits = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+  
+      // Build search parameters
+      const queryParams = new URLSearchParams();
+    
+    // Only add parameters that have values
+    if (searchParams.permitReceiver) {
+      queryParams.append('PermitReceiver', searchParams.permitReceiver);
+    }
+    if (searchParams.status) {
+      queryParams.append('Status', searchParams.status);
+    }
+    if (searchParams.contractCompanyName) {
+      queryParams.append('ContractCompanyName', searchParams.contractCompanyName);
+    }
+    if (searchParams.startDate) {
+      queryParams.append('StartDate', searchParams.startDate);
+    }
+    if (searchParams.endDate) {
+      queryParams.append('EndDate', searchParams.endDate);
+    }
+
+    const response = await api.getPermits(Object.fromEntries(queryParams));
+
+    if (response.success) {
+      setPermits(response.data);
+    } else {
+      setError(response.error || 'Failed to fetch permits');
+      setPermits([]);
+    }
+  } catch (error) {
+    console.error('Error fetching permits:', error);
+    setError('Failed to fetch permits. Please try again later.');
+    setPermits([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  useEffect(() => {
+    fetchPermits();
+  }, []); // Initial fetch
+
+  // Search handler
+  const handleSearch = () => {
+    fetchPermits();
+  };
+
   const handleCreatePermit = () => {
     navigate('/dashboard/permits/job-permits/create');
   };
@@ -27,12 +90,6 @@ const JobSafetyPermit = () => {
   const handleViewPTW = () => {
     setIsPermitFormOpen(true);
   };
-
-  const permits = [
-    { id: 'C95-1', status: 'Rejected', company: 'MPS Ghana Ltd', jobDescription: 'Internal job', receiverName: 'Bernard Ofori', submissionDate: '2/20/2024'},
-    { id: 'C96-1', status: 'Approved', company: 'MTN Ghana', jobDescription: 'Fix Network', receiverName: 'Yaw Sarpong', submissionDate: '8/28/2024'},
-    { id: 'C97-1', status: 'Pending', company: 'Epsin Company', jobDescription: 'Check RTG and STS', receiverName: 'Dennis Appiah', submissionDate: '10/30/2024'}
-  ];
   
   const Dropdown = ({ 
     children, 
@@ -121,27 +178,30 @@ const JobSafetyPermit = () => {
       <div className="mb-4 flex justify-between items-start gap-2">
         <Card className="flex-1 p-4">
           <div className="flex flex-col gap-4">
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Input 
-                  placeholder="Search Permit ID number" 
-                  value={searchParams.permitId} 
-                  onChange={(e) => setSearchParams({ ...searchParams, permitId: e.target.value })} 
-                  className="w-full"
-                />
+          <div className="flex flex-col gap-4">
+              {/* Your existing search inputs */}
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <Input 
+                    placeholder="Search Permit ID number" 
+                    value={searchParams.jobPermitId} 
+                    onChange={(e) => setSearchParams({ ...searchParams, jobPermitId: e.target.value })} 
+                    className="w-full"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Input 
+                    placeholder="Search contractor" 
+                    value={searchParams.contractCompanyName} 
+                    onChange={(e) => setSearchParams({ ...searchParams, contractCompanyName: e.target.value })} 
+                    className="w-full"
+                  />
+                </div>
+                <Button variant="primary" onClick={handleSearch} className="w-[150px]">
+                  Search
+                </Button>
               </div>
-              <div className="flex-1">
-                <Input 
-                  placeholder="Search contractor" 
-                  value={searchParams.contractor} 
-                  onChange={(e) => setSearchParams({ ...searchParams, contractor: e.target.value })} 
-                  className="w-full"
-                />
               </div>
-              <Button variant="primary" onClick={() => console.log('search')} className="w-[150px]">
-                Search
-              </Button>
-            </div>
 
             {showAdvanced && (
               <div className="grid grid-cols-12 gap-4">
@@ -198,84 +258,118 @@ const JobSafetyPermit = () => {
           <h1 className="text-2xl font-semibold">Job Safety Permits</h1>
         </CardHeader>
         <CardContent className="p-4">
-          {/* Action Buttons */}
+          {/* Action Buttons - show all for ISS/HOD, limited for RCV */}
           <div className="flex gap-2 mb-4">
             <Button 
               variant="secondary" 
               className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
-              onClick={() => console.log('refresh')}
+              onClick={fetchPermits}
             >
               <RefreshCw className="w-4 h-4" />
               REFRESH
             </Button>
-            <Button
-              variant='secondary' 
-              className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
-              onClick={handleCreatePermit}
-            >
-              <PlusCircle className="w-4 h-4" />
-              CREATE PERMIT
-            </Button>
-            <Button 
-              variant="destructive"
-              className="flex items-center gap-2 text-red-600 hover:bg-red-50 border-none"
-              onClick={() => console.log('revoke')}
-            >
-              <XCircle className="w-4 h-4" />
-              REVOKE PERMIT
-            </Button>
+            
+            {userRole !== 'RCV' && (
+              <>
+                <Button
+                  variant='secondary' 
+                  className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={handleCreatePermit}
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  CREATE PERMIT
+                </Button>
+                <Button 
+                  variant="destructive"
+                  className="flex items-center gap-2 text-red-600 hover:bg-red-50 border-none"
+                  onClick={() => console.log('revoke')}
+                >
+                  <XCircle className="w-4 h-4" />
+                  REVOKE PERMIT
+                </Button>
+              </>
+            )}
+            
             <Button onClick={handleViewPTW}>
               View PTW
             </Button>
-
           </div>
 
-          {/* Table */}
-          <Table>
+          {/* Show loading state */}
+          {loading && (
+            <div className="text-center py-4">
+              Loading permits...
+            </div>
+          )}
+
+          {/* Show error state */}
+          {error && (
+            <div className="text-red-500 text-center py-4">
+              {error}
+            </div>
+          )}
+
+          {/* Only render table if we have permits and not loading */}
+          {!loading && !error && (
+            <Table>
             <TableHead>
               <TableRow>
                 <TableCell>
-                <Button variant="ghost" className="text-sm font-medium">
-                    Command 
+                  <Button variant="ghost" className="text-sm font-medium">
+                    Actions
                   </Button>
                 </TableCell>
                 <TableCell className="text-base font-medium">Permit ID</TableCell>
-                <TableCell className="text-base font-medium">Company</TableCell>
-                <TableCell className="text-base font-medium">Job Description</TableCell>
                 <TableCell className="text-base font-medium">Permit Receiver</TableCell>
-                <TableCell className="text-base font-medium">Submission Date</TableCell>
-                
+                <TableCell className="text-base font-medium">Company</TableCell>
+                <TableCell className="text-base font-medium">Status</TableCell>
+                <TableCell className="text-base font-medium">Submission Date</TableCell>   
               </TableRow>
             </TableHead>
-              <TableBody>
-                {permits.map((permit) => (
-                  <TableRow key={permit.id}>
+            <TableBody>
+              {Array.isArray(permits) && permits.length > 0 ? (
+                permits.map((permit) => (
+                  <TableRow key={permit.JobPermitID}>
                     <TableCell>
-                    <Dropdown
-                      options={['View', 'Edit', 'Print']}
-                      onSelect={(action) => handleDropdownAction(action, permit.id)}
-                      className="text-sm font-medium"
-                    >
-                      Actions
-                    </Dropdown>
+                      <Dropdown
+                        options={['View', 'Edit', 'Print']}
+                        onSelect={(action) => handleDropdownAction(action, permit.JobPermitID)}
+                        className="text-sm font-medium"
+                      >
+                        Actions
+                      </Dropdown>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span>{permit.id}</span>
-                        <span className={getStatusColor(permit.status)}>{permit.status}</span>
+                        <span>JSP-{String(permit.JobPermitID).padStart(4, '0')}</span>
+                        <span className={getStatusColor(permit.Status)}>{permit.Status}</span>
                       </div>
                     </TableCell>
-                    <TableCell>{permit.company}</TableCell>
-                    <TableCell>{permit.jobDescription}</TableCell>
-                    <TableCell>{permit.receiverName}</TableCell>
-                    <TableCell>{permit.submissionDate}</TableCell>
+                    <TableCell>{permit.PermitReceiver}</TableCell>
+                    <TableCell>{permit.ContractCompanyName || 'N/A'}</TableCell>
+                    <TableCell>{permit.Status}</TableCell>
+                    <TableCell>
+                      {new Date(permit.Created).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </TableCell>
                   </TableRow>
-                  ))}
-                </TableBody>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-4">
+                    No permits found
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
           </Table>
+          )}
 
           <div className="flex justify-end mt-4 text-sm text-gray-500">
-            Rows per page: 15 | 1-3 of 3
+            Rows per page: 15 | {Array.isArray(permits) ? `1-${permits.length} of ${permits.length}` : '0-0 of 0'}
           </div>
         </CardContent>
       </Card>

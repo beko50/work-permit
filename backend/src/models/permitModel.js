@@ -92,7 +92,7 @@ const permitModel = {
           changer.FirstName as ChangerFirstName,
           changer.LastName as ChangerLastName,
           jpc.SectionItemID,
-          jpc.IsChecked,
+          jpc.Selected,
           jpc.TextInput,
           si.ItemLabel,
           fs.SectionName
@@ -105,6 +105,47 @@ const permitModel = {
         ORDER BY jp.Created DESC
       `);
     return result.recordset;
+  },
+
+  async searchPermits(searchParams) {
+    const pool = await poolPromise;
+    try {
+      const request = pool.request();
+
+      // Add parameters
+      request
+        .input('permitReceiver', searchParams.permitReceiver || null)
+        .input('jobPermitId', searchParams.jobPermitId || null)
+        .input('contractCompanyName', searchParams.contractCompanyName || null)
+        .input('status', searchParams.status || null)
+        .input('startDate', searchParams.startDate ? new Date(searchParams.startDate) : null)
+        .input('endDate', searchParams.endDate ? new Date(searchParams.endDate) : null);
+
+      const result = await request.query(`
+        SELECT 
+          jp.*,
+          jpc.SectionItemID,
+          jpc.Selected,  -- Using Selected instead of IsChecked
+          jpc.TextInput,
+          si.ItemLabel,
+          s.SectionName
+        FROM JobPermits jp
+        LEFT JOIN JobPermitCheckboxes jpc ON jp.JobPermitID = jpc.JobPermitID
+        LEFT JOIN SectionItems si ON jpc.SectionItemID = si.SectionItemID
+        LEFT JOIN Sections s ON si.SectionID = s.SectionID
+        WHERE (@permitReceiver IS NULL OR jp.PermitReceiver = @permitReceiver)
+        AND (@jobPermitId IS NULL OR jp.JobPermitID LIKE '%' + @jobPermitId + '%')
+        AND (@contractCompanyName IS NULL OR jp.ContractCompanyName LIKE '%' + @contractCompanyName + '%')
+        AND (@status IS NULL OR jp.Status = @status)
+        AND (@startDate IS NULL OR jp.StartDate >= @startDate)
+        AND (@endDate IS NULL OR jp.EndDate <= @endDate)
+        ORDER BY jp.Created DESC
+      `);
+      return result.recordset;
+    } catch (error) {
+      console.error('Error in searchPermits:', error);
+      throw error;
+    }
   },
 
   async updatePermitStatus(permitId, status, changerId, transaction) {

@@ -1,14 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState,useEffect } from 'react';
 import logo from './assets/mps_logo.jpg';
 import { useNavigate } from 'react-router-dom';
-import { FcGoogle } from 'react-icons/fc';
+import { Card, CardHeader, CardContent } from './components/ui/card';
 import { api } from './services/api'
 
 const SignUpPage = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(''); 
+  const [countdown, setCountdown] = useState(3);
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccessCard, setShowSuccessCard] = useState(false);
+  const [shouldRedirect, setShouldRedirect] = useState(false);
+
+  const departments = [
+    { id: 'IT', name: 'Information Technology' },
+    { id: 'OPS', name: 'Operations' },
+    { id: 'ASM', name: 'Asset Maintenance' },
+    { id: 'QHSSE', name: 'QHSSE' }
+  ];
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -16,15 +26,81 @@ const SignUpPage = () => {
     contractCompanyName: '',
     password: '',
     confirmPassword: '',
+    departmentId: '',
+    roleId: 'RCV' // Default to Receiver
   });
+
+  // Handle email change to auto-fill company name
+  const handleEmailChange = (email) => {
+    if (email.endsWith('@mps-gh.com')) {
+      setFormData(prev => ({
+        ...prev,
+        email: email,
+        contractCompanyName: 'MPS Ghana'
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        email: email,
+        contractCompanyName: '', // Reset if not MPS email
+        roleId: 'RCV'  // Reset to Receiver for external users
+      }));
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    
+    if (name === 'email') {
+      handleEmailChange(value);
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
+
+  const SuccessCard = () => (
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+      <Card className="bg-green-100 border-l-4 border-green-500 p-6 shadow-lg max-w-lg mx-auto">
+        <CardHeader>
+          <div className="flex items-center">
+            <svg
+              className="fill-current h-8 w-8 text-green-500 mr-4"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+            </svg>
+            <h3 className="text-green-900 font-bold text-lg">Registration successful!</h3>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-green-700 text-base mt-2">
+            Redirecting to Sign In page in {countdown} seconds...
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  useEffect(() => {
+    let countdownInterval;
+    
+    if (shouldRedirect && countdown > 0) {
+      countdownInterval = setInterval(() => {
+        setCountdown((prev) => prev - 1);
+      }, 1000);
+    } else if (shouldRedirect && countdown === 0) {
+      navigate('/');
+    }
+
+    return () => {
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
+    };
+  }, [shouldRedirect, countdown, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -52,14 +128,13 @@ const SignUpPage = () => {
         email: formData.email,
         password: formData.password,
         contractCompanyName: formData.contractCompanyName,
+        departmentId: formData.departmentId || null,
+        roleId: formData.roleId
       });
 
-      console.log('Response data:', data);
-    
-    // If we get here, registration was successful
-    console.log('Registration successful:', data);
-    navigate('/'); // Navigate to sign in page
-    
+      console.log('Registration successful:', data);
+      setShowSuccessCard(true);
+      setShouldRedirect(true); // Trigger the countdown effect
   } catch (err) {
     // Handle specific error messages if they exist
     const errorMessage = err.message || 'Network error or server is not responding';
@@ -70,8 +145,26 @@ const SignUpPage = () => {
   }
   };
 
+  const isInternalUser = formData.email.endsWith('@mps-gh.com');
+
+  // Define available roles based on user type
+  const getRoleOptions = () => {
+    if (isInternalUser) {
+      return [
+        { id: 'RCV', name: 'Permit Receiver' },
+        { id: 'ISS', name: 'Permit Issuer' },
+        { id: 'HOD', name: 'Head of Department' }
+      ];
+    } else {
+      return [
+        { id: 'RCV', name: 'Permit Receiver' }
+      ];
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-cover bg-center">
+      {showSuccessCard && <SuccessCard />}
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
         {/* Logo Section */}
         <div className="flex justify-center mb-0"> {/* Reduce margin-bottom to mb-4 */}
@@ -131,9 +224,9 @@ const SignUpPage = () => {
             />
           </div>
 
-          {/* CompanyName input */}
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+           {/* Company Name field - readonly for internal users */}
+           <div>
+            <label htmlFor="contractCompanyName" className="block text-sm font-medium text-gray-700">
               Contract Company Name
             </label>
             <input
@@ -142,10 +235,57 @@ const SignUpPage = () => {
               name="contractCompanyName"
               value={formData.contractCompanyName}
               onChange={handleChange}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              readOnly={isInternalUser}
+              className={`mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                isInternalUser ? 'bg-gray-100' : ''
+              }`}
               required
             />
           </div>
+
+          {/* Role Selection - Modified to show options based on user type */}
+          <div>
+            <label htmlFor="roleId" className="block text-sm font-medium text-gray-700">
+              Role
+            </label>
+            <select
+              id="roleId"
+              name="roleId"
+              value={formData.roleId}
+              onChange={handleChange}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+            >
+              {getRoleOptions().map(role => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Department selection - only for internal users */}
+          {isInternalUser && (
+            <div>
+              <label htmlFor="departmentId" className="block text-sm font-medium text-gray-700">
+                Department
+              </label>
+              <select
+                id="departmentId"
+                name="departmentId"
+                value={formData.departmentId}
+                onChange={handleChange}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              >
+                <option value="">Select Department</option>
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Password input */}
           <div>
@@ -260,23 +400,14 @@ const SignUpPage = () => {
           {/* Sign up button */}
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || showSuccessCard}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-900 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             {isLoading ? 'Signing up...' : 'Sign Up'}
           </button>
-
-          {/* Google Sign Up */}
-          <div className="text-center">
-            <span>or</span>
-            <button className="flex items-center justify-center w-full py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-              <FcGoogle className="mr-2" />
-              Sign up with Google
-            </button>
-          </div>
         </form>
 
-        <div className="text-sm text-center mt-4">
+        <div className="text-sm text-center mt-5">
           Already have an account?{' '}
           <a href="/" className="font-medium text-blue-600 hover:text-blue-500 underline">
             SIGN IN

@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate,Routes,Route,useLocation,Outlet } from 'react-router-dom';
+import { useAuth } from './context/AuthContext';
 import ViewPermits from './ViewPermits';
 import Home from './Home';
 
 const SidebarItem = ({ icon, label, isOpen, onClick, children, isActive, path, isCreatePermitActive }) => {
     const activeClass = isActive || isCreatePermitActive ? 'border-r-4 border-blue-500 bg-blue-50' : '';
     const activeTextClass = isActive || isCreatePermitActive ? 'text-blue-500' : 'text-gray-700';
-
 
   return (
     <div className="mb-1">
@@ -48,10 +48,41 @@ const SidebarItem = ({ icon, label, isOpen, onClick, children, isActive, path, i
 };
 
 const Sidebar = () => {
+  // const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [sidebarMode, setSidebarMode] = useState('full'); // 'full', 'icons'
+  const [sidebarMode, setSidebarMode] = useState('full');
   const [expandedMenu, setExpandedMenu] = useState(null);
+
+  // Abednego 20-01-2025
+  const [currentUser, SetCurrentUser] = useState()
+
+  useEffect(()=>{
+    const saveData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui')
+    const parsedData = JSON.parse(saveData)
+    console.warn(parsedData)
+    SetCurrentUser(parsedData?.user)
+  }, [])
+
+  // Add this useEffect for initial redirect
+  useEffect(() => {
+    if (currentUser?.roleId?.trim() === 'RCV' && location.pathname === '/dashboard') {
+      navigate('/dashboard/permits/job-permits');
+    }
+  }, [currentUser, location.pathname, navigate]);
+
+  const isLimitedUser = currentUser?.roleId?.trim() !== 'HOD' && currentUser?.roleId?.trim() !== 'ISS';
+
+// Update the getUserRoleDisplay function
+const getUserRoleDisplay = () => {
+    const roleId = currentUser?.roleId?.trim();
+    switch(roleId) {
+        case 'RCV': return 'Permit Receiver';
+        case 'ISS': return 'Permit Issuer';
+        case 'HOD': return 'Head of Department';
+        // default: return 'User';
+    }
+};
 
   const toggleSidebar = () => {
       // Toggle between 'full' and 'icons' modes
@@ -82,26 +113,30 @@ const Sidebar = () => {
                       </div>
                       {sidebarMode === 'full' && (
                           <div>
-                              <div className="font-medium">Administrator</div>
-                              <div className="text-sm text-gray-500">Admin</div>
-                          </div>
+                          <div className="font-medium">Welcome, {currentUser?.firstName}</div>
+                          <div className="text-sm text-gray-500">{getUserRoleDisplay()}</div>
+                        </div>
                       )}
                   </div>
               </div>
 
               <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                  <SidebarItem
+                  {/* Only show Home for Issuers and HODs */}
+                  {!isLimitedUser && (
+                    <SidebarItem
                       icon={
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                              <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                          </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                        </svg>
                       }
                       label={sidebarMode === 'full' ? 'Home' : ''}
                       onClick={() => navigate('/dashboard')}
                       isActive={location.pathname === '/dashboard'}
                       path={location.pathname}
-                  />
+                    />
+                  )}
 
+                  {/* Permits Request - visible to all users */}
                   <SidebarItem
                       icon={
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -136,53 +171,61 @@ const Sidebar = () => {
                           </>
                       )}
                   </SidebarItem>
+
+                 {/* My Tasks - Only for Issuers and HODs */}
+                {!isLimitedUser && (
                   <SidebarItem
-                      icon={
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                              <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                              <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-                          </svg>
-                      }
-                      label={sidebarMode === 'full' ? 'My Tasks' : ''}
-                      isOpen={sidebarMode === 'full' && expandedMenu === 'myTasks'}
-                      onClick={() => toggleMenu('myTasks')}
-                      isActive={['/dashboard/my-tasks/view-permits','/dashboard/my-tasks/pending-approvals', '/dashboard/my-tasks/approval-history'].includes(location.pathname)}
-                      path={location.pathname}>
-                      {sidebarMode === 'full' && (
-                          <>
-                              <div
-                                  className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
-                                  onClick={() => navigate('/dashboard/my-tasks/pending-approvals')}
-                              >
-                                  Pending Approvals
-                              </div>
-                              <div
-                                  className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
-                                  onClick={() => navigate('/dashboard/my-tasks/view-permits')}
-                              >
-                                  View All Permits
-                              </div>
-                              <div
-                                  className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
-                                  onClick={() => navigate('/dashboard/my-tasks/approval-history')}
-                              >
-                                  Approval History
-                              </div>
-                          </>
-                      )}
+                    icon={
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                        <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
+                      </svg>
+                    }
+                    label={sidebarMode === 'full' ? 'My Tasks' : ''}
+                    isOpen={sidebarMode === 'full' && expandedMenu === 'myTasks'}
+                    onClick={() => toggleMenu('myTasks')}
+                    isActive={['/dashboard/my-tasks/view-permits','/dashboard/my-tasks/pending-approvals', '/dashboard/my-tasks/approval-history'].includes(location.pathname)}
+                    path={location.pathname}
+                  >
+                    {sidebarMode === 'full' && (
+                      <>
+                        <div
+                          className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
+                          onClick={() => navigate('/dashboard/my-tasks/pending-approvals')}
+                        >
+                          Pending Approvals
+                        </div>
+                        <div
+                          className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
+                          onClick={() => navigate('/dashboard/my-tasks/view-permits')}
+                        >
+                          View All Permits
+                        </div>
+                        <div
+                          className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
+                          onClick={() => navigate('/dashboard/my-tasks/approval-history')}
+                        >
+                          Approval History
+                        </div>
+                      </>
+                    )}
                   </SidebarItem>
+                )}
                     
-                  <SidebarItem
+                 {/* Jobs Monitoring - Only for Issuers and HODs */}
+                  {!isLimitedUser && (
+                    <SidebarItem
                       icon={
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 0l-2 2a1 1 0 101.414 1.414L8 10.414l1.293 1.293a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 0l-2 2a1 1 0 101.414 1.414L8 10.414l1.293 1.293a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
                       }
                       label={sidebarMode === 'full' ? 'Jobs Monitoring' : ''}
                       onClick={() => navigate('/dashboard/jobs-monitoring')}
                       isActive={location.pathname === '/dashboard/jobs-monitoring'}
                       path={location.pathname}
-                  />
+                    />
+                  )}
               </nav>
 
               {sidebarMode === 'full' && (
