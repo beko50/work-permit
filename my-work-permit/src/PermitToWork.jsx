@@ -163,7 +163,7 @@ const PermitToWork = () => {
                   <TableRow key={permit.id}>
                     <TableCell>
                     <Dropdown
-                      options={['View','Edit / Permit Extension']}
+                      options={['Request Permit To Work','Edit / Permit Extension']}
                       onSelect={(action) => handleDropdownAction(action, permit.id)}
                       className="text-sm font-medium"
                     >

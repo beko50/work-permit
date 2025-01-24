@@ -46,7 +46,7 @@ const userController = {
         passwordHash: hashedPassword,
         contractCompanyName,
         departmentId,
-        roleId
+        roleId: roleId.trim() 
       };
 
       // Create user
@@ -109,6 +109,26 @@ const userController = {
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({ message: 'Error during login' });
+    }
+  },
+
+  async getRoles(req, res) {
+    try {
+      const roles = await userModel.getRoles();
+      res.json(roles);
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+      res.status(500).json({ message: 'Error fetching roles' });
+    }
+  },
+
+  async getDepartments(req, res) {
+    try {
+      const departments = await userModel.getDepartments();
+      res.json(departments);
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+      res.status(500).json({ message: 'Error fetching departments' });
     }
   },
 

@@ -13,12 +13,12 @@ router.use((req, res, next) => {
 });
 
 // Main permit routes
-router.get('/form-sections', authMiddleware, permitController.getFormSections);
-router.post('/', authMiddleware, permitController.createPermit);
-router.get('/', authMiddleware, permitController.getPermits);
-router.put('/status', authMiddleware, permitController.updatePermitStatus);
+router.get('/form-sections',permitController.getFormSections);
+router.post('/', permitController.createPermit);
+router.get('', authMiddleware, permitController.getPermits);
+router.put('/status',  permitController.updatePermitStatus);
 
-// Debug/testing routes
+// // Debug/testing routes
 router.get('/test-checkboxes/:permitId', authMiddleware, async (req, res) => {
   try {
     const pool = await poolPromise;

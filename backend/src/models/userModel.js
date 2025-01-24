@@ -19,7 +19,7 @@ const userModel = {
       .input('email', sql.VarChar, userData.email)
       .input('passwordHash', sql.VarChar, userData.passwordHash)
       .input('contractCompanyName', sql.VarChar, userData.contractCompanyName)
-      .input('departmentId', sql.VarChar, isInternalUser ? userData.departmentId : null)
+      .input('department', sql.VarChar, isInternalUser ? userData.department : null)
       .input('roleId', sql.VarChar, userData.roleId)
       .input('userType', sql.VarChar, isInternalUser ? 'Internal' : 'External')
       .query(`
@@ -29,7 +29,7 @@ const userModel = {
           Email, 
           PasswordHash, 
           ContractCompanyName, 
-          DepartmentID,
+          Department,
           RoleID,
           UserType,
           Created
@@ -40,7 +40,7 @@ const userModel = {
           @email,
           @passwordHash,
           @contractCompanyName,
-          @departmentId,
+          @department,
           @roleId,
           @userType,
           GETDATE()
@@ -60,7 +60,7 @@ const userModel = {
           FirstName, 
           LastName, 
           Email, 
-          DepartmentID, 
+          Department, 
           RoleID,
           UserType,
           ContractCompanyName,
@@ -69,6 +69,20 @@ const userModel = {
         WHERE UserID = @userId
       `);
     return result.recordset[0];
+  },
+
+  async getRoles() {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .query('SELECT RoleID, RoleName FROM Roles');
+    return result.recordset;
+  },
+
+  async getDepartments() {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .query('SELECT DepartmentID, DepartmentName  FROM Departments');
+    return result.recordset;
   }
 };
 

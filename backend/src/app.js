@@ -19,17 +19,17 @@ app.use(cors({
 app.use(express.json());
 
 app.use(cookieParser());
-app.use(session({
-  secret: 'your-secret-key',  // Use a secure secret in production
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // true in production
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
+// app.use(session({
+//   secret: 'your-secret-key',  // Use a secure secret in production
+//   resave: false,
+//   saveUninitialized: false,
+//   cookie: {
+//     httpOnly: true,
+//     secure: process.env.NODE_ENV === 'production', // true in production
+//     sameSite: 'lax',
+//     maxAge: 24 * 60 * 60 * 1000 // 24 hours
+//   }
+// }));
 
 // Test database connection
 async function connectDB() {
@@ -51,6 +51,7 @@ app.locals.db = poolPromise;
 // Mount routes
 app.use('/api/users', userRoutes);
 app.use('/api/permits', permitRoutes);
+// app.use('/api/departments', )
 
 // Test route
 app.get('/', (req, res) => {

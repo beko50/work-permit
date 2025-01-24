@@ -11,5 +11,7 @@ router.post('/login', validateLoginInput, userController.login);
 
 // Protected routes
 router.get('/profile', authMiddleware, userController.getProfile);
+router.get('/roles', userController.getRoles);
+router.get('/departments', userController.getDepartments);
 
 module.exports = router;

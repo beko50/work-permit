@@ -139,6 +139,47 @@ export const api = {
     }
   },
 
+  async getRoles() {
+    try {
+      const response = await fetch(`${API_URL}/users/roles`, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+      throw error;
+    }
+  },
+
+  async getDepartments() {
+    try {
+      const response = await fetch(`${API_URL}/users/departments`, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+  
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+  
+      const data = await response.json();
+      // console.log(data)
+      return data.map(dept => ({
+        DepartmentID: dept.DepartmentID, 
+        DepartmentName: dept.DepartmentName  // Adjust based on your actual return structure
+      }));
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+      throw error;
+    }
+  },
+
   async getUserProfile() {
     try {
       const response = await fetch(`${API_URL}/users/profile`, {
@@ -219,61 +260,67 @@ export const api = {
     }
   },
 
-  async getPermits(searchParams = {}) {
+  async getPermits(searchParams, user) {
     try {
-      // Build query string from search params
       const queryParams = new URLSearchParams();
       Object.entries(searchParams).forEach(([key, value]) => {
         if (value) {
           queryParams.append(key, value);
         }
       });
+
+      // If user exists and has a first and last name, add PermitReceiver
+    if (user && user.firstName && user.lastName) {
+      queryParams.append('permitReceiver', `${user.firstName} ${user.lastName}`.trim());
+    }
   
-      // Make the request
+      // Include user departmentId or role if required for filtering
+      if (user) {
+        if (user.role === 'HOD' || user.role === 'ISS') {
+          queryParams.append('department', user.departmentId);
+        }
+      }
+  
       const response = await fetch(`${API_URL}/permits?${queryParams.toString()}`, {
         method: 'GET',
         credentials: 'include',
         headers: getAuthHeaders(),
       });
   
-      // Log the full response for debugging
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
-  
-      // Check if response is OK
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
   
-      // Try to parse the response as JSON
       const data = await response.json();
-      console.log('Response data:', data);
+
+      console.log(data)
   
-      // Format the permits data
-      const formattedPermits = Array.isArray(data) ? data.map(permit => ({
+      const formattedPermits = Array.isArray(data.permits) ? data.permits.map(permit => ({
         JobPermitID: permit.JobPermitID,
         PermitReceiver: permit.PermitReceiver,
-        ContractCompanyName: permit.ContractCompanyName || 'N/A',
+        ContractCompanyName: permit.ContractCompanyName,
         Status: permit.Status,
         Created: permit.Created,
+        Department: permit.Department,
+        AssignedTo: permit.AssignedTo
       })) : [];
   
       return {
         data: formattedPermits,
         total: formattedPermits.length,
-        success: true
+        success: true,
       };
-  
     } catch (error) {
       console.error('Error fetching permits:', error);
       return {
         data: [],
         total: 0,
         success: false,
-        error: error.message || 'Failed to fetch permits'
+        error: error.message || 'Failed to fetch permits',
       };
     }
   },
+  
 
   async getPermitById(permitId) {
     try {

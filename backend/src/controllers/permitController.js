@@ -41,12 +41,19 @@ const permitController = {
     try {
       const { checkboxSelections, ...permitData } = req.body;
 
-      console.log('Raw request body:', req.body);
-      console.log('Checkbox selections:', checkboxSelections);
+      // Handle contract company name based on contract type
+      if (permitData.contractType === 'Internal / MPS') {
+        permitData.contractCompanyName = 'Meridian Port Services Ltd';
+      }
+
+      // console.log('Raw request body:', req.body);
+      // console.log('Checkbox selections:', checkboxSelections);
+
+      // console.log(req.body)
 
       await transaction.begin();
 
-      const permitResult = await permitModel.createPermit(permitData, checkboxSelections, req.user.userId, transaction);
+      const permitResult = await permitModel.createPermit(permitData, checkboxSelections, req.body.user.id, transaction);
       const jobPermitId = permitResult.JobPermitID;
 
       if (Array.isArray(checkboxSelections) && checkboxSelections.length > 0) {
@@ -76,37 +83,72 @@ const permitController = {
 
   async getPermits(req, res) {
     try {
-      const result = await permitModel.getAllPermits();
+      if (!req.user) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+      console.log('User object:', req.user); // Log full user object
 
-      const permits = {};
-      result.forEach(row => {
-        if (!permits[row.JobPermitID]) {
-          permits[row.JobPermitID] = {
-            ...row,
+      const queryResult = await permitModel.getPermitsByRole(req.user);
+
+      console.log(queryResult.recordset)
+
+      if (!queryResult || !queryResult.recordset) {
+        return res.status(500).json({ message: 'Error retrieving permits' });
+      }
+
+      // Format the permits with their checkboxes
+      const formattedPermits = {};
+      queryResult.recordset.forEach(row => {
+        if (!formattedPermits[row.JobPermitID]) {
+          // Create new permit entry if it doesn't exist
+          formattedPermits[row.JobPermitID] = {
+            JobPermitID: row.JobPermitID,
+            StartDate: row.StartDate,
+            EndDate: row.EndDate,
+            PermitDuration: row.PermitDuration,
+            Department: row.Department,
+            JobLocation: row.JobLocation,
+            SubLocation: row.SubLocation,
+            LocationDetail: row.LocationDetail,
+            JobDescription: row.JobDescription,
+            PermitReceiver: row.PermitReceiver,
+            ContractType: row.ContractType,
+            ContractCompanyName: row.ContractCompanyName,
+            Status: row.Status,
+            Created: row.Created,
+            IssuerName: row.IssuerName,
+            IssuerDepartment: row.IssuerDepartment,
+            AssignedTo: row.AssignedTo,
             checkboxes: []
           };
-          delete permits[row.JobPermitID].SectionItemID;
-          delete permits[row.JobPermitID].Selected;
-          delete permits[row.JobPermitID].TextInput;
-          delete permits[row.JobPermitID].ItemLabel;
-          delete permits[row.JobPermitID].SectionName;
         }
 
+        // Add checkbox data if it exists
         if (row.SectionItemID) {
-          permits[row.JobPermitID].checkboxes.push({
+          formattedPermits[row.JobPermitID].checkboxes.push({
             sectionItemId: row.SectionItemID,
             sectionName: row.SectionName,
             label: row.ItemLabel,
-            selected: row.Selected === 'Yes',
+            selected: row.Selected === 1,
             textInput: row.TextInput
           });
         }
       });
 
-      res.json({ permits: Object.values(permits) });
+
+      res.json({ 
+        permits: Object.values(formattedPermits),
+        userRole: req.user.roleId ? req.user.roleId.trim() : null,
+        userDepartment: req.user.departmentId ? req.user.departmentId.trim() : null
+      });
+      
     } catch (error) {
-      console.error('Error fetching permits:', error);
-      res.status(500).json({ message: 'Error fetching permits' });
+      console.error('Error in getPermits controller:', error);
+      res.status(500).json({ 
+        message: 'Error fetching permits',
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   },
 

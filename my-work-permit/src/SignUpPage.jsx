@@ -12,13 +12,9 @@ const SignUpPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessCard, setShowSuccessCard] = useState(false);
   const [shouldRedirect, setShouldRedirect] = useState(false);
+  const [roles, setRoles] = useState([]);
+  const [departments, setDepartments] = useState([]);
 
-  const departments = [
-    { id: 'IT', name: 'Information Technology' },
-    { id: 'OPS', name: 'Operations' },
-    { id: 'ASM', name: 'Asset Maintenance' },
-    { id: 'QHSSE', name: 'QHSSE' }
-  ];
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -26,26 +22,51 @@ const SignUpPage = () => {
     contractCompanyName: '',
     password: '',
     confirmPassword: '',
-    departmentId: '',
+    departmentName: '',
     roleId: 'RCV' // Default to Receiver
   });
 
-  // Handle email change to auto-fill company name
+  // Fetch roles and departments on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [rolesData, departmentsData] = await Promise.all([
+          api.getRoles(),
+          api.getDepartments()
+        ]);
+
+        if (Array.isArray(rolesData)) {
+          setRoles(rolesData);
+        } else {
+          console.error('Unexpected roles data format:', rolesData);
+          // Set default roles as fallback
+          setRoles([
+            { RoleID: 'RCV', RoleName: 'Permit Receiver' },
+            { RoleID: 'ISS', RoleName: 'Permit Issuer' },
+            { RoleID: 'HOD', RoleName: 'Head of Department' }
+          ]);
+        }
+        setDepartments(departmentsData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setError('Error loading form data');
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Handle email change to auto-fill company name and handle role restrictions
   const handleEmailChange = (email) => {
-    if (email.endsWith('@mps-gh.com')) {
-      setFormData(prev => ({
-        ...prev,
-        email: email,
-        contractCompanyName: 'MPS Ghana'
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        email: email,
-        contractCompanyName: '', // Reset if not MPS email
-        roleId: 'RCV'  // Reset to Receiver for external users
-      }));
-    }
+    const isInternalUser = email.endsWith('@mps-gh.com');
+    
+    setFormData(prev => ({
+      ...prev,
+      email: email,
+      contractCompanyName: isInternalUser ? 'MPS Ghana' : '',
+      roleId: isInternalUser ? prev.roleId : 'RCV', // Reset to Receiver for external users
+      departmentId: isInternalUser ? prev.departmentId : '' // Clear department for external users
+    }));
   };
 
   const handleChange = (e) => {
@@ -149,16 +170,15 @@ const SignUpPage = () => {
 
   // Define available roles based on user type
   const getRoleOptions = () => {
+    if (!roles.length) {
+      return [{ RoleID: 'RCV', RoleName: 'Permit Receiver' }];
+    }
+    
     if (isInternalUser) {
-      return [
-        { id: 'RCV', name: 'Permit Receiver' },
-        { id: 'ISS', name: 'Permit Issuer' },
-        { id: 'HOD', name: 'Head of Department' }
-      ];
+      return roles;
     } else {
-      return [
-        { id: 'RCV', name: 'Permit Receiver' }
-      ];
+      // For external users, only return Permit Receiver role
+      return roles.filter(role => role.RoleID === 'RCV');
     }
   };
 
@@ -245,23 +265,27 @@ const SignUpPage = () => {
 
           {/* Role Selection - Modified to show options based on user type */}
           <div>
-            <label htmlFor="roleId" className="block text-sm font-medium text-gray-700">
-              Role
-            </label>
-            <select
-              id="roleId"
-              name="roleId"
-              value={formData.roleId}
-              onChange={handleChange}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              {getRoleOptions().map(role => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <label htmlFor="roleId" className="block text-sm font-medium text-gray-700">
+            Role
+          </label>
+          <select
+            id="roleId"
+            name="roleId"
+            value={formData.roleId}
+            onChange={handleChange}
+            className={`mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+              !isInternalUser ? 'bg-gray-100 cursor-not-allowed' : ''
+            }`}
+            disabled={!isInternalUser}
+          >
+            <option value="">Select Role</option>
+            {getRoleOptions().map(role => (
+              <option key={role.RoleID} value={role.RoleID}>
+                {role.RoleName}
+              </option>
+            ))}
+          </select>
+        </div>
 
           {/* Department selection - only for internal users */}
           {isInternalUser && (
@@ -272,15 +296,15 @@ const SignUpPage = () => {
               <select
                 id="departmentId"
                 name="departmentId"
-                value={formData.departmentId}
+                // value={formData.departmentId}
                 onChange={handleChange}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
               >
                 <option value="">Select Department</option>
                 {departments.map(dept => (
-                  <option key={dept.id} value={dept.id}>
-                    {dept.name}
+                  <option key={dept.DepartmentID} value={dept.DepartmentID}>
+                    {dept.DepartmentName}
                   </option>
                 ))}
               </select>

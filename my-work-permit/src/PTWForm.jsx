@@ -55,7 +55,7 @@ const PermitToWorkForm = ({ onClose }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <Card className="w-full max-w-4xl bg-white relative">
-        <CardHeader className="relative border-b pb-2 pt-2 flex items-center">
+      <CardHeader className="sticky top-0 z-50 border-b pb-2 pt-2 flex items-center bg-white">
           <img 
             src={logo}
             alt="Company Logo" 
@@ -68,13 +68,13 @@ const PermitToWorkForm = ({ onClose }) => {
             variant="outline"
             onClick={onClose}
             disabled={isSubmitting}
-            className="absolute top-2 right-2 transition-transform duration-300 hover:scale-110 group"
+            className="absolute top-2 right-2 z-60 transition-transform duration-300 hover:scale-110 group"
           >
             <X className="h-5 w-5 group-hover:h-6 group-hover:w-6 transition-all duration-300" />
           </Button>
         </CardHeader>
         
-        <CardContent ref={componentRef}>
+        <CardContent ref={componentRef} className="overflow-y-auto flex-grow">
           {/* Job Details Section */}
           <div className="job-details mt-6">
             <h2 className="text-lg font-medium">Job Details</h2>

@@ -58,6 +58,8 @@ const SafetyForm = () => {
     otherBreakPreparationText: ''
   });
 
+  const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [currentSection, setCurrentSection] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,6 +71,22 @@ const SafetyForm = () => {
   const [otherDangerousGoodsText, setOtherDangerousGoodsText] = useState('');  //Specify dangerous goods/chemcials with text
   const [otherHazardousEnergyText, setOtherHazardousEnergyText] = useState(''); //Specify other hazardous energies with text
   const [otherBreakPreparationText, setOtherBreakPreparationText] = useState('');
+
+  const [currentUser, SetCurrentUser] = useState()
+
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const response = await api.getDepartments();
+        setDepartments(response.map(dept => dept.DepartmentName));
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching departments:', error);
+        setLoading(false);
+      }
+    };
+    fetchDepartments();
+  }, []);
 
   const getSectionItemId = (sectionName, itemLabel) => {
     // Find the corresponding state key for the section
@@ -194,7 +212,6 @@ const SafetyForm = () => {
     }).filter(Boolean);
   };
 
-  const departmentOptions = ['IT', 'Operations', 'Asset Maintenance', 'QHSSE'];
   const jobLocationOptions = ['Gates','Authorities Building','MPS Admin Building','Workshop Building','Scanners Area','OCR Area','Inspection Platform','Yard','Quayside','Powerhouse','Fuel Station']
   const contractTypeOptions = ['Internal / MPS','External / Contract Company'];
 
@@ -605,6 +622,14 @@ const SafetyForm = () => {
     );
   };
 
+
+    useEffect(()=>{
+      const saveData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui')
+      const parsedData = JSON.parse(saveData)
+      SetCurrentUser(parsedData?.user)
+    }, [])
+
+
   return (
     <div className="p-4">
       <Card className="w-full max-w-4xl mx-auto bg-white relative">
@@ -702,6 +727,7 @@ const SafetyForm = () => {
           
               // Prepare the data for submission
               const submitData = {
+                user: currentUser,
                 startDate: startDateTime?.toISOString(),
                 endDate: endDateTime?.toISOString(),
                 permitDuration: parseInt(values.permitDuration) || 0,
@@ -887,26 +913,24 @@ const SafetyForm = () => {
 
                       {/* Department Dropdown */}
                       <div>
-                        <label className="block text-sm font-medium mb-1">
-                          Department <span className="text-red-600">*</span>
-                        </label>
-                        <Dropdown
-                          options={departmentOptions}
-                          value={formData.department}
-                          onChange={(value) => {
-                            handleInputChange('department', value, setFieldValue);
-                          }}
-                          className={`w-full ${
-                            errors.department && touched.department 
-                              ? 'border-red-500 bg-red-50' 
-                              : ''
-                          }`}
-                          dropdownIcon="▾"
-                        />
-                        {errors.department && touched.department && (
-                          <div className="text-red-600 text-sm mt-1">{errors.department}</div>
-                        )}
-                      </div>
+                       <label className="block text-sm font-medium mb-1">
+                         Department <span className="text-red-600">*</span>
+                       </label>
+                       {loading ? (
+                         <div className="w-full h-10 bg-gray-100 animate-pulse rounded" />
+                       ) : (
+                         <Dropdown
+                           options={departments}
+                           value={formData.department}
+                           onChange={(value) => handleInputChange('department', value, setFieldValue)}
+                           className={`w-full ${errors.department && touched.department ? 'border-red-500 bg-red-50' : ''}`}
+                           dropdownIcon="▾"
+                         />
+                       )}
+                       {errors.department && touched.department && (
+                         <div className="text-red-600 text-sm mt-1">{errors.department}</div>
+                       )}
+                     </div>
                     </div>
     
                     <div className="grid grid-cols-2 gap-6">
