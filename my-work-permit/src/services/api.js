@@ -68,6 +68,10 @@ export const api = {
   // Existing auth endpoints
   async register(userData) {
     try {
+      console.log('Registration data:', {
+        ...userData,
+        departmentId: userData.departmentId  // Verify this is included
+      });
       const response = await fetch(`${API_URL}/users/register`, {
         method: 'POST',
         headers: {
@@ -120,20 +124,8 @@ export const api = {
 
   async logout() {
     try {
-      localStorage.removeItem('token');
-      const response = await fetch(`${API_URL}/users/logout`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: getAuthHeaders(),
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || `HTTP error! status: ${response.status}`);
-      }
-
-      return data;
+      window.localStorage.clear()
+      window.location.href = '/'
     } catch (error) {
       throw error;
     }
@@ -269,17 +261,30 @@ export const api = {
         }
       });
 
-      // If user exists and has a first and last name, add PermitReceiver
-    if (user && user.firstName && user.lastName) {
-      queryParams.append('permitReceiver', `${user.firstName} ${user.lastName}`.trim());
-    }
-  
-      // Include user departmentId or role if required for filtering
-      if (user) {
-        if (user.role === 'HOD' || user.role === 'ISS') {
-          queryParams.append('department', user.departmentId);
+      // Role-based filtering logic
+    if (user) {
+      const userRoleId = user.roleId?.trim();
+      // Only add department filter for internal users
+      const userDepartmentId = user.departmentId ? user.departmentId.trim() : null;
+
+      if (userRoleId === 'QA') {
+        // No additional filtering for QA
+      } else if (['HOD', 'ISS'].includes(userRoleId) && userDepartmentId) {
+        // Filter by department and assigned role for internal users with HOD/ISS roles
+        queryParams.append('department', userDepartmentId);
+        queryParams.append('assignedTo', userRoleId);
+      } else {
+        // For external users and other roles (like RCV), filter by creator
+        if (user.id) {
+          queryParams.append('creator', user.id);
         }
       }
+
+      // Add permit receiver for limited roles
+      if (user.firstName && user.lastName) {
+        queryParams.append('permitReceiver', `${user.firstName} ${user.lastName}`.trim());
+      }
+    }
   
       const response = await fetch(`${API_URL}/permits?${queryParams.toString()}`, {
         method: 'GET',
@@ -292,8 +297,6 @@ export const api = {
       }
   
       const data = await response.json();
-
-      console.log(data)
   
       const formattedPermits = Array.isArray(data.permits) ? data.permits.map(permit => ({
         JobPermitID: permit.JobPermitID,
@@ -302,7 +305,12 @@ export const api = {
         Status: permit.Status,
         Created: permit.Created,
         Department: permit.Department,
-        AssignedTo: permit.AssignedTo
+        AssignedTo: permit.AssignedTo,
+        JobDescription: permit.JobDescription, // Add this line
+        StartDate: permit.StartDate,      
+        EndDate: permit.EndDate,
+        JobLocation: permit.JobLocation,
+        Changed: permit.Changed
       })) : [];
   
       return {
@@ -320,7 +328,6 @@ export const api = {
       };
     }
   },
-  
 
   async getPermitById(permitId) {
     try {
@@ -347,6 +354,34 @@ export const api = {
         data: null,
         success: false,
         error: error.message || 'Failed to fetch permit'
+      };
+    }
+  },
+
+  async getPermitsByDepartment(departmentId) {
+    try {
+      const response = await fetch(`${API_URL}/permits/department/${departmentId}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+  
+      const data = await response.json();
+      return {
+        data: data.permits || data, // Handle different possible response structures
+        success: true
+      };
+    } catch (error) {
+      console.error('Error fetching department permits:', error);
+      return {
+        data: [],
+        success: false,
+        error: error.message
       };
     }
   },
@@ -390,6 +425,130 @@ export const api = {
         success: false,
         error: error.message || 'Failed to search permits'
       };
+    }
+  },
+
+  async approvePermit({ jobPermitId, status, comments = '' }) {
+    try {
+      const response = await fetch(`${API_URL}/permits/approve`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ 
+          jobPermitId, 
+          status, 
+          comments 
+        }),
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+  
+      return await response.json();
+    } catch (error) {
+      console.error('Permit approval error:', error);
+      throw error;
+    }
+  },
+
+
+  // PERMIT TO WORK -- SECOND PHASE
+  async createPermitToWork(permitData) {
+    try {
+      const response = await fetch(`${API_URL}/permits/permit-to-work`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(permitData)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create permit to work');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error creating permit to work:', error);
+      throw error;
+    }
+  },
+
+  // Get a specific Permit to Work by ID
+  async getPermitToWorkById(permitToWorkId) {
+    try {
+      const response = await fetch(`${API_URL}/permits/permit-to-work/${permitToWorkId}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to fetch permit to work');
+      }
+
+      const data = await response.json();
+    return {
+      success: true,
+      data: {
+        permit: data.permit,
+        jobPermit: data.jobPermit // This will include the related job permit data
+      }
+    };
+    } catch (error) {
+      console.error('Error fetching permit to work:', error);
+      throw error;
+    }
+  },
+
+  // Get all Permits to Work based on user role
+  async getPermitsToWork() {
+    try {
+      const response = await fetch(`${API_URL}/permits/permit-to-work`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
+  
+      if (!response.ok) {
+        const errorMessage = await response.text();
+        throw new Error(errorMessage || 'Failed to fetch permits to work');
+      }
+  
+      const data = await response.json(); // Parse the JSON response
+      return {
+        success: true,
+        data: data.permits // Return the permits array
+      };
+    } catch (error) {
+      console.error('Error fetching permits to work:', error);
+      throw error;
+    }
+  },
+  
+
+  // Approve/Reject a Permit to Work
+  async approvePermitToWork(permitToWorkId, approvalData) {
+    try {
+      const response = await fetch(`${API_URL}/permits/permit-to-work/${permitToWorkId}/approve`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(approvalData)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to process approval');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error processing permit approval:', error);
+      throw error;
     }
   },
 

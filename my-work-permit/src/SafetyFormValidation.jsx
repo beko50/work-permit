@@ -95,7 +95,7 @@ const SafetyFormValidation = Yup.object().shape({
     .test('file-type', 'Unsupported file type', (files) =>
       files.every((file) => ['jpg', 'jpeg', 'png', 'doc', 'docx', 'pdf'].includes(file.name.split('.').pop().toLowerCase()))
     ),
-  //permitRequired: Yup.array().min(1, 'At least one Permit is required'),
+  permitRequired: Yup.array().min(1, 'At least one Permit is required'),
 
   workerDetails: Yup.array()
   .of(

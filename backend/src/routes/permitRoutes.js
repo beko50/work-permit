@@ -16,6 +16,16 @@ router.use((req, res, next) => {
 router.get('/form-sections',permitController.getFormSections);
 router.post('/', permitController.createPermit);
 router.get('', authMiddleware, permitController.getPermits);
+
+// Permit to Work routes - Make sure these come BEFORE the general permitId route
+router.post('/permit-to-work', authMiddleware, permitController.createPermitToWork);
+router.get('/permit-to-work', authMiddleware, permitController.getPermitToWork);
+router.get('/permit-to-work/:permitToWorkId', authMiddleware, permitController.getPermitToWorkById);
+router.post('/permit-to-work/:permitToWorkId/approve', authMiddleware, permitController.approvePermitToWork);
+
+router.get('/:permitId', authMiddleware, permitController.getPermitById);
+router.get('/department/:departmentId', permitController.getPermitsByDepartment);
+router.post('/approve', authMiddleware, permitController.approvePermit);
 router.put('/status',  permitController.updatePermitStatus);
 
 // // Debug/testing routes

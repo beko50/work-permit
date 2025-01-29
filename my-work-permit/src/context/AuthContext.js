@@ -54,16 +54,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = async () => {
-    try {
-      await api.logout();
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      setUser(null);
-      localStorage.removeItem('token');
-    }
-  };
+  // const logout = async () => {
+  //   try {
+  //     await api.logout();
+  //   } catch (error) {
+  //     console.error('Logout error:', error);
+  //   } finally {
+  //     setUser(null);
+  //     localStorage.removeItem('token');
+  //   }
+  // };
 
   // Add helper function to get role display name
   const getUserRoleDisplay = () => {
@@ -81,7 +81,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{ 
       user, 
       login, 
-      logout, 
+      // logout, 
       loading,
       getUserRoleDisplay, // Export the helper function
       isLimitedUser: user?.isLimitedUser 

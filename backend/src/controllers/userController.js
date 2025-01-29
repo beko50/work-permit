@@ -16,6 +16,7 @@ const userController = {
         password, 
         contractCompanyName,
         departmentId,
+        departmentName,
         roleId
       } = req.body;
 
@@ -46,6 +47,7 @@ const userController = {
         passwordHash: hashedPassword,
         contractCompanyName,
         departmentId,
+        departmentName,
         roleId: roleId.trim() 
       };
 
@@ -99,9 +101,11 @@ const userController = {
           id: user.UserID,
           email: user.Email,
           roleId: user.RoleID,
+          roleName: user.RoleName,
           firstName: user.FirstName,
           lastName: user.LastName,
           departmentId: user.DepartmentID,
+          departmentName: user.DepartmentName,
           userType: user.UserType,
           contractCompanyName: user.ContractCompanyName
         }

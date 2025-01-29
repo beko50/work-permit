@@ -22,7 +22,7 @@ const SignUpPage = () => {
     contractCompanyName: '',
     password: '',
     confirmPassword: '',
-    departmentName: '',
+    departmentId: '',
     roleId: 'RCV' // Default to Receiver
   });
 
@@ -149,7 +149,8 @@ const SignUpPage = () => {
         email: formData.email,
         password: formData.password,
         contractCompanyName: formData.contractCompanyName,
-        departmentId: formData.departmentId || null,
+        departmentId: formData.departmentId,
+        departmentName: departments.find(dept => dept.DepartmentID === formData.departmentId)?.DepartmentName,
         roleId: formData.roleId
       });
 
@@ -296,7 +297,7 @@ const SignUpPage = () => {
               <select
                 id="departmentId"
                 name="departmentId"
-                // value={formData.departmentId}
+                value={formData.departmentId}
                 onChange={handleChange}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required

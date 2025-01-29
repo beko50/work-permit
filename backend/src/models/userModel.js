@@ -14,38 +14,40 @@ const userModel = {
     const isInternalUser = userData.email.endsWith('@mps-gh.com');
     
     const result = await transaction.request()
-      .input('firstName', sql.VarChar, userData.firstName)
-      .input('lastName', sql.VarChar, userData.lastName)
-      .input('email', sql.VarChar, userData.email)
-      .input('passwordHash', sql.VarChar, userData.passwordHash)
-      .input('contractCompanyName', sql.VarChar, userData.contractCompanyName)
-      .input('department', sql.VarChar, isInternalUser ? userData.department : null)
-      .input('roleId', sql.VarChar, userData.roleId)
-      .input('userType', sql.VarChar, isInternalUser ? 'Internal' : 'External')
-      .query(`
-        INSERT INTO Users (
-          FirstName, 
-          LastName, 
-          Email, 
-          PasswordHash, 
-          ContractCompanyName, 
-          Department,
-          RoleID,
-          UserType,
-          Created
-        )
-        VALUES (
-          @firstName,
-          @lastName,
-          @email,
-          @passwordHash,
-          @contractCompanyName,
-          @department,
-          @roleId,
-          @userType,
-          GETDATE()
-        );
-        SELECT SCOPE_IDENTITY() AS userId;
+    .input('firstName', sql.VarChar, userData.firstName)
+    .input('lastName', sql.VarChar, userData.lastName)
+    .input('email', sql.VarChar, userData.email)
+    .input('passwordHash', sql.VarChar, userData.passwordHash)
+    .input('contractCompanyName', sql.VarChar, userData.contractCompanyName)
+    .input('department', sql.VarChar, isInternalUser ? userData.departmentName : null)
+    .input('departmentId', sql.VarChar, isInternalUser ? userData.departmentId : null)
+    .input('roleId', sql.VarChar, userData.roleId)
+    .input('userType', sql.VarChar, isInternalUser ? 'Internal' : 'External')
+    .query(`
+      INSERT INTO Users (
+        FirstName,
+        LastName,
+        Email,
+        PasswordHash,
+        ContractCompanyName,
+        Department,
+        DepartmentID,
+        RoleID,
+        UserType,
+        Created
+      ) VALUES (
+        @firstName,
+        @lastName,
+        @email,
+        @passwordHash,
+        @contractCompanyName,
+        @department,
+        @departmentId,
+        @roleId,
+        @userType,
+        GETDATE()
+      );
+      SELECT SCOPE_IDENTITY() AS userId;
       `);
     return result.recordset[0];
   },
@@ -56,17 +58,19 @@ const userModel = {
       .input('userId', sql.Int, userId)
       .query(`
         SELECT 
-          UserID, 
-          FirstName, 
-          LastName, 
-          Email, 
-          Department, 
-          RoleID,
-          UserType,
-          ContractCompanyName,
-          Created
-        FROM Users 
-        WHERE UserID = @userId
+          u.UserID, 
+          u.FirstName, 
+          u.LastName, 
+          u.Email, 
+          u.Department, 
+          u.RoleID,
+          r.RoleName,
+          u.UserType,
+          u.ContractCompanyName,
+          u.Created
+        FROM Users u
+        LEFT JOIN Roles r ON u.RoleID = r.RoleID
+        WHERE u.UserID = @userId
       `);
     return result.recordset[0];
   },

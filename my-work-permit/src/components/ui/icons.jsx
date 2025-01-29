@@ -95,6 +95,22 @@ export const Icons = {
         d="M9 5l7 7-7 7"
       />
     </svg>
+  ),
+
+  LogOut: () => (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-5 w-5 text-red-600"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M17 16l4-4m0 0l-4-4m4 4H9" /> {/* Arrow Path */}
+      <path d="M13 21H7a3 3 0 01-3-3V6a3 3 0 013-3h6" /> {/* Main box path */}
+    </svg>
   )
 };
 

@@ -6,18 +6,28 @@ import { Input, Select } from './components/ui/form';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
 import { RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
 import SafetyForm from './SafetyForm';
-import PermitToWorkForm from './PTWForm';
-import PermitApprovalWorkflow from './ApprovalWorkflow';
+import RequestPTW from './RequestPTW';
 import { api } from './services/api'
 
-const JobSafetyPermit = () => {
+const RequestJobPermit = () => {
   const navigate = useNavigate();
   const [permits, setPermits] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isPermitFormOpen, setIsPermitFormOpen] = useState(false);
-  const [isApprovalOpen, setIsApprovalOpen] = useState(false);
+  const [selectedPermit, setSelectedPermit] = useState(null);
+  const [showPTWForm, setShowPTWForm] = useState(false);
+
+  const getDepartmentFullName = (departmentCode) => {
+    const departmentMap = {
+      'OPS': 'Operations',
+      'ASM': 'Asset Maintenance',
+      // Add other department mappings as needed
+    };
+    
+    return departmentMap[departmentCode] || departmentCode;
+  };
   
   // Get user info from localStorage and parse roleId
   const [currentUser, setCurrentUser] = useState(null);
@@ -29,7 +39,7 @@ const JobSafetyPermit = () => {
   }, []);
 
   
-  const isLimitedUser = currentUser?.roleId?.trim() !== 'HOD' && currentUser?.roleId?.trim() !== 'ISS';
+  const isLimitedUser = currentUser?.roleId?.trim() !== 'HOD' && currentUser?.roleId?.trim() !== 'ISS' && currentUser?.roleId?.trim() !== 'QA';
 
   const [searchParams, setSearchParams] = useState({
     jobPermitId: '',
@@ -74,7 +84,11 @@ const JobSafetyPermit = () => {
       const response = await api.getPermits(queryParams, currentUser);
   
       if (response.success) {
-        setPermits(response.data);
+        // Sort permits by Created date in descending order (most recent first)
+        const sortedPermits = response.data.sort((a, b) => {
+          return new Date(b.Created) - new Date(a.Created);
+        });
+        setPermits(sortedPermits);
       } else {
         setError(response.error || 'Failed to fetch permits');
         setPermits([]);
@@ -109,10 +123,6 @@ const JobSafetyPermit = () => {
 
   const handleViewPTW = () => {
     setIsPermitFormOpen(true);
-  };
-
-  const handleViewApprovalWorkflow = () => {
-    setIsApprovalOpen(true);
   };
   
   const Dropdown = ({ 
@@ -153,7 +163,7 @@ const JobSafetyPermit = () => {
         <ChevronDown className="h-5 w-5 text-blue-500" />
       </button>
       {isOpen && (
-        <ul className="absolute z-10 w-28 border rounded-md mt-2 bg-gray-50 shadow-lg overflow-auto">
+        <ul className="absolute z-10 w-48 border rounded-md mt-2 bg-gray-50 shadow-lg overflow-auto">
           {options.map((option) => (
             <li
               key={option}
@@ -178,22 +188,33 @@ const JobSafetyPermit = () => {
     }
   };
 
-  const handleDropdownAction = (action, permitId) => {
+  const handleDropdownAction = (action, permit) => {
     switch (action) {
       case 'View':
-        console.log(`Viewing permit: ${permitId}`);
+        navigate(`/dashboard/permits/view/${permit.JobPermitID}`);
         break;
       case 'Review':
-        console.log(`Editing permit: ${permitId}`);
-        navigate(`/dashboard/permits/job-permits/edit/${permitId}`);
+        navigate(`/dashboard/permits/review/${permit.JobPermitID}`);
         break;
-      case 'Print':
-        console.log(`Printing permit: ${permitId}`);
-        // Add your print logic here
+      case 'Request Permit To Work':
+        setSelectedPermit(permit);
+        setShowPTWForm(true);
         break;
       default:
         console.log(`Unknown action: ${action}`);
     }
+  };
+
+  const getDropdownOptions = (permit) => {
+    if (!isLimitedUser) {
+      return ['Review'];
+    }
+    
+    const options = ['View'];
+    if (permit.Status === 'Approved') {
+      options.push('Request Permit To Work');
+    }
+    return options;
   };
 
   return (
@@ -279,7 +300,7 @@ const JobSafetyPermit = () => {
       {/* Main Content Card */}
       <Card>
         <CardHeader>
-          <h1 className="text-2xl font-semibold">Job Safety Permits</h1>
+          <h1 className="text-2xl font-semibold">Request for Job Permit</h1>
         </CardHeader>
         <CardContent className="p-4">
           {/* Action Buttons - show all for ISS/HOD, limited for RCV */}
@@ -318,10 +339,6 @@ const JobSafetyPermit = () => {
             <Button onClick={handleViewPTW}>
               View PTW
             </Button>
-
-            <Button onClick={handleViewApprovalWorkflow}>
-              View Approval WF
-            </Button>
           </div>
 
           {/* Show loading state */}
@@ -349,6 +366,9 @@ const JobSafetyPermit = () => {
                   </Button>
                 </TableCell>
                 <TableCell className="text-base font-medium">Permit ID</TableCell>
+                {currentUser?.roleId === 'QA' && (
+                    <TableCell className="text-base font-medium">Department</TableCell>
+                  )}
                 <TableCell className="text-base font-medium">Permit Receiver</TableCell>
                 <TableCell className="text-base font-medium">Company</TableCell>
                 <TableCell className="text-base font-medium">Submission Date</TableCell>
@@ -361,8 +381,8 @@ const JobSafetyPermit = () => {
                   <TableRow key={permit.JobPermitID}>
                     <TableCell>
                       <Dropdown
-                        options={['View', 'Edit', 'Print']}
-                        onSelect={(action) => handleDropdownAction(action, permit.JobPermitID)}
+                        options={getDropdownOptions(permit)}
+                        onSelect={(action) => handleDropdownAction(action, permit)}
                         className="text-sm font-medium"
                       >
                         Actions
@@ -370,10 +390,14 @@ const JobSafetyPermit = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span>JSP-{String(permit.JobPermitID).padStart(4, '0')}</span>
+                        <span>JP-{String(permit.JobPermitID).padStart(4, '0')}</span>
                         <span className={getStatusColor(permit.Status)}>{permit.Status}</span>
                       </div>
                     </TableCell>
+                    {/* New Department Column for QA role */}
+                    {currentUser?.roleId === 'QA' && (
+                        <TableCell>{getDepartmentFullName(permit.Department)}</TableCell>
+                      )}
                     <TableCell>{permit.PermitReceiver}</TableCell>
                     <TableCell>{permit.ContractCompanyName}</TableCell>
                     <TableCell>
@@ -405,11 +429,22 @@ const JobSafetyPermit = () => {
       {isPermitFormOpen && (
         <PermitToWorkForm onClose={() => setIsPermitFormOpen(false)} />
       )}
-      {isApprovalOpen && (
-        <PermitApprovalWorkflow onClose={() => setIsApprovalOpen(false)} />
+      {showPTWForm && selectedPermit && (
+        <RequestPTW
+          jobPermit={selectedPermit}
+          onClose={() => {
+            setShowPTWForm(false);
+            setSelectedPermit(null);
+          }}
+          onSubmitSuccess={() => {
+            setShowPTWForm(false);
+            setSelectedPermit(null);
+            fetchPermits(); // Refresh the permits list after successful submission
+          }}
+        />
       )}
     </div>
   );
 };
 
-export default JobSafetyPermit;
+export default RequestJobPermit;

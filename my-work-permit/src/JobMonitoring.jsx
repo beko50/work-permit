@@ -7,7 +7,6 @@ import { RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
 import Tabs from './components/ui/tabs';
 import { api } from './services/api';
 import RequestPTW from './RequestPTW';
-import SubmittedPTW from './SubmittedPTW';
 
 const PermitToWork = () => {
   const navigate = useNavigate();
@@ -16,17 +15,7 @@ const PermitToWork = () => {
   const [error, setError] = useState(null);
   const [currentTab, setCurrentTab] = useState('approved-job-permits');
   const [showPTWForm, setShowPTWForm] = useState(false);
-  const [showSubmittedPTW, setShowSubmittedPTW] = useState(false); // Add this state
-  const [selectedPermitId, setSelectedPermitId] = useState(null);
   const [selectedPermit, setSelectedPermit] = useState(null);
-
-  const getStatusColor = (status) => {
-    status = status.toLowerCase();
-    if (status === 'Pending') return 'text-yellow-500';
-    if (status === 'Approved') return 'text-green-500';
-    if (status === 'Rejected' || status === 'revoked') return 'text-red-500';
-    return 'text-gray-500'; // default color for unknown status
-  };
 
   const tabs = [
     { value: 'approved-job-permits', label: 'Approved Job Permits' },
@@ -139,10 +128,6 @@ const PermitToWork = () => {
         setSelectedPermit(permit);
         setShowPTWForm(true);
         break;
-      case 'View Permit To Work':
-        // Navigate to the SubmittedPTW component with the permit ID
-        navigate(`/dashboard/permits/permit-to-work/ptw/${permitId}`);
-        break;
       default:
         console.log(`Unknown action: ${action}`);
     }
@@ -151,11 +136,6 @@ const PermitToWork = () => {
   const handleClosePTWForm = () => {
     setShowPTWForm(false);
     setSelectedPermit(null);
-  };
-
-  const handleCloseSubmittedPTW = () => {
-    setShowSubmittedPTW(false);
-    setSelectedPermitId(null);
   };
 
   return (
@@ -185,6 +165,7 @@ const PermitToWork = () => {
                   </TableCell>
                   <TableCell className="text-base font-medium">Permit ID</TableCell>
                   <TableCell className="text-base font-medium">Permit Receiver</TableCell>
+                  <TableCell className="text-base font-medium">Company</TableCell>
                   <TableCell className="text-base font-medium">Approval Date</TableCell>
                   <TableCell className="text-base font-medium">Assigned To</TableCell>
                 </TableRow>
@@ -195,7 +176,7 @@ const PermitToWork = () => {
                     <TableRow key={permit.JobPermitID}>
                       <TableCell>
                         <Dropdown
-                          options={['View Permit To Work']}
+                          options={['Request Permit To Work']}
                           onSelect={(action) => handleDropdownAction(action, permit.JobPermitID)}
                           className="text-sm font-medium"
                         >
@@ -205,12 +186,11 @@ const PermitToWork = () => {
                       <TableCell>
                         <div className="flex flex-col">
                           <span>JP-{String(permit.JobPermitID).padStart(4, '0')}</span>
-                          <span className={getStatusColor(permit.Status)}>
-                            {permit.Status}
-                          </span>
+                          <span className="text-green-500">{permit.Status}</span>
                         </div>
                       </TableCell>
                       <TableCell>{permit.PermitReceiver}</TableCell>
+                      <TableCell>{permit.ContractCompanyName}</TableCell>
                       <TableCell>
                       {new Date(permit.Changed).toLocaleDateString('en-US', {
                         year: 'numeric',

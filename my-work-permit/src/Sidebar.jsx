@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate,Routes,Route,useLocation,Outlet } from 'react-router-dom';
-import Icons from '../src/components/ui/icons'
+import Icons from '../src/components/ui/icons';
+import UserProfileDropdown from './components/UserProfileDropdown';
 import { useAuth } from './context/AuthContext';
 import ViewPermits from './ViewPermits';
 import Home from './Home';
@@ -64,7 +65,7 @@ const Sidebar = () => {
     }
   }, [currentUser, location.pathname, navigate]);
 
-  const isLimitedUser = currentUser?.roleId?.trim() !== 'HOD' && currentUser?.roleId?.trim() !== 'ISS';
+  const isLimitedUser = currentUser?.roleId?.trim() !== 'HOD' && currentUser?.roleId?.trim() !== 'ISS' && currentUser?.roleId?.trim() !== 'QA';
 
 // Update the getUserRoleDisplay function
 const getUserRoleDisplay = () => {
@@ -135,7 +136,7 @@ const getUserRoleDisplay = () => {
                                   className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
                                   onClick={() => navigate('/dashboard/permits/job-permits')}
                               >
-                                  Job Safety Permits
+                                  Request for Job Permit
                               </div>
                               <div
                                   className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
@@ -159,12 +160,12 @@ const getUserRoleDisplay = () => {
                   >
                     {sidebarMode === 'full' && (
                       <>
-                        <div
+                        {/*<div
                           className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
                           onClick={() => navigate('/dashboard/my-tasks/pending-approvals')}
                         >
                           Pending Approvals
-                        </div>
+                        </div> */}
                         <div
                           className="py-2 px-3 text-sm rounded-md hover:bg-gray-100 cursor-pointer"
                           onClick={() => navigate('/dashboard/my-tasks/view-permits')}
@@ -220,10 +221,8 @@ const getUserRoleDisplay = () => {
             <button className="p-2">
               <Icons.Bell />
             </button>
-            <button className="p-2">
-            <Icons.User />
-
-            </button>
+            
+            <UserProfileDropdown />
           </div>
         </div>
           </header>

@@ -635,7 +635,7 @@ const SafetyForm = () => {
       <Card className="w-full max-w-4xl mx-auto bg-white relative">
         <CardHeader className="relative border-b pb-2 pt-2 flex items-center">
           <img src={logo} alt="Company Logo" className="h-[80px] w-[80px]" />
-          <h1 className="text-xl font-semibold flex-grow text-center">JOB SAFETY PERMIT</h1>
+          <h1 className="text-xl font-semibold flex-grow text-center"> SAFETY FORM</h1>
           <Button
           variant="outline"
           onClick={handleInitiateClose}
@@ -658,16 +658,8 @@ const SafetyForm = () => {
               <p className="mb-4 text-gray-700">Are you sure you want to close this?</p>
               <div className="flex justify-center space-x-4">
                 <Button 
-                  variant="primary" 
-                  onClick={() => {
-                    handleSaveDraft();
-                    handleClose();
-                  }}
-                >
-                  Save as Draft and Close
-                </Button>
-                <Button 
-                  variant="ghost" 
+                  variant="secondary"
+                  className="bg-gray-600 text-white hover:bg-gray-700"
                   onClick={handleClose}
                 >
                   Close Without Saving
