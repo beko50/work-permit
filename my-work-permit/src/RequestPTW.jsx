@@ -21,22 +21,44 @@ const RequestPTW = ({ jobPermit, onClose, onSubmitSuccess }) => {
     const [error, setError] = useState('');
     const [isSubmitDisabled, setIsSubmitDisabled] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-  
-    useEffect(() => {
-      if (formData.entryDate && formData.exitDate) {
-        const diffTime = Math.abs(formData.exitDate - formData.entryDate);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        setFormData(prev => ({ ...prev, workDuration: diffDays }));
-        
-        if (diffDays > 5) {
-          setError('Request cannot exceed 5 days');
-          setIsSubmitDisabled(true);
-        } else {
-          setError('');
-          setIsSubmitDisabled(false);
-        }
+
+    // Convert job permit dates to Date objects and set to start of day
+    const jobStartDate = jobPermit?.StartDate ? new Date(jobPermit.StartDate) : null;
+    const jobEndDate = jobPermit?.EndDate ? new Date(jobPermit.EndDate) : null;
+    
+    // Helper function to compare dates (ignoring time)
+    const isSameOrAfterDate = (date1, date2) => {
+      if (!date1 || !date2) return false;
+      const d1 = new Date(date1);
+      const d2 = new Date(date2);
+      return new Date(d1.setHours(0, 0, 0, 0)) >= new Date(d2.setHours(0, 0, 0, 0));
+    };
+
+  useEffect(() => {
+    if (formData.entryDate && formData.exitDate) {
+      const diffTime = Math.abs(formData.exitDate - formData.entryDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      setFormData(prev => ({ ...prev, workDuration: diffDays }));
+      
+      // Validate work duration
+      if (diffDays > 5) {
+        setError('Request cannot exceed 5 days');
+        setIsSubmitDisabled(true);
+        return;
       }
-    }, [formData.entryDate, formData.exitDate]);
+
+      // Validate entry date using the new comparison function
+      if (!isSameOrAfterDate(formData.entryDate, jobStartDate)) {
+        setError('Entry date cannot be earlier than Job Permit start date');
+        setIsSubmitDisabled(true);
+        return;
+      }
+
+      // Clear error if all validations pass
+      setError('');
+      setIsSubmitDisabled(false);
+    }
+  }, [formData.entryDate, formData.exitDate, jobStartDate]);
   
     const validateForm = () => {
       if (!formData.entryDate) {
@@ -49,6 +71,10 @@ const RequestPTW = ({ jobPermit, onClose, onSubmitSuccess }) => {
       }
       if (formData.exitDate < formData.entryDate) {
         setError('Exit date cannot be before entry date');
+        return false;
+      }
+      if (!isSameOrAfterDate(formData.entryDate, jobStartDate)) {
+        setError('Entry date cannot be earlier than Job Permit start date');
         return false;
       }
       return true;
@@ -98,16 +124,21 @@ const RequestPTW = ({ jobPermit, onClose, onSubmitSuccess }) => {
     };
   
     const CustomInput = React.forwardRef(({ value, onClick }, ref) => (
-      <div className="relative" onClick={onClick}>
+      <div className="relative">
         <Input
           ref={ref}
           value={value}
           readOnly
           className="w-full pl-10 cursor-pointer"
+          onClick={onClick}
         />
-        <Calendar className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+        <Calendar className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 cursor-pointer" onClick={onClick} />
       </div>
     ));
+
+    const formatDate = (date) => {
+      return date ? new Date(date).toLocaleDateString('en-GB') : 'N/A';
+    };
   
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -125,6 +156,9 @@ const RequestPTW = ({ jobPermit, onClose, onSubmitSuccess }) => {
   
           <div className="px-6 py-2 border-b">
             <p className="text-sm text-gray-500">JOB PERMIT ID: JP-{jobPermit?.JobPermitID?.toString().padStart(4, '0')}</p>
+            <p className="text-sm text-gray-500">
+            JOB PERMIT VALID FROM: {formatDate(jobStartDate)} - {formatDate(jobEndDate)}
+          </p>
           </div>
   
           <CardContent>
@@ -134,7 +168,7 @@ const RequestPTW = ({ jobPermit, onClose, onSubmitSuccess }) => {
         <Label className="mb-2">Entry Date</Label>
         <DatePicker
           selected={formData.entryDate}
-          onChange={date => setFormData({ ...formData, entryDate: date })}
+          onChange={(date) => setFormData((prev) => ({ ...prev, entryDate: date, exitDate: null }))}
           minDate={new Date()}
           dateFormat="dd/MM/yyyy"
           customInput={<CustomInput />}
@@ -149,6 +183,8 @@ const RequestPTW = ({ jobPermit, onClose, onSubmitSuccess }) => {
           minDate={formData.entryDate || new Date()}
           dateFormat="dd/MM/yyyy"
           customInput={<CustomInput />}
+          onCalendarOpen={() => {}}
+          onClickOutside={() => {}}
         />
       </div>
     </div>

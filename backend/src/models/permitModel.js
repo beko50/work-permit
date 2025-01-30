@@ -484,10 +484,17 @@ async getPermitToWorkById(permitToWorkId) {
       .query(`
         SELECT 
           ptw.*,
+          -- Job Permit details
           jp.JobDescription,
           jp.JobLocation,
+          jp.SubLocation,
+          jp.LocationDetail,
           jp.Department,
+          jp.ContractCompanyName,
           jp.PermitReceiver,
+          jp.NumberOfWorkers,
+          jp.WorkersNames,
+          -- Approval details with approver names
           CONCAT(issuer.FirstName, ' ', issuer.LastName) as IssuerApproverName,
           CONCAT(hod.FirstName, ' ', hod.LastName) as HODApproverName,
           CONCAT(qa.FirstName, ' ', qa.LastName) as QHSSEApproverName
@@ -499,7 +506,126 @@ async getPermitToWorkById(permitToWorkId) {
         WHERE ptw.PermitToWorkID = @permitToWorkId
       `);
 
-    return result.recordset[0];
+    if (result.recordset.length === 0) {
+      return null;
+    }
+
+    const permit = result.recordset[0];
+    
+    // Restructure the data to include both PTW and Job Permit details
+    return {
+      permit: {
+        PermitToWorkID: permit.PermitToWorkID,
+        JobPermitID: permit.JobPermitID,
+        EntryDate: permit.EntryDate,
+        ExitDate: permit.ExitDate,
+        WorkDuration: permit.WorkDuration,
+        Status: permit.Status,
+        Created: permit.Created,
+        AssignedTo: permit.AssignedTo,
+        // Approval details
+        IssuerStatus: permit.IssuerStatus,
+        IssuerComments: permit.IssuerComments,
+        IssuerApproverName: permit.IssuerApproverName,
+        IssuerApprovedDate: permit.IssuerApprovedDate,
+        HODStatus: permit.HODStatus,
+        HODComments: permit.HODComments,
+        HODApproverName: permit.HODApproverName,
+        HODApprovedDate: permit.HODApprovedDate,
+        QHSSEStatus: permit.QHSSEStatus,
+        QHSSEComments: permit.QHSSEComments,
+        QHSSEApproverName: permit.QHSSEApproverName,
+        QHSSEApprovedDate: permit.QHSSEApprovedDate
+      },
+      jobPermit: {
+        JobDescription: permit.JobDescription,
+        JobLocation: permit.JobLocation,
+        SubLocation: permit.SubLocation,
+        LocationDetail: permit.LocationDetail,
+        Department: permit.Department,
+        ContractCompanyName: permit.ContractCompanyName,
+        PermitReceiver: permit.PermitReceiver,
+        NumberOfWorkers: permit.NumberOfWorkers,
+        WorkersNames: permit.WorkersNames
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching permit to work:', error);
+    throw error;
+  }
+},
+
+async getPermitToWorkByJobPermitId(jobPermitId) {
+  const pool = await poolPromise;
+
+  try {
+    const result = await pool.request()
+      .input('jobPermitId', sql.Int, parseInt(jobPermitId))
+      .query(`
+        SELECT 
+          ptw.*,
+          -- Job Permit details
+          jp.JobDescription,
+          jp.JobLocation,
+          jp.SubLocation,
+          jp.LocationDetail,
+          jp.Department,
+          jp.ContractCompanyName,
+          jp.PermitReceiver,
+          jp.NumberOfWorkers,
+          jp.WorkersNames,
+          -- Approval details with approver names
+          CONCAT(issuer.FirstName, ' ', issuer.LastName) as IssuerApproverName,
+          CONCAT(hod.FirstName, ' ', hod.LastName) as HODApproverName,
+          CONCAT(qa.FirstName, ' ', qa.LastName) as QHSSEApproverName
+        FROM PermitToWork ptw
+        INNER JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+        LEFT JOIN Users issuer ON ptw.IssuerApprovedBy = issuer.UserID
+        LEFT JOIN Users hod ON ptw.HODApprovedBy = hod.UserID
+        LEFT JOIN Users qa ON ptw.QHSSEApprovedBy = qa.UserID
+        WHERE ptw.JobPermitID = @jobPermitId
+      `);
+
+    if (result.recordset.length === 0) {
+      return null;
+    }
+
+    const permit = result.recordset[0];
+    return {
+      permit: {
+        PermitToWorkID: permit.PermitToWorkID,
+        JobPermitID: permit.JobPermitID,
+        EntryDate: permit.EntryDate,
+        ExitDate: permit.ExitDate,
+        WorkDuration: permit.WorkDuration,
+        Status: permit.Status,
+        Created: permit.Created,
+        AssignedTo: permit.AssignedTo,
+        IssuerStatus: permit.IssuerStatus,
+        IssuerComments: permit.IssuerComments,
+        IssuerApproverName: permit.IssuerApproverName,
+        IssuerApprovedDate: permit.IssuerApprovedDate,
+        HODStatus: permit.HODStatus,
+        HODComments: permit.HODComments,
+        HODApproverName: permit.HODApproverName,
+        HODApprovedDate: permit.HODApprovedDate,
+        QHSSEStatus: permit.QHSSEStatus,
+        QHSSEComments: permit.QHSSEComments,
+        QHSSEApproverName: permit.QHSSEApproverName,
+        QHSSEApprovedDate: permit.QHSSEApprovedDate
+      },
+      jobPermit: {
+        JobDescription: permit.JobDescription,
+        JobLocation: permit.JobLocation,
+        SubLocation: permit.SubLocation,
+        LocationDetail: permit.LocationDetail,
+        Department: permit.Department,
+        ContractCompanyName: permit.ContractCompanyName,
+        PermitReceiver: permit.PermitReceiver,
+        NumberOfWorkers: permit.NumberOfWorkers,
+        WorkersNames: permit.WorkersNames
+      }
+    };
   } catch (error) {
     console.error('Error fetching permit to work:', error);
     throw error;
@@ -550,7 +676,7 @@ async approvePermitToWork(permitToWorkId, assignedTo, status, comments, userId, 
     .input('userId', sql.Int, userId)
     .input('comments', sql.NVarChar(sql.MAX), comments || '')
     .input('nextApprover', sql.VarChar(50), 
-      nextApprover === 'COMPLETED' ? null : nextApprover
+      nextApprover === 'COMPLETED' ? 'ACTIVE' : nextApprover // Changed from null to 'ACTIVE'
     )
     .query(`
       UPDATE PermitToWork 
@@ -562,7 +688,7 @@ async approvePermitToWork(permitToWorkId, assignedTo, status, comments, userId, 
         AssignedTo = CASE
           WHEN @status = 'Rejected' THEN NULL
           WHEN @status = 'Approved' AND @nextApprover IS NOT NULL THEN @nextApprover
-          WHEN @status = 'Approved' AND @assignedTo = 'QA' THEN NULL
+          WHEN @status = 'Approved' AND @assignedTo = 'QA' THEN 'ACTIVE'  -- Changed from NULL to 'ACTIVE'
           ELSE AssignedTo
         END,
         Status = CASE

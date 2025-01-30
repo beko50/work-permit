@@ -504,6 +504,30 @@ export const api = {
     }
   },
 
+  async getPermitToWorkByJobPermitId(jobPermitId) {
+    try {
+      const response = await fetch(`${API_URL}/permits/permit-to-work/job-permit/${jobPermitId}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
+  
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to fetch permit to work');
+      }
+  
+      const data = await response.json();
+      return {
+        success: true,
+        data: data.data
+      };
+    } catch (error) {
+      console.error('Error fetching permit to work:', error);
+      throw error;
+    }
+  },
+
   // Get all Permits to Work based on user role
   async getPermitsToWork() {
     try {
@@ -537,14 +561,18 @@ export const api = {
         method: 'POST',
         headers: getAuthHeaders(),
         credentials: 'include',
-        body: JSON.stringify(approvalData)
+        body: JSON.stringify({
+          permitToWorkId, // Explicitly include this
+          status: approvalData.status,
+          comments: approvalData.comments
+        })
       });
-
+  
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Failed to process approval');
       }
-
+  
       return await response.json();
     } catch (error) {
       console.error('Error processing permit approval:', error);

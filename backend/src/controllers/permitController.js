@@ -344,11 +344,17 @@ const permitController = {
       const exitDate = new Date(permitData.exitDate);
       const jobStartDate = new Date(jobPermit.StartDate);
       const jobEndDate = new Date(jobPermit.EndDate);
+
+      const isSameOrAfterDate = (date1, date2) => {
+        const d1 = new Date(date1.setHours(0, 0, 0, 0));
+        const d2 = new Date(date2.setHours(0, 0, 0, 0));
+        return d1 >= d2;
+      };
       
-      if (entryDate < jobStartDate || exitDate > jobEndDate) {
+      if (!isSameOrAfterDate(entryDate, jobStartDate)) {
         await transaction.rollback();
         return res.status(400).json({ 
-          message: 'Entry and Exit dates must be within Job Permit date range' 
+          message: 'Entry date cannot be earlier than Job Permit start date' 
         });
       }
 
@@ -386,120 +392,155 @@ const permitController = {
     }
 },
 
-  async getPermitToWorkById(req, res) {
-    try {
-      const { permitToWorkId } = req.params;
-      
-      const permit = await permitModel.getPermitToWorkById(permitToWorkId);
-      
-      if (!permit) {
-        return res.status(404).json({ message: 'Permit to Work not found' });
-      }
-
-      res.json(permit);
-    } catch (error) {
-      console.error('Error fetching permit to work:', error);
-      res.status(500).json({ 
-        message: 'Error fetching permit to work',
-        error: error.message 
+async getPermitToWorkById(req, res) {
+  try {
+    const { permitToWorkId } = req.params;
+    
+    const result = await permitModel.getPermitToWorkById(permitToWorkId);
+    
+    if (!result) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Permit to Work not found' 
       });
     }
-  },
 
-  async approvePermitToWork(req, res) {
-    const pool = await poolPromise;
-    const transaction = await pool.transaction();
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error fetching permit to work:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching permit to work',
+      error: error.message 
+    });
+  }
+},
 
-    try {
-      const { permitToWorkId, status, comments } = req.body;
-
-      if (!permitToWorkId || !status) {
-        return res.status(400).json({ 
-          message: 'Missing required fields: permitToWorkId and status are required' 
-        });
-      }
-
-      if (!req.user || !req.user.userId) {
-        return res.status(401).json({ 
-          message: 'User not authenticated' 
-        });
-      }
-
-      await transaction.begin();
-
-      const permitResult = await permitModel.getPermitToWorkById(permitToWorkId);
-
-      if (!permitResult) {
-        await transaction.rollback();
-        return res.status(404).json({ 
-          message: 'Permit to Work not found' 
-        });
-      }
-
-      const { AssignedTo } = permitResult;
-
-      const userRole = req.user.role.trim();
-      if (
-        (AssignedTo === 'ISS' && userRole !== 'ISS') ||
-        (AssignedTo === 'HOD' && userRole !== 'HOD') ||
-        (AssignedTo === 'QA' && userRole !== 'QA')
-      ) {
-        await transaction.rollback();
-        return res.status(403).json({
-          message: 'User does not have permission to approve this stage'
-        });
-      }
-
-      const rowsAffected = await permitModel.approvePermitToWork(
-        permitToWorkId,
-        AssignedTo,
-        status,
-        comments || null,
-        req.user.userId,
-        transaction
-      );
-
-      if (rowsAffected === 0) {
-        await transaction.rollback();
-        return res.status(404).json({
-          message: 'Permit not found or no updates were made'
-        });
-      }
-
-      await transaction.commit();
-
-      const nextStageMap = {
-        'ISS': 'HOD',
-        'HOD': 'QHSSE',
-        'QA': null
-      };
-
-      const nextStage = status === 'Approved' ? nextStageMap[AssignedTo] : null;
-      const responseMessage = status === 'Approved'
-        ? (nextStage
-          ? `Permit to Work approved successfully. Forwarded to ${nextStage} for review.`
-          : 'Permit to Work approved successfully. Process complete.')
-        : 'Permit to Work rejected successfully.';
-
-      res.json({
-        message: responseMessage,
-        status,
-        previousStage: AssignedTo,
-        nextStage: nextStage
-      });
-
-    } catch (error) {
-      if (transaction && transaction._begun) {
-        await transaction.rollback();
-      }
-
-      console.error('Error processing permit to work approval:', error);
-      res.status(500).json({
-        message: 'Error processing permit to work approval',
-        error: error.message
+async getPermitToWorkByJobPermitId(req, res) {
+  try {
+    const { jobPermitId } = req.params;
+    
+    const result = await permitModel.getPermitToWorkByJobPermitId(jobPermitId);
+    
+    if (!result) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'No Permit to Work found for this Job Permit' 
       });
     }
-  },
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error fetching permit to work:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching permit to work',
+      error: error.message 
+    });
+  }
+},
+
+async approvePermitToWork(req, res) {
+  const pool = await poolPromise;
+  const transaction = await pool.transaction();
+
+  try {
+    const { permitToWorkId, status, comments } = req.body;
+
+    if (!permitToWorkId || !status) {
+      return res.status(400).json({ 
+        message: 'Missing required fields: permitToWorkId and status are required' 
+      });
+    }
+
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ 
+        message: 'User not authenticated' 
+      });
+    }
+
+    await transaction.begin();
+
+    const permitResult = await permitModel.getPermitToWorkById(permitToWorkId);
+
+    if (!permitResult || !permitResult.permit) { // Check for permitResult.permit
+      await transaction.rollback();
+      return res.status(404).json({ 
+        message: 'Permit to Work not found' 
+      });
+    }
+
+    // Get AssignedTo from the nested permit object
+    const { AssignedTo } = permitResult.permit;
+
+    const userRole = req.user.role.trim();
+    if (
+      (AssignedTo === 'ISS' && userRole !== 'ISS') ||
+      (AssignedTo === 'HOD' && userRole !== 'HOD') ||
+      (AssignedTo === 'QA' && userRole !== 'QA')
+    ) {
+      await transaction.rollback();
+      return res.status(403).json({
+        message: 'User does not have permission to approve this stage'
+      });
+    }
+
+    const rowsAffected = await permitModel.approvePermitToWork(
+      permitToWorkId,
+      AssignedTo,
+      status,
+      comments || null,
+      req.user.userId,
+      transaction
+    );
+
+    if (rowsAffected === 0) {
+      await transaction.rollback();
+      return res.status(404).json({
+        message: 'Permit not found or no updates were made'
+      });
+    }
+
+    await transaction.commit();
+
+    const nextStageMap = {
+      'ISS': 'HOD',
+      'HOD': 'QHSSE',
+      'QA': null
+    };
+
+    const nextStage = status === 'Approved' ? nextStageMap[AssignedTo] : null;
+    const responseMessage = status === 'Approved'
+      ? (nextStage
+        ? `Permit to Work approved successfully. Forwarded to ${nextStage} for review.`
+        : 'Permit to Work approved successfully. Process complete.')
+      : 'Permit to Work rejected successfully.';
+
+    res.json({
+      message: responseMessage,
+      status,
+      previousStage: AssignedTo,
+      nextStage: nextStage
+    });
+
+  } catch (error) {
+    if (transaction && transaction._begun) {
+      await transaction.rollback();
+    }
+
+    console.error('Error processing permit to work approval:', error);
+    res.status(500).json({
+      message: 'Error processing permit to work approval',
+      error: error.message
+    });
+  }
+},
 
   async getPermitToWork(req, res) {
     try {

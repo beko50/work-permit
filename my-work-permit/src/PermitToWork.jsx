@@ -2,30 +2,57 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent, CardFooter } from './components/ui/card';
 import { Button } from './components/ui/button';
+import { Input, Select } from './components/ui/form';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
 import { RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
 import Tabs from './components/ui/tabs';
 import { api } from './services/api';
 import RequestPTW from './RequestPTW';
-import SubmittedPTW from './SubmittedPTW';
 
 const PermitToWork = () => {
   const navigate = useNavigate();
-  const [approvedJobPermits, setApprovedJobPermits] = useState([]);
+  const [permits, setPermits] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [currentTab, setCurrentTab] = useState('approved-job-permits');
   const [showPTWForm, setShowPTWForm] = useState(false);
-  const [showSubmittedPTW, setShowSubmittedPTW] = useState(false); // Add this state
-  const [selectedPermitId, setSelectedPermitId] = useState(null);
   const [selectedPermit, setSelectedPermit] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [searchParams, setSearchParams] = useState({
+    jobPermitId: '',
+    permitReceiver: '',
+    contractCompanyName: '',
+    status: '',
+    startDate: '',
+    endDate: '',
+  });
+
+  useEffect(() => {
+    const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
+    const userData = JSON.parse(savedData)?.user;
+    setCurrentUser(userData);
+  }, []);
+
+  const getPermitActions = (permit) => {
+    const reviewerRoles = ['ISS', 'HOD', 'QA'];
+    
+    if (
+      reviewerRoles.includes(currentUser?.roleId) && 
+      permit.AssignedTo === currentUser?.roleId
+    ) {
+      return ['Review Permit To Work'];
+    }
+    
+    return ['View Permit To Work'];
+  };
 
   const getStatusColor = (status) => {
     status = status.toLowerCase();
-    if (status === 'Pending') return 'text-yellow-500';
-    if (status === 'Approved') return 'text-green-500';
-    if (status === 'Rejected' || status === 'revoked') return 'text-red-500';
-    return 'text-gray-500'; // default color for unknown status
+    if (status === 'pending') return 'text-yellow-500';
+    if (status === 'approved') return 'text-green-500';
+    if (status === 'rejected' || status === 'revoked') return 'text-red-500';
+    return 'text-gray-500';
   };
 
   const tabs = [
@@ -35,40 +62,15 @@ const PermitToWork = () => {
     { value: 'revoked-rejected', label: 'Revoked/Rejected' }
   ];
 
-  const handlePTWSubmitSuccess = () => {
-    // Refresh the permits list
-    fetchApprovedPermits();
-  };
-
-  // Fetch approved permits
-  const fetchApprovedPermits = async () => {
+  const fetchPermits = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
-      const currentUser = JSON.parse(savedData)?.user;
-  
       const response = await api.getPermitsToWork();
       
       if (response.success) {
-        // Log raw data to see what we're getting
-        console.log('Raw permits data:', response.data);
-        
-        // For now, let's show all permits until we determine the correct filter
-        setApprovedJobPermits(response.data);
-  
-        // Commented out the filter until we determine the correct conditions
-        /*
-        const onlyApproved = response.data.filter(permit => 
-          permit.Status === 'Approved' || 
-          (permit.HODStatus === 'Approved' && 
-           permit.IssuerStatus === 'Approved' && 
-           permit.QHSSEStatus === 'Approved')
-        );
-        console.log('Filtered permits:', onlyApproved);
-        setApprovedJobPermits(onlyApproved);
-        */
+        setPermits(response.data);
       } else {
         setError(response.error);
       }
@@ -78,17 +80,21 @@ const PermitToWork = () => {
     } finally {
       setLoading(false);
     }
-  };  
+  };
 
   useEffect(() => {
-    fetchApprovedPermits();
+    fetchPermits();
   }, []);
+
+  const handleSearch = () => {
+    fetchPermits();
+  };
 
   const Dropdown = ({ children, options, onSelect, className = '' }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const dropdownRef = React.useRef(null);
+    const dropdownRef = useRef(null);
 
-    React.useEffect(() => {
+    useEffect(() => {
       const handleClickOutside = (event) => {
         if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
           setIsOpen(false);
@@ -134,29 +140,37 @@ const PermitToWork = () => {
 
   const handleDropdownAction = (action, permitId) => {
     switch (action) {
-      case 'Request Permit To Work':
-        const permit = approvedJobPermits.find(p => p.JobPermitID === permitId);
-        setSelectedPermit(permit);
-        setShowPTWForm(true);
-        break;
       case 'View Permit To Work':
-        // Navigate to the SubmittedPTW component with the permit ID
-        navigate(`/dashboard/permits/permit-to-work/ptw/${permitId}`);
+        navigate(`/dashboard/permits/permit-to-work/job-permit/${permitId}`);
+        break;
+      case 'Review Permit To Work':
+        navigate(`/dashboard/permits/permit-to-work/review/${permitId}`);
         break;
       default:
         console.log(`Unknown action: ${action}`);
     }
   };
 
-  const handleClosePTWForm = () => {
-    setShowPTWForm(false);
-    setSelectedPermit(null);
+  const getFilteredPermits = () => {
+    switch (currentTab) {
+      case 'active':
+        return permits.filter(permit => permit.AssignedTo === 'ACTIVE');
+      case 'approved-job-permits':
+        return permits.filter(permit => permit.AssignedTo !== 'ACTIVE');
+      case 'expired':
+        // Add expired filtering logic when needed
+        return [];
+      case 'revoked-rejected':
+        return permits.filter(permit => 
+          permit.Status.toLowerCase() === 'revoked' || 
+          permit.Status.toLowerCase() === 'rejected'
+        );
+      default:
+        return [];
+    }
   };
 
-  const handleCloseSubmittedPTW = () => {
-    setShowSubmittedPTW(false);
-    setSelectedPermitId(null);
-  };
+  const filteredPermits = getFilteredPermits();
 
   return (
     <div className="mt-6">
@@ -164,8 +178,22 @@ const PermitToWork = () => {
         <CardHeader>
           <h2 className="text-2xl font-semibold">Permit to Work</h2>
         </CardHeader>
-        <Tabs tabs={tabs} activeTab={currentTab} onTabChange={setCurrentTab} />
         <CardContent>
+          <div className="mb-4">
+            <div className="flex gap-2 mb-4">
+              <Button 
+                variant="secondary" 
+                className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
+                onClick={fetchPermits}
+              >
+                <RefreshCw className="w-4 h-4" />
+                REFRESH
+              </Button>
+            </div>
+          </div>
+
+          <Tabs tabs={tabs} activeTab={currentTab} onTabChange={setCurrentTab} />
+
           {loading && (
             <div className="text-center py-4">Loading permits...</div>
           )}
@@ -185,17 +213,17 @@ const PermitToWork = () => {
                   </TableCell>
                   <TableCell className="text-base font-medium">Permit ID</TableCell>
                   <TableCell className="text-base font-medium">Permit Receiver</TableCell>
-                  <TableCell className="text-base font-medium">Approval Date</TableCell>
+                  <TableCell className="text-base font-medium">Company</TableCell>
                   <TableCell className="text-base font-medium">Assigned To</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {currentTab === 'approved-job-permits' && approvedJobPermits.length > 0 ? (
-                  approvedJobPermits.map((permit) => (
+                {filteredPermits.length > 0 ? (
+                  filteredPermits.map((permit) => (
                     <TableRow key={permit.JobPermitID}>
                       <TableCell>
                         <Dropdown
-                          options={['View Permit To Work']}
+                          options={getPermitActions(permit)}
                           onSelect={(action) => handleDropdownAction(action, permit.JobPermitID)}
                           className="text-sm font-medium"
                         >
@@ -211,26 +239,14 @@ const PermitToWork = () => {
                         </div>
                       </TableCell>
                       <TableCell>{permit.PermitReceiver}</TableCell>
-                      <TableCell>
-                      {new Date(permit.Changed).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
-                      </TableCell>
+                      <TableCell>{permit.ContractCompanyName}</TableCell>
                       <TableCell>{permit.AssignedTo}</TableCell>
                     </TableRow>
                   ))
-                ) : currentTab === 'approved-job-permits' ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-4">
-                      No approved job permits found
-                    </TableCell>
-                  </TableRow>
                 ) : (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-4">
-                      No permits available
+                      No permits found for this tab
                     </TableCell>
                   </TableRow>
                 )}
@@ -238,7 +254,7 @@ const PermitToWork = () => {
             </Table>
           )}
           <div className="flex justify-end mt-4 text-sm text-gray-500">
-            Rows per page: 15 | {approvedJobPermits.length > 0 ? `1-${approvedJobPermits.length} of ${approvedJobPermits.length}` : '0-0 of 0'}
+            Rows per page: 15 | {filteredPermits.length > 0 ? `1-${filteredPermits.length} of ${filteredPermits.length}` : '0-0 of 0'}
           </div>
         </CardContent>
         <CardFooter>
@@ -253,12 +269,19 @@ const PermitToWork = () => {
       </Card>
 
       {showPTWForm && (
-      <RequestPTW
-        jobPermit={selectedPermit}
-        onClose={handleClosePTWForm}
-        onSubmitSuccess={handlePTWSubmitSuccess}
-      />
-    )}
+        <RequestPTW
+          jobPermit={selectedPermit}
+          onClose={() => {
+            setShowPTWForm(false);
+            setSelectedPermit(null);
+          }}
+          onSubmitSuccess={() => {
+            setShowPTWForm(false);
+            setSelectedPermit(null);
+            fetchPermits();
+          }}
+        />
+      )}
     </div>
   );
 };

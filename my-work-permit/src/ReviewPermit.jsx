@@ -226,7 +226,7 @@ const PermitReview = () => {
 
           {/* Approval Workflow */}
           <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-4">Approval Workflow</h3>
+            <h3 className="text-lg font-semibold mb-4">Documentation Approval </h3>
             <div className="relative">
               <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
               {approvals.map((approval, index) => (

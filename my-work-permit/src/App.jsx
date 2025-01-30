@@ -17,6 +17,7 @@ import ApprovalHistory from './ApprovalHistory';
 import SuccessPage from './SuccessPage';
 import SubmittedPermit from './SubmittedPermit';  // New import
 import SubmittedPTW from './SubmittedPTW';
+import ReviewPTW from './ReviewPTW';
 import PermitReview from './ReviewPermit';
 
 function App() {
@@ -41,10 +42,11 @@ function App() {
             <Route path="job-permits/success" element={<SuccessPage />} />
             <Route path="view/:permitId" element={<SubmittedPermit />} />
             <Route path="review/:permitId" element={<PermitReview/>} /> 
-            {/* Permit to Work should have its own routing */}
+            {/* Permit to Work should have its own */}
             <Route path="permit-to-work" element={<PermitToWork />} />
-            <Route path="permit-to-work/:ptwId" element={<SubmittedPTW />} />
+            <Route path="permit-to-work/job-permit/:jobPermitId" element={<SubmittedPTW />} />
             <Route path="requestPTW" element={<RequestPTW />} />
+            <Route path="permit-to-work/review/:jobPermitId" element={<ReviewPTW />} />
           </Route>  //'/dashboard/my-tasks/pending-approvals'
           <Route path="my-tasks">
             {/* <Route path="pending-approvals" element={<PendingApprovals />} /> */}

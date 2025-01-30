@@ -21,6 +21,7 @@ router.get('', authMiddleware, permitController.getPermits);
 router.post('/permit-to-work', authMiddleware, permitController.createPermitToWork);
 router.get('/permit-to-work', authMiddleware, permitController.getPermitToWork);
 router.get('/permit-to-work/:permitToWorkId', authMiddleware, permitController.getPermitToWorkById);
+router.get('/permit-to-work/job-permit/:jobPermitId', authMiddleware, permitController.getPermitToWorkByJobPermitId);
 router.post('/permit-to-work/:permitToWorkId/approve', authMiddleware, permitController.approvePermitToWork);
 
 router.get('/:permitId', authMiddleware, permitController.getPermitById);
