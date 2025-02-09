@@ -2,29 +2,32 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from './components/ui/card';
 import { Button } from './components/ui/button';
-import { X, Check, Clock, AlertTriangle } from 'lucide-react';
+import { X, Check, Clock, AlertTriangle,Eye } from 'lucide-react';
 import { api } from './services/api';
 import logo from './assets/mps_logo.jpg';
 
 const SubmittedPTW = () => {
-  const { jobPermitId } = useParams();
+  const { permitToWorkId } = useParams();
   const navigate = useNavigate();
   const [ptw, setPtw] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [approvals, setApprovals] = useState([]);
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString, dateOnly = false) => {
     if (!dateString) return '';
-    return new Date(dateString).toLocaleString('en-GB', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    return dateOnly 
+      ? new Date(dateString).toLocaleDateString('en-GB')
+      : new Date(dateString).toLocaleString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
   };
+  
 
   const getStatusBadge = (status) => {
     switch (status?.toLowerCase()) {
@@ -55,17 +58,17 @@ const SubmittedPTW = () => {
   };
 
   useEffect(() => {
-    const fetchPTWDetails = async () => {
-      try {
-        setLoading(true);
-        const response = await api.getPermitToWorkByJobPermitId(jobPermitId);
-
-        if (response.success && response.data?.permit) {
-          console.log('PTW Data:', response.data);
-          setPtw({
-            ...response.data.permit,
-            jobPermit: response.data.jobPermit
-          });
+      const fetchPTWDetails = async () => {
+        try {
+          setLoading(true);
+          // Change this to use getPermitToWorkById instead
+          const response = await api.getPermitToWorkById(permitToWorkId);
+          
+          if (response.success && response.data?.permit) {
+            setPtw({
+              ...response.data.permit,
+              jobPermit: response.data.jobPermit
+            });
           
           const workflowStages = [
             {
@@ -76,14 +79,14 @@ const SubmittedPTW = () => {
               comments: response.data.permit.IssuerComments
             },
             {
-              title: "Head of Department",
+              title: "Head of Department / Manager",
               status: response.data.permit.HODStatus || 'Pending',
               approverName: response.data.permit.HODApproverName,
               approvedDate: response.data.permit.HODApprovedDate,
               comments: response.data.permit.HODComments
             },
             {
-              title: "QHSSE",
+              title: "QHSSE Approver",
               status: response.data.permit.QHSSEStatus || 'Pending',
               approverName: response.data.permit.QHSSEApproverName,
               approvedDate: response.data.permit.QHSSEApprovedDate,
@@ -102,15 +105,16 @@ const SubmittedPTW = () => {
       }
     };
 
-    if (jobPermitId) {
+    if (permitToWorkId) {
       fetchPTWDetails();
     }
-  }, [jobPermitId]);
+  }, [permitToWorkId]);
 
   if (loading) return <div className="text-center">Loading PTW details...</div>;
   if (error) return <div className="text-red-500 text-center">{error}</div>;
   if (!ptw) return <div className="text-center">No PTW details found</div>;
 
+  const isFullyApproved = approvals.every(approval => approval.status === 'Approved');
   const workersList = ptw.jobPermit.WorkersNames?.split(',').map(name => name.trim()) || [];
 
   return (
@@ -136,50 +140,61 @@ const SubmittedPTW = () => {
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Job Permit Reference */}
-          <Card>
-            <CardContent className="pt-6">
+        <div className="p-4 space-y-4">
+          <Card className="shadow-sm">
+            <CardContent className="pt-4">
               <div className="grid grid-cols-2 gap-4">
-              <div>
+                <div>
                   <p className="text-sm text-gray-500">
                     <span className="font-bold">PTW ID:</span> PTW-{String(ptw.PermitToWorkID).padStart(4, '0')}
                   </p>
                   <p className="text-sm text-gray-500">
-                    <span className="font-bold">Job Permit ID:</span> JP-{String(ptw.JobPermitID).padStart(4, '0')}
+                    <span className="font-bold">Job Permit ID:</span> 
+                    <Button 
+                      variant="link" 
+                      className="pl-1 text-blue-600 hover:underline"
+                      onClick={() => navigate(`/dashboard/permits/view/${ptw.JobPermitID}`)}
+                    >
+                      JP-{String(ptw.JobPermitID).padStart(4, '0')}
+                    </Button>
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500">
                     <span className="font-bold">Status:</span> {getStatusBadge(ptw.Status)}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    <span className="font-bold">Permit Receiver:</span> {ptw.jobPermit.PermitReceiver}
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Job Details */}
-          <Card>
-            <CardHeader className="font-bold text-lg">Job Details</CardHeader>
+          <Card className="shadow-sm">
+          <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Details</div>
+
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="font-semibold">Job Description:</p>
-                  <p className="text-gray-700">{ptw.jobPermit.JobDescription}</p>
+              <div>
+                  <p className="font-semibold text-sm">Permit Receiver:</p>
+                  <p className="text-gray-700 text-sm">{ptw.jobPermit.PermitReceiver}</p>
                 </div>
                 <div>
-                  <p className="font-semibold">Location:</p>
-                  <p className="text-gray-700">{ptw.jobPermit.JobLocation}</p>
-                  <p className="text-gray-700">{ptw.jobPermit.SubLocation}</p>
+                  <p className="font-semibold text-sm">Contract Company:</p>
+                  <p className="text-gray-700 text-sm">{ptw.jobPermit.ContractCompanyName}</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Job Description:</p>
+                  <p className="text-gray-700 text-sm">{ptw.jobPermit.JobDescription}</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Location:</p>
+                  <p className="text-gray-700 text-sm">{ptw.jobPermit.JobLocation}</p>
+                  <p className="text-gray-700 text-sm">{ptw.jobPermit.SubLocation}</p>
                 </div>
                 <div className="col-span-2">
-                  <p className="font-semibold">Workers:</p>
-                  <div className="bg-gray-50 p-4 rounded-md">
+                  <p className="font-semibold text-sm">Workers:</p>
+                  <div className="bg-gray-50 p-2 rounded-md">
                     {workersList.map((worker, index) => (
-                      <p key={index} className="text-gray-700 py-1">{worker}</p>
+                      <p key={index} className="text-gray-700 text-sm py-0.5">{worker}</p>
                     ))}
                   </div>
                 </div>
@@ -187,72 +202,66 @@ const SubmittedPTW = () => {
             </CardContent>
           </Card>
 
-          {/* Work Duration Details */}
-          <Card>
-            <CardHeader className="font-bold text-lg">Work Duration</CardHeader>
+          <Card className="shadow-sm">
+          <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Work Duration</div>
+
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <p className="font-semibold">Entry Date:</p>
-                  <p>{new Date(ptw.EntryDate).toLocaleDateString('en-GB')}</p>
+                  <p className="text-sm font-semibold">Entry Date:</p>
+                  <p className="text-sm">{formatDate(ptw.EntryDate)}</p>
                 </div>
                 <div>
-                  <p className="font-semibold">Exit Date:</p>
-                  <p>{new Date(ptw.ExitDate).toLocaleDateString('en-GB')}</p>
+                  <p className="text-sm font-semibold">Exit Date:</p>
+                  <p className="text-sm">{formatDate(ptw.ExitDate)}</p>
                 </div>
                 <div>
-                  <p className="font-semibold">Work Duration:</p>
-                  <p>{ptw.WorkDuration} days</p>
+                  <p className="text-sm font-semibold">Work Duration:</p>
+                  <p className="text-sm">{ptw.WorkDuration} days</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Approval Workflow */}
-          <Card>
-            <CardHeader className="font-bold text-lg">Final Stage Approval</CardHeader>
+          <Card className="shadow-sm">
+          <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Approval Status</div>
             <CardContent>
-              <div className="relative">
-                <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
-                {approvals.map((approval, index) => (
-                  <div key={index} className="relative pl-10 pb-6">
-                    <div 
-                      className={`absolute left-0 rounded-full border-2 w-6 h-6 transition-all duration-300
-                        ${approval.status === 'Approved' ? 'bg-green-500 border-green-500' : 
-                          approval.status === 'Rejected' ? 'bg-red-500 border-red-500' :
-                          'bg-gray-200 border-gray-300'}`}
-                    />
-                    <div className="border rounded-md p-4">
-                      <div className="mb-4">
-                        <h4 className="font-medium text-lg mb-2">{approval.title}</h4>
-                        {getStatusBadge(approval.status)}
-                      </div>
-
-                      <div className="text-sm">
-                        <p className="text-gray-600">
-                          Approver: {approval.approverName || 'Not yet approved'}
-                        </p>
-                        {approval.approvedDate && (
-                          <p className="text-gray-600">
-                            Date: {formatDate(approval.approvedDate)}
-                          </p>
-                        )}
-                        {approval.comments && (
-                          <div className="mt-2">
-                            <p className="text-gray-600">Comments:</p>
-                            <p className="bg-gray-50 p-2 rounded mt-1">{approval.comments}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="text-left p-2">Approver</th>
+                      <th className="text-left p-2">Status</th>
+                      <th className="text-left p-2">Approved By</th>
+                      <th className="text-left p-2">Date</th>
+                      <th className="text-left p-2">Comments</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {approvals.map((approval, index) => (
+                      <tr key={index} className="border-t">
+                        <td className="p-2">{approval.title}</td>
+                        <td className="p-2">{approval.status}</td>
+                        <td className="p-2">{approval.approverName || '-'}</td>
+                        <td className="p-2">{approval.approvedDate ? formatDate(approval.approvedDate, true) : '-'}</td>
+                        <td className="p-2">{approval.comments || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
 
-          {/* Print Button */}
-          <div className="flex justify-end mt-6 pb-4">
+          {isFullyApproved && (
+            <div className="text-sm text-gray-700 p-2 bg-gray-50 rounded">
+              This permit has been reviewed and approved by the necessary parties to proceed with the electrical maintenance work
+              in Building A, Floor 2 from {formatDate(ptw.EntryDate)} to {formatDate(ptw.ExitDate)}. All appropriate safety measures and precautions must be followed
+              throughout the duration of work.
+            </div>
+          )}
+
+          <div className="flex justify-end mt-4">
             <Button 
               onClick={() => window.print()}
               variant="secondary"

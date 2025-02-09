@@ -9,6 +9,18 @@ import Tabs from './components/ui/tabs';
 import { api } from './services/api';
 import RequestPTW from './RequestPTW';
 
+const TabButton = ({ id, label, active, onClick }) => (
+  <button
+    onClick={() => onClick(id)}
+    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors
+      ${active 
+        ? 'bg-white border-t-2 border-blue-500 text-blue-600' 
+        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+  >
+    {label}
+  </button>
+);
+
 const PermitToWork = () => {
   const navigate = useNavigate();
   const [permits, setPermits] = useState([]);
@@ -19,14 +31,6 @@ const PermitToWork = () => {
   const [selectedPermit, setSelectedPermit] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [searchParams, setSearchParams] = useState({
-    jobPermitId: '',
-    permitReceiver: '',
-    contractCompanyName: '',
-    status: '',
-    startDate: '',
-    endDate: '',
-  });
 
   useEffect(() => {
     const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
@@ -55,40 +59,40 @@ const PermitToWork = () => {
     return 'text-gray-500';
   };
 
-  const tabs = [
-    { value: 'approved-job-permits', label: 'Approved Job Permits' },
-    { value: 'active', label: 'Active' },
-    { value: 'expired', label: 'Expired' },
-    { value: 'revoked-rejected', label: 'Revoked/Rejected' }
-  ];
-
-  const fetchPermits = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await api.getPermitsToWork();
-      
-      if (response.success) {
-        setPermits(response.data);
-      } else {
-        setError(response.error);
-      }
-    } catch (err) {
-      setError('Error fetching permits. Please try again later.');
-      console.error('Error:', err);
-    } finally {
-      setLoading(false);
-    }
+  // Add role display mapping function
+  const getRoleDisplayName = (roleId) => {
+    const roleDisplayMap = {
+      'ISS': 'PERMIT ISSUER',
+      'HOD': 'HOD / MANAGER',
+      'QA': 'QHSSE APPROVER'
+    };
+    
+    return roleDisplayMap[roleId] || roleId;
   };
 
   useEffect(() => {
+    const fetchPermits = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await api.getPermitsToWork();
+        
+        if (response.success) {
+          setPermits(response.data);
+        } else {
+          setError(response.error);
+        }
+      } catch (err) {
+        setError('Error fetching permits. Please try again later.');
+        console.error('Error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+  
     fetchPermits();
-  }, []);
-
-  const handleSearch = () => {
-    fetchPermits();
-  };
+  }, [currentTab]);
 
   const Dropdown = ({ children, options, onSelect, className = '' }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -118,7 +122,7 @@ const PermitToWork = () => {
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
         >
-          <span className="text-sm font-medium">Actions</span>
+          <span className="text-sm font-medium">Select</span>
           <ChevronDown className="h-5 w-5 text-blue-500" />
         </button>
         {isOpen && (
@@ -138,13 +142,13 @@ const PermitToWork = () => {
     );
   };
 
-  const handleDropdownAction = (action, permitId) => {
+  const handleDropdownAction = (action, permitToWorkId) => {
     switch (action) {
       case 'View Permit To Work':
-        navigate(`/dashboard/permits/permit-to-work/job-permit/${permitId}`);
+        navigate(`/dashboard/permits/permit-to-work/view/${permitToWorkId}`);
         break;
       case 'Review Permit To Work':
-        navigate(`/dashboard/permits/permit-to-work/review/${permitId}`);
+        navigate(`/dashboard/permits/permit-to-work/review/${permitToWorkId}`); // Use permitToWorkId directly
         break;
       default:
         console.log(`Unknown action: ${action}`);
@@ -153,18 +157,30 @@ const PermitToWork = () => {
 
   const getFilteredPermits = () => {
     switch (currentTab) {
-      case 'active':
-        return permits.filter(permit => permit.AssignedTo === 'ACTIVE');
       case 'approved-job-permits':
-        return permits.filter(permit => permit.AssignedTo !== 'ACTIVE');
-      case 'expired':
-        // Add expired filtering logic when needed
-        return [];
-      case 'revoked-rejected':
+        return permits.filter(permit => {
+          const status = permit.Status.toLowerCase();
+          return status === 'pending';
+        });
+        case 'approved':
+          return permits.filter(permit => {
+            const status = permit.Status.toLowerCase();
+            return status === 'approved';
+          });
+      case 'ongoing':
         return permits.filter(permit => 
-          permit.Status.toLowerCase() === 'revoked' || 
-          permit.Status.toLowerCase() === 'rejected'
+          permit.Status.toLowerCase() === 'approved' && 
+          permit.AssignedTo === 'ONGOING'
         );
+      case 'expired':
+        return permits.filter(permit => 
+          permit.Status.toLowerCase() === 'expired'
+        );
+      case 'revoked-rejected':
+        return permits.filter(permit => {
+          const status = permit.Status.toLowerCase();
+          return status === 'revoked' || status === 'rejected';
+        });
       default:
         return [];
     }
@@ -176,24 +192,37 @@ const PermitToWork = () => {
     <div className="mt-6">
       <Card>
         <CardHeader>
-          <h2 className="text-2xl font-semibold">Permit to Work</h2>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4">
-            <div className="flex gap-2 mb-4">
-              <Button 
-                variant="secondary" 
-                className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
-                onClick={fetchPermits}
-              >
-                <RefreshCw className="w-4 h-4" />
-                REFRESH
-              </Button>
+          <div className="flex flex-col gap-4">
+            <h2 className="text-2xl font-semibold">Permit to Work</h2>
+            <div className="flex gap-2 border-b">
+              <TabButton
+                id="approved-job-permits"
+                label="Pending"
+                active={currentTab === 'approved-job-permits'}
+                onClick={setCurrentTab}
+              />
+              <TabButton
+                id="approved"
+                label="Approved"
+                active={currentTab === 'approved'}
+                onClick={setCurrentTab}
+              />
+              <TabButton
+                id="expired"
+                label="Expired"
+                active={currentTab === 'expired'}
+                onClick={setCurrentTab}
+              />
+              <TabButton
+                id="revoked-rejected"
+                label="Revoked/Rejected"
+                active={currentTab === 'revoked-rejected'}
+                onClick={setCurrentTab}
+              />
             </div>
           </div>
-
-          <Tabs tabs={tabs} activeTab={currentTab} onTabChange={setCurrentTab} />
-
+        </CardHeader>
+        <CardContent>
           {loading && (
             <div className="text-center py-4">Loading permits...</div>
           )}
@@ -208,23 +237,24 @@ const PermitToWork = () => {
                 <TableRow>
                   <TableCell>
                     <Button variant="ghost" className="text-sm font-medium">
-                      Command
+                      Actions
                     </Button>
                   </TableCell>
-                  <TableCell className="text-base font-medium">Permit ID</TableCell>
+                  <TableCell className="text-base font-medium">Permit to Work ID</TableCell>
                   <TableCell className="text-base font-medium">Permit Receiver</TableCell>
                   <TableCell className="text-base font-medium">Company</TableCell>
+                  <TableCell className="text-base font-medium">Job Description</TableCell>
                   <TableCell className="text-base font-medium">Assigned To</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredPermits.length > 0 ? (
                   filteredPermits.map((permit) => (
-                    <TableRow key={permit.JobPermitID}>
+                    <TableRow key={permit.PermitToWorkID}>
                       <TableCell>
                         <Dropdown
                           options={getPermitActions(permit)}
-                          onSelect={(action) => handleDropdownAction(action, permit.JobPermitID)}
+                          onSelect={(action) => handleDropdownAction(action, permit.PermitToWorkID)}
                           className="text-sm font-medium"
                         >
                           Actions
@@ -232,7 +262,7 @@ const PermitToWork = () => {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span>JP-{String(permit.JobPermitID).padStart(4, '0')}</span>
+                          <span>PTW-{String(permit.PermitToWorkID).padStart(4, '0')}</span>
                           <span className={getStatusColor(permit.Status)}>
                             {permit.Status}
                           </span>
@@ -240,12 +270,13 @@ const PermitToWork = () => {
                       </TableCell>
                       <TableCell>{permit.PermitReceiver}</TableCell>
                       <TableCell>{permit.ContractCompanyName}</TableCell>
-                      <TableCell>{permit.AssignedTo}</TableCell>
+                      <TableCell>{permit.JobDescription}</TableCell>
+                      <TableCell>{getRoleDisplayName(permit.AssignedTo)}</TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-4">
+                    <TableCell colSpan={6} className="text-center py-4">
                       No permits found for this tab
                     </TableCell>
                   </TableRow>

@@ -17,10 +17,13 @@ router.get('/form-sections',permitController.getFormSections);
 router.post('/', permitController.createPermit);
 router.get('', authMiddleware, permitController.getPermits);
 
+router.get('/search', authMiddleware, permitController.searchPermits);
+
 // Permit to Work routes - Make sure these come BEFORE the general permitId route
 router.post('/permit-to-work', authMiddleware, permitController.createPermitToWork);
 router.get('/permit-to-work', authMiddleware, permitController.getPermitToWork);
 router.get('/permit-to-work/:permitToWorkId', authMiddleware, permitController.getPermitToWorkById);
+// Keep this route for initial PTW creation
 router.get('/permit-to-work/job-permit/:jobPermitId', authMiddleware, permitController.getPermitToWorkByJobPermitId);
 router.post('/permit-to-work/:permitToWorkId/approve', authMiddleware, permitController.approvePermitToWork);
 

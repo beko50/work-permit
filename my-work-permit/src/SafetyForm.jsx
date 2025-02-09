@@ -384,19 +384,34 @@ const SafetyForm = () => {
       };
   
   
-  const handleFileUpload = (event, setFieldValue) => {
-    const newFiles = Array.from(event.target.files);
-    const updatedFiles = [...fileToUpload, ...newFiles];  // Merge with existing files
-    setFileToUpload(updatedFiles);  // Update local state
-    setFieldValue('riskAssessment', updatedFiles);  // Update Formik state with array directly
-  };
+      const handleFileUpload = (event, setFieldValue) => {
+  const newFiles = Array.from(event.target.files);
+  
+  if (newFiles.length > 0) {
+    const filePromises = newFiles.map(file => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          resolve(reader.result);
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(filePromises).then(dataUrls => {
+      setFileToUpload(prevFiles => [...prevFiles, ...newFiles]);
+      setFieldValue('riskAssessment', dataUrls);
+    });
+  }
+};
   
   const handleFileDrop = (event, setFieldValue) => {
     event.preventDefault();
+    event.stopPropagation();
     const newFiles = Array.from(event.dataTransfer.files);
-    const updatedFiles = [...fileToUpload, ...newFiles];  // Merge with existing files
-    setFileToUpload(updatedFiles);  // Update local state
-    setFieldValue('riskAssessment', updatedFiles);  // Update Formik state with array directly
+    const updatedFiles = [...fileToUpload, ...newFiles];
+    setFileToUpload(updatedFiles);
+    setFieldValue('riskAssessment', updatedFiles);
   };
   
   const handleFileRemove = (index, setFieldValue) => {
@@ -405,222 +420,249 @@ const SafetyForm = () => {
     setFieldValue('riskAssessment', updatedFiles);
   };
 
+  const SectionHeader = ({ number, title,optional = false }) => (
+    <h2 className="font-semibold mb-4 relative">
+      <span className="relative after:content-[''] after:block after:w-full after:h-1 after:bg-gray-500 after:mb-1 after:shadow-md">
+        {number}. {title.toUpperCase()}
+        {optional && (
+        <span className="text-gray-400 text-sm ml-2">(Not Compulsory)</span>
+      )}
+      </span>
+    </h2>
+  );
 
-  const renderCheckboxGroup = (sectionKey, label, setFieldValue, errors, touched, setFieldTouched,setFieldError) => {
+  const renderCheckboxGroup = (sectionKey, label, number, setFieldValue, errors, touched, setFieldTouched,setFieldError,isOptional = false) => {
     const options = checkboxOptions[sectionKey] || [];
     const currentValues = Array.isArray(formData[sectionKey]) ? formData[sectionKey] : [];
-  
-    // Keep existing variable declarations
-    const textStateSetters = {
-      hazardIdentification: setOtherHazardText,
-      jobRequirement: setOtherGasesText,
-      ppeRequirement: setOtherPPEText,
-      precaution: setOtherControlsText,
-      hazardousEnergies: {
-        otherDangerousGoods: setOtherDangerousGoodsText,
-        otherHazardousEnergy: setOtherHazardousEnergyText
-      },
-      breakPreparation: setOtherBreakPreparationText
+
+    const getGridClass = (number) => {
+      // Sections 2-5 use 3 columns
+      if (number >= 2 && number <= 5 ) {
+        return "grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-0"; // Reduced vertical gap
+      }
+      // Sections 6-8 use 2 columns
+      else if (number >= 6 && number <= 7) {
+        return "grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-0"; // Reduced vertical gap
+      }
+      // Default to single column for other sections
+      return "grid grid-cols-3 gap-1";
     };
   
-    const textFieldValues = {
-      hazardIdentification: otherHazardText,
-      jobRequirement: otherGasesText,
-      ppeRequirement: otherPPEText,
-      precaution: otherControlsText,
-      hazardousEnergies: {
-        otherDangerousGoods: otherDangerousGoodsText,
-        otherHazardousEnergy: otherHazardousEnergyText
-      },
-      breakPreparation: otherBreakPreparationText
-    };
-  
-    const otherOptionLabels = {
-      hazardIdentification: ['Other (Specify)'],
-      jobRequirement: ['List other gases detected'],
-      ppeRequirement: ['Other (Specify)'],
-      precaution: ['Additional Controls (Specify)'],
-      hazardousEnergies: ['Dangerous goods/chemicals (Specify)', 'Other hazardous energies (Specify)'],
-      breakPreparation: ['Other (Specify)']
-    };
-  
-    const handleCheckboxChange = (option, checked) => {
-      const updatedValues = checked
-        ? [...currentValues, option.label]
-        : currentValues.filter(v => v !== option.label);
-      
-      // Update form data
-      setFormData(prev => ({
-        ...prev,
-        [sectionKey]: updatedValues
-      }));
-      setFieldValue(sectionKey, updatedValues);
+    // Define all the constants and helper functions first
+  const textStateSetters = {
+    hazardIdentification: setOtherHazardText,
+    jobRequirement: setOtherGasesText,
+    ppeRequirement: setOtherPPEText,
+    precaution: setOtherControlsText,
+    hazardousEnergies: {
+      otherDangerousGoods: setOtherDangerousGoodsText,
+      otherHazardousEnergy: setOtherHazardousEnergyText
+    },
+    breakPreparation: setOtherBreakPreparationText
+  };
+
+  const textFieldValues = {
+    hazardIdentification: otherHazardText,
+    jobRequirement: otherGasesText,
+    ppeRequirement: otherPPEText,
+    precaution: otherControlsText,
+    hazardousEnergies: {
+      otherDangerousGoods: otherDangerousGoodsText,
+      otherHazardousEnergy: otherHazardousEnergyText
+    },
+    breakPreparation: otherBreakPreparationText
+  };
+
+  const otherOptionLabels = {
+    hazardIdentification: ['Other (Specify)'],
+    jobRequirement: ['List other gases detected'],
+    ppeRequirement: ['Other (Specify)'],
+    precaution: ['Additional Controls (Specify)'],
+    hazardousEnergies: ['Dangerous goods/chemicals (Specify)', 'Other (Specify)'],
+    breakPreparation: ['Other (Specify)']
+  };
+
+  const handleCheckboxChange = (option, checked) => {
+    const updatedValues = checked
+      ? [...currentValues, option.label]
+      : currentValues.filter(v => v !== option.label);
     
-      // Debug logging
-      console.log(`Checkbox changed for ${sectionKey}:`, {
-        option: option.label,
-        checked,
-        updatedValues
-      });
-    
-      // Clear text input and validation state when unchecking
-      if (!checked) {
-        const sectionLabels = otherOptionLabels[sectionKey] || [];
-        if (sectionLabels.includes(option.label)) {
-          if (sectionKey === 'hazardousEnergies') {
-            if (option.label === sectionLabels[0]) {
-              textStateSetters.hazardousEnergies.otherDangerousGoods('');
-              setFieldValue('otherDangerousGoodsText', '');
-              setFieldTouched('otherDangerousGoodsText', false);
-            } else if (option.label === sectionLabels[1]) {
-              textStateSetters.hazardousEnergies.otherHazardousEnergy('');
-              setFieldValue('otherHazardousEnergyText', '');
-              setFieldTouched('otherHazardousEnergyText', false);
-            }
-          } else {
-            const setter = textStateSetters[sectionKey];
-            if (typeof setter === 'function') {
-              setter('');
-              const fieldName = sectionKey === 'precaution' ? 'otherControlsText' : `other${sectionKey}Text`;
-              setFieldValue(fieldName, '');
-              setFieldTouched(fieldName, true);
-              setFieldError(fieldName, undefined);
-            }
+    setFormData(prev => ({
+      ...prev,
+      [sectionKey]: updatedValues
+    }));
+    setFieldValue(sectionKey, updatedValues);
+  
+    if (!checked) {
+      const sectionLabels = otherOptionLabels[sectionKey] || [];
+      if (sectionLabels.includes(option.label)) {
+        if (sectionKey === 'hazardousEnergies') {
+          if (option.label === sectionLabels[0]) {
+            textStateSetters.hazardousEnergies.otherDangerousGoods('');
+            setFieldValue('otherDangerousGoodsText', '');
+            setFieldTouched('otherDangerousGoodsText', false);
+          } else if (option.label === sectionLabels[1]) {
+            textStateSetters.hazardousEnergies.otherHazardousEnergy('');
+            setFieldValue('otherHazardousEnergyText', '');
+            setFieldTouched('otherHazardousEnergyText', false);
+          }
+        } else {
+          const setter = textStateSetters[sectionKey];
+          if (typeof setter === 'function') {
+            setter('');
+            const fieldName = sectionKey === 'precaution' ? 'otherControlsText' : `other${sectionKey}Text`;
+            setFieldValue(fieldName, '');
+            setFieldTouched(fieldName, true);
+            setFieldError(fieldName, undefined);
           }
         }
-    
-        // Special handling for Electricity option
-        if (sectionKey === 'hazardousEnergies' && option.label === 'Electricity') {
-          setFieldValue('acVoltageDe', []);
-          setFieldValue('dcVoltageDe', []);
-        }
       }
-    };
   
-    const handleTextChange = (e, option) => {
-      const text = e.target.value;
-      
-      if (sectionKey === 'hazardousEnergies') {
-        const sectionLabels = otherOptionLabels[sectionKey];
-        if (option.label === sectionLabels[0]) {
-          textStateSetters.hazardousEnergies.otherDangerousGoods(text);
-          setFieldValue('otherDangerousGoodsText', text);
-          setFieldTouched('otherDangerousGoodsText', true);
-        } else if (option.label === sectionLabels[1]) {
-          textStateSetters.hazardousEnergies.otherHazardousEnergy(text);
-          setFieldValue('otherHazardousEnergyText', text);
-          setFieldTouched('otherHazardousEnergyText', true);
-        }
-      } else if (sectionKey === 'precaution' && option.label === 'Additional Controls (Specify)') {
-        setOtherControlsText(text);
-        setFieldValue('otherControlsText', text);
-        setFieldTouched('otherControlsText', true);
-      } else if (sectionKey === 'hazardIdentification' && option.label === 'Other (Specify)') {
-        setOtherHazardText(text);
-        setFieldValue('otherHazardText', text);
-        setFieldTouched('otherHazardText', true);
-      } else if (sectionKey === 'jobRequirement' && option.label === 'List other gases detected') {
-        setOtherGasesText(text);
-        setFieldValue('otherGasesText', text);
-        setFieldTouched('otherGasesText', true);
-      } else if (sectionKey === 'ppeRequirement' && option.label === 'Other (Specify)') {
-        setOtherPPEText(text);
-        setFieldValue('otherPPEText', text);
-        setFieldTouched('otherPPEText', true);
+      if (sectionKey === 'hazardousEnergies' && option.label === 'Electricity') {
+        setFieldValue('acVoltageDe', []);
+        setFieldValue('dcVoltageDe', []);
       }
-      
-      // Update form data
-      setFormData(prev => ({
-        ...prev,
-        [sectionKey === 'precaution' ? 'otherControlsText' : `other${sectionKey}Text`]: text
-      }));
-    };
-  
-    const getTextFieldError = (sectionKey, option) => {
-      const sectionLabels = otherOptionLabels[sectionKey] || [];
-      if (sectionKey === 'hazardousEnergies') {
-        if (option.label === sectionLabels[0]) {
-          return errors.otherDangerousGoodsText && touched.otherDangerousGoodsText;
-        } else if (option.label === sectionLabels[1]) {
-          return errors.otherHazardousEnergyText && touched.otherHazardousEnergyText;
-        }
-      } else if (sectionKey === 'precaution' && option.label === 'Additional Controls (Specify)') {
-        return errors.otherControlsText && touched.otherControlsText;
-      } else {
-        const errorKey = `other${sectionKey}Text`;
-        return errors[errorKey] && touched[errorKey];
-      }
-      return false;
-    };
-    
-    const getTextFieldValue = (sectionKey, option) => {
-      if (sectionKey === 'hazardousEnergies') {
-        const sectionLabels = otherOptionLabels[sectionKey];
-        if (option.label === sectionLabels[0]) {
-          return textFieldValues.hazardousEnergies.otherDangerousGoods;
-        } else if (option.label === sectionLabels[1]) {
-          return textFieldValues.hazardousEnergies.otherHazardousEnergy;
-        }
-      } else if (sectionKey === 'precaution') {
-        return textFieldValues.precaution;
-      }
-      return textFieldValues[sectionKey];
-    };
-  
-    return (
-      <div>
-        <label className="block text-sm font-medium mb-3">
-          {label} <span className="text-red-600">*</span>
-        </label>
-        {errors[sectionKey] && touched[sectionKey] && (
-          <div className="text-red-600 text-sm mt-1">{errors[sectionKey]}</div>
-        )}
-        <div className="grid grid-cols-3 gap-4">
-          {options.map((option) => {
-            const isChecked = currentValues.includes(option.label);
-            const sectionLabels = otherOptionLabels[sectionKey] || [];
-            const showTextInput = (sectionLabels.includes(option.label) || 
-                                 (sectionKey === 'precaution' && option.label === 'Additional Controls (Specify)')) && 
-                                 isChecked;
-  
-            return (
-              <div key={option.id} className="relative">
-                <label className="inline-flex items-center">
-                  <input
-                    type="checkbox"
-                    value={option.label}
-                    checked={isChecked}
-                    onChange={(e) => handleCheckboxChange(option, e.target.checked)}
-                    className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mr-2"
-                  />
-                  <span className="text-sm">{option.label}</span>
-                </label>
-                
-                {showTextInput && (
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      placeholder={`Specify ${option.label.toLowerCase()}`}
-                      value={getTextFieldValue(sectionKey, option)}
-                      onChange={(e) => handleTextChange(e, option)}
-                      className={`block w-full border rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-                        getTextFieldError(sectionKey, option) ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                      }`}
-                    />
-                    {getTextFieldError(sectionKey, option) && (
-                      <div className="text-red-600 text-xs mt-1">
-                        This field is required
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+    }
   };
+
+  const handleTextChange = (e, option) => {
+    const text = e.target.value;
+
+    // Add a specific handler for Break Preparation
+  if (sectionKey === 'breakPreparation' && option.label === 'Other (Specify)') {
+    setOtherBreakPreparationText(text);
+    setFieldValue('otherBreakPreparationText', text);
+    setFieldTouched('otherBreakPreparationText', true);
+  }
+    
+    if (sectionKey === 'hazardousEnergies') {
+      const sectionLabels = otherOptionLabels[sectionKey];
+      if (option.label === sectionLabels[0]) {
+        textStateSetters.hazardousEnergies.otherDangerousGoods(text);
+        setFieldValue('otherDangerousGoodsText', text);
+        setFieldTouched('otherDangerousGoodsText', true);
+      } else if (option.label === sectionLabels[1]) {
+        textStateSetters.hazardousEnergies.otherHazardousEnergy(text);
+        setFieldValue('otherHazardousEnergyText', text);
+        setFieldTouched('otherHazardousEnergyText', true);
+      }
+    } else if (sectionKey === 'precaution' && option.label === 'Additional Controls (Specify)') {
+      setOtherControlsText(text);
+      setFieldValue('otherControlsText', text);
+      setFieldTouched('otherControlsText', true);
+    } else if (sectionKey === 'hazardIdentification' && option.label === 'Other (Specify)') {
+      setOtherHazardText(text);
+      setFieldValue('otherHazardText', text);
+      setFieldTouched('otherHazardText', true);
+    } else if (sectionKey === 'jobRequirement' && option.label === 'List other gases detected') {
+      setOtherGasesText(text);
+      setFieldValue('otherGasesText', text);
+      setFieldTouched('otherGasesText', true);
+    } else if (sectionKey === 'ppeRequirement' && option.label === 'Other (Specify)') {
+      setOtherPPEText(text);
+      setFieldValue('otherPPEText', text);
+      setFieldTouched('otherPPEText', true);
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      [sectionKey === 'precaution' ? 'otherControlsText' : `other${sectionKey}Text`]: text
+    }));
+  };
+
+  const getTextFieldError = (sectionKey, option) => {
+    const sectionLabels = otherOptionLabels[sectionKey] || [];
+    if (sectionKey === 'hazardousEnergies') {
+      if (option.label === sectionLabels[0]) {
+        return errors.otherDangerousGoodsText && touched.otherDangerousGoodsText;
+      } else if (option.label === sectionLabels[1]) {
+        return errors.otherHazardousEnergyText && touched.otherHazardousEnergyText;
+      }
+    } else if (sectionKey === 'precaution' && option.label === 'Additional Controls (Specify)') {
+      return errors.otherControlsText && touched.otherControlsText;
+    } else {
+      const errorKey = `other${sectionKey}Text`;
+      return errors[errorKey] && touched[errorKey];
+    }
+    return false;
+  };
+
+  const getTextFieldValue = (sectionKey, option) => {
+    if (sectionKey === 'hazardousEnergies') {
+      const sectionLabels = otherOptionLabels[sectionKey];
+      if (option.label === sectionLabels[0]) {
+        return textFieldValues.hazardousEnergies.otherDangerousGoods;
+      } else if (option.label === sectionLabels[1]) {
+        return textFieldValues.hazardousEnergies.otherHazardousEnergy;
+      }
+    } else if (sectionKey === 'precaution') {
+      return textFieldValues.precaution;
+    } else if (sectionKey === 'breakPreparation' && option.label === 'Other (Specify)') {
+      return otherBreakPreparationText;
+    }
+    return textFieldValues[sectionKey];
+  };
+
+  const sectionError = errors[sectionKey] && touched[sectionKey];
+
+  // Now return the JSX
+  return (
+    <div className="mb-4">
+      <SectionHeader number={number} title={label} optional={isOptional}/>
+
+      {/* Section-level error display */}
+      {sectionError && (
+        <div className="text-red-600 text-sm mb-3 pl-2">
+          {errors[sectionKey]}
+        </div>
+      )}
+      
+      <div className={getGridClass(number)}>
+        {options.map((option) => {
+          const isChecked = currentValues.includes(option.label);
+          const sectionLabels = otherOptionLabels[sectionKey] || [];
+          const showTextInput = (sectionLabels.includes(option.label) || 
+                               (sectionKey === 'precaution' && option.label === 'Additional Controls (Specify)')) && 
+                               isChecked;
+          
+          return (
+            <div key={option.id} className="relative p-2">
+              <label className="inline-flex items-start">
+                <input
+                  type="checkbox"
+                  value={option.label}
+                  checked={isChecked}
+                  onChange={(e) => handleCheckboxChange(option, e.target.checked)}
+                  className="form-checkbox h-4 w-4 text-blue-600 cursor-pointer border-gray-300 rounded mt-1 mr-2"
+                />
+                <span className="text-sm">{option.label}</span>
+              </label>
+              
+              {showTextInput && (
+                <div className="mt-2 ml-6">
+                  <input
+                    type="text"
+                    placeholder={`Specify ${option.label.toLowerCase()}`}
+                    value={getTextFieldValue(sectionKey, option)}
+                    onChange={(e) => handleTextChange(e, option)}
+                    className={`block w-full border rounded-md text-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                      getTextFieldError(sectionKey, option) ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                    }`}
+                  />
+                  {getTextFieldError(sectionKey, option) && (
+                    <div className="text-red-600 text-xs mt-1">
+                      This field is required
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 
     useEffect(()=>{
@@ -674,6 +716,12 @@ const SafetyForm = () => {
           initialValues={formData}
           validationSchema={SafetyFormValidation}
           onSubmit={async (values, { setTouched,setFieldError }) => {
+            setTouched({
+              ...Object.keys(values).reduce((acc, key) => {
+                acc[key] = true;
+                return acc;
+              }, {})
+            });
             setIsSubmitting(true);
             try {
               setIsSubmitting(true);
@@ -735,10 +783,29 @@ const SafetyForm = () => {
                 staffID: values.contractType === 'Internal / MPS' ? 
                   values.staffID : null,
                 numberOfWorkers: parseInt(values.numberOfWorkers) || 0,
-                riskAssessmentDocument: values.riskAssessmentDocument || [],
                 workersNames,
                 checkboxSelections // Include the checkbox selections here
               };
+
+              if (fileToUpload.length > 0) {
+                try {
+                    // Read the first file (if you want to handle multiple files, you'll need to modify this)
+                    const file = fileToUpload[0];
+                    const reader = new FileReader();
+                    
+                    await new Promise((resolve, reject) => {
+                        reader.onload = () => {
+                            submitData.riskAssessmentDocument = reader.result;
+                            resolve();
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                } catch (error) {
+                    console.error('Error processing file:', error);
+                    throw error;
+                }
+            }
           
               console.log('Submit Data:', submitData);
               console.log('Checkbox Selections:', checkboxSelections); // Add this for debugging
@@ -766,7 +833,7 @@ const SafetyForm = () => {
           validationContext={{ currentSection }}
           validateOnBlur={true}
         >
-          {({ errors, touched, setFieldValue,validateForm,setTouched,setFieldTouched,setFieldError}) => (
+          {({ errors, touched,values, setFieldValue,validateForm,setTouched,setFieldTouched,setFieldError}) => (
             <Form>
             {currentSection === 1 && (
                 <div className="space-y-6">
@@ -1240,7 +1307,7 @@ const SafetyForm = () => {
                     </div>
            
                 <div>
-                    {renderCheckboxGroup('permitRequired', 'Permit(s) Required', setFieldValue, errors, touched,setFieldTouched,setFieldError)}
+                    {renderCheckboxGroup('permitRequired', 'Permit(s) Required','II', setFieldValue, errors, touched,setFieldTouched,setFieldError)}
                 </div>
 
                 {/* Worker Details Table */}
@@ -1298,9 +1365,9 @@ const SafetyForm = () => {
             {currentSection === 3 && (
                 <div className="space-y-6">
                   <>
-                    {renderCheckboxGroup('hazardIdentification', 'Hazard Identification', setFieldValue, errors, touched,setFieldTouched,setFieldError)}
-                    {renderCheckboxGroup('jobRequirement', 'Job Requirements', setFieldValue, errors, touched,setFieldTouched,setFieldError)}
-                    {renderCheckboxGroup('ppeRequirement', 'PPE Requirements', setFieldValue, errors, touched,setFieldTouched,setFieldError)}
+                    {renderCheckboxGroup('hazardIdentification', 'Hazard Identification', 3, setFieldValue, errors, touched,setFieldTouched,setFieldError)}
+                    {renderCheckboxGroup('jobRequirement', 'Job Requirements', 4, setFieldValue, errors, touched,setFieldTouched,setFieldError)}
+                    {renderCheckboxGroup('ppeRequirement', 'PPE Requirements', 5, setFieldValue, errors, touched,setFieldTouched,setFieldError)}
                   </>
               </div>
             )}
@@ -1310,16 +1377,16 @@ const SafetyForm = () => {
                 {/* Section 6 */}
                 <div>
 
-                {renderCheckboxGroup('precautionaryMeasure', 'Precautionary Measures', setFieldValue, errors, touched,setFieldTouched,setFieldError)}
-                    {renderCheckboxGroup('precaution', 'Precautions', setFieldValue, errors, touched,setFieldTouched,setFieldError)}
-                    {renderCheckboxGroup('hazardousEnergies', 'Hazardous Energies', setFieldValue, errors, touched,setFieldTouched,setFieldError)}
+                {renderCheckboxGroup('precautionaryMeasure', 'Precautionary Measures', 6, setFieldValue, errors, touched,setFieldTouched,setFieldError)}
+                    {renderCheckboxGroup('precaution', 'Precautions', 7, setFieldValue, errors, touched,setFieldTouched,setFieldError)}
+                    {renderCheckboxGroup('hazardousEnergies', 'Hazardous Energies', 8, setFieldValue, errors, touched,setFieldTouched,setFieldError)}
                     {formData.hazardousEnergies.includes('Electricity') && (
                       <>
-                        {renderCheckboxGroup('acVoltageDe', 'AC Voltage', setFieldValue, errors, touched, setFieldTouched, setFieldError)}
-                        {renderCheckboxGroup('dcVoltageDe', 'DC Voltage', setFieldValue, errors, touched, setFieldTouched, setFieldError)}
+                        {renderCheckboxGroup('acVoltageDe', 'AC Voltage','', setFieldValue, errors, touched, setFieldTouched, setFieldError)}
+                        {renderCheckboxGroup('dcVoltageDe', 'DC Voltage','', setFieldValue, errors, touched, setFieldTouched, setFieldError)}
                       </>
                     )}
-                    {renderCheckboxGroup('breakPreparation', 'Break Preparation', setFieldValue, errors, touched,setFieldTouched,setFieldError)}
+                    {renderCheckboxGroup('breakPreparation', 'Break Preparation','', setFieldValue, errors, touched,setFieldTouched,setFieldError, true)}
 
                 {/* Disclaimer Section */}
                 <div>
@@ -1329,8 +1396,17 @@ const SafetyForm = () => {
                         type="checkbox"
                         id="terms-checkbox"
                         className="form-checkbox h-4 w-4 text-green-600 cursor-pointer border-gray-300 rounded mr-2"
-                        checked={formData.disclaimerAccepted} // Ensure this is bound to the form state
-                        onChange={e => setFieldValue('disclaimerAccepted', e.target.checked)} // Update state on change
+                        checked={values.disclaimerAccepted} // Ensure this is bound to the form state
+                        onChange={(e) => {
+                          const isChecked = e.target.checked;
+                          setFieldValue('disclaimerAccepted', isChecked);
+                          
+                          // Clear the error immediately when checked
+                          if (isChecked) {
+                            // This ensures the error disappears right away
+                            setFieldTouched('disclaimerAccepted', false);
+                          }
+                        }}
                       />
                       <span className="text-sm font-medium">
                         I agree to the safety precautions stated above

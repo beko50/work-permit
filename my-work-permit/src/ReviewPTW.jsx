@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import logo from './assets/mps_logo.jpg';
 
 const ReviewPTW = () => {
-  const { jobPermitId } = useParams();
+  const { permitToWorkId } = useParams();
   const navigate = useNavigate();
   const [ptw, setPtw] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -88,8 +88,9 @@ const ReviewPTW = () => {
     const fetchPTWDetails = async () => {
       try {
         setLoading(true);
-        const response = await api.getPermitToWorkByJobPermitId(jobPermitId);
-
+        // Change this to use getPermitToWorkById instead
+        const response = await api.getPermitToWorkById(permitToWorkId);
+        
         if (response.success && response.data?.permit) {
           setPtw({
             ...response.data.permit,
@@ -108,7 +109,7 @@ const ReviewPTW = () => {
               role: 'ISS'
             },
             {
-              title: "Head of Department",
+              title: "Head of Department/Manager",
               status: response.data.permit.HODStatus || 'Pending',
               isCurrentApprover: response.data.permit.AssignedTo === 'HOD',
               approverName: response.data.permit.HODApproverName,
@@ -117,7 +118,7 @@ const ReviewPTW = () => {
               role: 'HOD'
             },
             {
-              title: "QHSSE",
+              title: "QHSSE Approver",
               status: response.data.permit.QHSSEStatus || 'Pending',
               isCurrentApprover: response.data.permit.AssignedTo === 'QA',
               approverName: response.data.permit.QHSSEApproverName,
@@ -138,10 +139,10 @@ const ReviewPTW = () => {
       }
     };
 
-    if (jobPermitId) {
+    if (permitToWorkId) {
       fetchPTWDetails();
     }
-  }, [jobPermitId]);
+  }, [permitToWorkId]);
 
   if (loading) return <div className="text-center">Loading PTW details...</div>;
   if (error) return <div className="text-red-500 text-center">{error}</div>;
@@ -174,74 +175,88 @@ const ReviewPTW = () => {
 
         <div className="p-6 space-y-6">
           {/* Job Permit Reference */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">
-                    <span className="font-bold">PTW ID:</span> PTW-{String(ptw.PermitToWorkID).padStart(4, '0')}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    <span className="font-bold">Job Permit ID:</span> JP-{String(ptw.JobPermitID).padStart(4, '0')}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">
-                    <span className="font-bold">Status:</span> {getStatusBadge(ptw.Status)}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    <span className="font-bold">Permit Receiver:</span> {ptw.jobPermit.PermitReceiver}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
+          <Card className="shadow-sm">
+                <CardContent className="pt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">
+                        <span className="font-bold">PTW ID:</span> PTW-{String(ptw.PermitToWorkID).padStart(4, '0')}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        <span className="font-bold">Job Permit ID:</span> 
+                        <Button 
+                          variant="link" 
+                          className="pl-1 text-blue-600 hover:underline"
+                          onClick={() => navigate(`/dashboard/permits/view/${ptw.JobPermitID}`)}
+                        >
+                          JP-{String(ptw.JobPermitID).padStart(4, '0')}
+                        </Button>
+                      </p>
+                    </div>
+                    <div>
+                    <p className="text-sm text-gray-500">
+                        <span className="font-bold">Status:</span> {getStatusBadge(ptw.Status)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
           </Card>
 
           {/* Job Details */}
-          <Card>
-            <CardHeader className="font-bold text-lg">Job Details</CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+          <Card className="shadow-sm">
+            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Details</div>
+  
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="font-semibold">Job Description:</p>
-                  <p className="text-gray-700">{ptw.jobPermit.JobDescription}</p>
-                </div>
-                <div>
-                  <p className="font-semibold">Location:</p>
-                  <p className="text-gray-700">{ptw.jobPermit.JobLocation}</p>
-                  <p className="text-gray-700">{ptw.jobPermit.SubLocation}</p>
-                </div>
-                <div className="col-span-2">
-                  <p className="font-semibold">Workers:</p>
-                  <div className="bg-gray-50 p-4 rounded-md">
-                    {workersList.map((worker, index) => (
-                      <p key={index} className="text-gray-700 py-1">{worker}</p>
-                    ))}
+                    <p className="font-semibold text-sm">Permit Receiver:</p>
+                    <p className="text-gray-700 text-sm">{ptw.jobPermit.PermitReceiver}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">Contract Company:</p>
+                    <p className="text-gray-700 text-sm">{ptw.jobPermit.ContractCompanyName}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">Job Description:</p>
+                    <p className="text-gray-700 text-sm">{ptw.jobPermit.JobDescription}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">Location:</p>
+                    <p className="text-gray-700 text-sm">{ptw.jobPermit.JobLocation}</p>
+                    <p className="text-gray-700 text-sm">{ptw.jobPermit.SubLocation}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="font-semibold text-sm">Workers:</p>
+                    <div className="bg-gray-50 p-2 rounded-md">
+                      {workersList.map((worker, index) => (
+                        <p key={index} className="text-gray-700 text-sm py-0.5">{worker}</p>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
+              </CardContent>
           </Card>
 
           {/* Work Duration Details */}
-          <Card>
-            <CardHeader className="font-bold text-lg">Work Duration</CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="font-semibold">Entry Date:</p>
-                  <p>{formatDate(ptw.EntryDate)}</p>
+          <Card className="shadow-sm">
+            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Work Duration</div>
+          
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-sm font-semibold">Entry Date:</p>
+                    <p className="text-sm">{formatDate(ptw.EntryDate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Exit Date:</p>
+                    <p className="text-sm">{formatDate(ptw.ExitDate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Work Duration:</p>
+                    <p className="text-sm">{ptw.WorkDuration} days</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold">Exit Date:</p>
-                  <p>{formatDate(ptw.ExitDate)}</p>
-                </div>
-                <div>
-                  <p className="font-semibold">Work Duration:</p>
-                  <p>{ptw.WorkDuration} days</p>
-                </div>
-              </div>
-            </CardContent>
+              </CardContent>
           </Card>
 
           {/* Approval Workflow */}

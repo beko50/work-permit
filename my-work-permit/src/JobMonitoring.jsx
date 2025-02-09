@@ -1,65 +1,63 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent, CardFooter } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
-import { RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
-import Tabs from './components/ui/tabs';
 import { api } from './services/api';
-import RequestPTW from './RequestPTW';
+import Checkbox  from './components/ui/checkbox';
+import { Eye,RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
 
-const PermitToWork = () => {
+const TabButton = ({ id, label, active, onClick }) => (
+  <button
+    onClick={() => onClick(id)}
+    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors
+      ${active 
+        ? 'bg-white border-t-2 border-blue-500 text-blue-600' 
+        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+  >
+    {label}
+  </button>
+);
+
+const JobsMonitoring = () => {
   const navigate = useNavigate();
-  const [approvedJobPermits, setApprovedJobPermits] = useState([]);
+  const [permits, setPermits] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [currentTab, setCurrentTab] = useState('approved-job-permits');
-  const [showPTWForm, setShowPTWForm] = useState(false);
-  const [selectedPermit, setSelectedPermit] = useState(null);
+  const [currentTab, setCurrentTab] = useState('ongoing');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [selectedPermits, setSelectedPermits] = useState([]);
 
-  const tabs = [
-    { value: 'approved-job-permits', label: 'Approved Job Permits' },
-    { value: 'active', label: 'Active' },
-    { value: 'expired', label: 'Expired' },
-    { value: 'revoked-rejected', label: 'Revoked/Rejected' }
-  ];
-
-  const handlePTWSubmitSuccess = () => {
-    // Refresh the permits list
-    fetchApprovedPermits();
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
   };
 
-  // Fetch approved permits
-  const fetchApprovedPermits = async () => {
+  useEffect(() => {
+    try {
+      const savedData = localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
+      if (savedData) {
+        const userData = JSON.parse(savedData)?.user;
+        setCurrentUser(userData);
+      }
+    } catch (err) {
+      console.error('Error loading user data:', err);
+    }
+  }, []);
+
+  const fetchPermits = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
-      const currentUser = JSON.parse(savedData)?.user;
-  
       const response = await api.getPermitsToWork();
-      
       if (response.success) {
-        // Log raw data to see what we're getting
-        console.log('Raw permits data:', response.data);
-        
-        // For now, let's show all permits until we determine the correct filter
-        setApprovedJobPermits(response.data);
-  
-        // Commented out the filter until we determine the correct conditions
-        /*
-        const onlyApproved = response.data.filter(permit => 
-          permit.Status === 'Approved' || 
-          (permit.HODStatus === 'Approved' && 
-           permit.IssuerStatus === 'Approved' && 
-           permit.QHSSEStatus === 'Approved')
-        );
-        console.log('Filtered permits:', onlyApproved);
-        setApprovedJobPermits(onlyApproved);
-        */
+        setPermits(response.data);
       } else {
-        setError(response.error);
+        setError(response.error || 'Failed to fetch permits');
       }
     } catch (err) {
       setError('Error fetching permits. Please try again later.');
@@ -67,180 +65,196 @@ const PermitToWork = () => {
     } finally {
       setLoading(false);
     }
-  };  
+  };
 
   useEffect(() => {
-    fetchApprovedPermits();
-  }, []);
+    fetchPermits();
+  }, [currentTab]);
 
-  const Dropdown = ({ children, options, onSelect, className = '' }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const dropdownRef = React.useRef(null);
+  const handleView = (permit) => {
+    console.log('Permit object:', permit);
+    navigate(`/dashboard/permits/permit-to-work/view/${permit.PermitToWorkID}`);
+  };
 
-    React.useEffect(() => {
-      const handleClickOutside = (event) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-          setIsOpen(false);
-        }
-      };
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }, []);
+  const handleCheckboxChange = (permitId) => {
+    setSelectedPermits(prev => {
+      if (prev.includes(permitId)) {
+        return prev.filter(id => id !== permitId);
+      }
+      return [...prev, permitId];
+    });
+  };
 
-    const handleSelect = (selectedOption) => {
-      onSelect(selectedOption);
-      setIsOpen(false);
-    };
-    
+  const isInUserDepartment = (permit) => {
+    if (!currentUser?.departmentId && !currentUser?.departmentName) return false;
     return (
-      <div ref={dropdownRef} className={`relative ${className}`}>
-        <button
-          type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          <span className="text-sm font-medium">Actions</span>
-          <ChevronDown className="h-5 w-5 text-blue-500" />
-        </button>
-        {isOpen && (
-          <ul className="absolute z-10 w-48 border rounded-md mt-2 bg-gray-50 shadow-lg overflow-auto">
-            {options.map((option) => (
-              <li
-                key={option}
-                onClick={() => handleSelect(option)}
-                className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-              >
-                {option}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      permit.Department === currentUser.departmentId ||
+      permit.Department === currentUser.departmentName
     );
   };
 
-  const handleDropdownAction = (action, permitId) => {
-    switch (action) {
-      case 'Request Permit To Work':
-        const permit = approvedJobPermits.find(p => p.JobPermitID === permitId);
-        setSelectedPermit(permit);
-        setShowPTWForm(true);
-        break;
-      default:
-        console.log(`Unknown action: ${action}`);
+  const getFilteredPermits = () => {
+    if (!currentUser) return [];
+
+    const currentUserRole = currentUser.roleId;
+    const isQHSSE = currentUserRole === 'QA';
+
+    return permits.filter(permit => {
+      if (currentTab === 'ongoing') {
+        return permit.Status === 'Approved' && permit.AssignedTo === 'ONGOING';
+      }
+
+      switch (currentTab) {
+        case 'ongoing':
+          if (isQHSSE) return status === 'approved';
+          
+          if (['ISS', 'HOD'].includes(currentUserRole)) {
+            return status === 'approved' && 
+                   isInUserDepartment(permit) && 
+                   permit.AssignedTo === currentUserRole;
+          }
+          
+          return status === 'approved' && permit.AssignedTo === currentUserRole;
+
+        case 'completed':
+          if (isQHSSE) return status === 'completed';
+          return status === 'completed' && 
+                 (isInUserDepartment(permit) || permit.AssignedTo === currentUserRole);
+
+        case 'revoked-rejected':
+          if (isQHSSE) return ['revoked', 'rejected'].includes(status);
+          return ['revoked', 'rejected'].includes(status) && 
+                 (isInUserDepartment(permit) || permit.AssignedTo === currentUserRole);
+
+        default:
+          return false;
+      }
+    });
+  };
+
+  const getStatusColor = (status) => {
+    switch (status.toLowerCase()) {
+      case 'approved': return 'text-green-500';
+      case 'completed': return 'text-blue-500';
+      case 'revoked':
+      case 'rejected': return 'text-red-500';
+      default: return 'text-gray-500';
     }
   };
 
-  const handleClosePTWForm = () => {
-    setShowPTWForm(false);
-    setSelectedPermit(null);
-  };
+  const filteredPermits = getFilteredPermits();
 
   return (
-    <div className="mt-6">
+    <div className="mt-2">
       <Card>
         <CardHeader>
-          <h2 className="text-2xl font-semibold">Permit to Work</h2>
+          <div className="flex flex-col gap-4">
+            <h2 className="text-2xl font-semibold">Jobs Monitoring</h2>
+            <div className="flex gap-2 border-b">
+              <TabButton
+                id="ongoing"
+                label="Ongoing Jobs"
+                active={currentTab === 'ongoing'}
+                onClick={setCurrentTab}
+              />
+              <TabButton
+                id="completed"
+                label="Completed"
+                active={currentTab === 'completed'}
+                onClick={setCurrentTab}
+              />
+              <TabButton
+                id="revoked-rejected"
+                label="Revoked/Rejected"
+                active={currentTab === 'revoked-rejected'}
+                onClick={setCurrentTab}
+              />
+            </div>
+          </div>
         </CardHeader>
-        <Tabs tabs={tabs} activeTab={currentTab} onTabChange={setCurrentTab} />
+        
         <CardContent>
-          {loading && (
-            <div className="text-center py-4">Loading permits...</div>
-          )}
-
-          {error && (
-            <div className="text-red-500 text-center py-4">{error}</div>
-          )}
-
+          {loading && <div className="text-center py-4">Loading jobs...</div>}
+          {error && <div className="text-red-500 text-center py-4">{error}</div>}
+          
           {!loading && !error && (
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>
-                    <Button variant="ghost" className="text-sm font-medium">
-                      Command
-                    </Button>
+                <TableCell className="w-12">
+                <Checkbox
+                  checked={false}
+                  onCheckedChange={() => {}}
+                  disabled={true}
+                />
                   </TableCell>
+                  <TableCell className="text-base font-medium">Actions</TableCell>
                   <TableCell className="text-base font-medium">Permit ID</TableCell>
                   <TableCell className="text-base font-medium">Permit Receiver</TableCell>
-                  <TableCell className="text-base font-medium">Company</TableCell>
-                  <TableCell className="text-base font-medium">Approval Date</TableCell>
-                  <TableCell className="text-base font-medium">Assigned To</TableCell>
+                  <TableCell className="text-base font-medium">Job Location</TableCell>
+                  <TableCell className="text-base font-medium">Start Date</TableCell>
+                  <TableCell className="text-base font-medium">End Date</TableCell>
+                  <TableCell className="text-base font-medium">Status</TableCell>
                 </TableRow>
               </TableHead>
-              <TableBody>
-                {currentTab === 'approved-job-permits' && approvedJobPermits.length > 0 ? (
-                  approvedJobPermits.map((permit) => (
-                    <TableRow key={permit.JobPermitID}>
-                      <TableCell>
-                        <Dropdown
-                          options={['Request Permit To Work']}
-                          onSelect={(action) => handleDropdownAction(action, permit.JobPermitID)}
-                          className="text-sm font-medium"
-                        >
-                          Actions
-                        </Dropdown>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span>JP-{String(permit.JobPermitID).padStart(4, '0')}</span>
-                          <span className="text-green-500">{permit.Status}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{permit.PermitReceiver}</TableCell>
-                      <TableCell>{permit.ContractCompanyName}</TableCell>
-                      <TableCell>
-                      {new Date(permit.Changed).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
-                      </TableCell>
-                      <TableCell>{permit.AssignedTo}</TableCell>
-                    </TableRow>
-                  ))
-                ) : currentTab === 'approved-job-permits' ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-4">
-                      No approved job permits found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-4">
-                      No permits available
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
+                  <TableBody>
+                    {filteredPermits.length > 0 ? (
+                      filteredPermits.map((permit) => (
+                        <TableRow key={permit.PermitToWorkID}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={selectedPermits.includes(permit.PermitToWorkID)}
+                              onChange={() => handleCheckboxChange(permit.PermitToWorkID)}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => handleView(permit)}
+                              className="inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-medium"
+                            >
+                              <Eye size={14} className="mr-1" /> View
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span>PTW-{String(permit.PermitToWorkID).padStart(4, '0')}</span>
+                              <span className={getStatusColor(permit.Status)}>
+                                {permit.Status}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{permit.PermitReceiver}</TableCell>
+                          <TableCell>{permit.JobLocation}</TableCell>
+                          <TableCell>{formatDate(permit.EntryDate)}</TableCell>
+                          <TableCell>{formatDate(permit.ExitDate)}</TableCell>
+                          <TableCell>{permit.AssignedTo}</TableCell>
+                       </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell>
+                          <input type="checkbox" disabled className="cursor-not-allowed rounded border-gray-300" />
+                        </TableCell>
+                        <TableCell colSpan={5} className="text-center py-4">
+                          No jobs found for this tab
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
             </Table>
           )}
+          
           <div className="flex justify-end mt-4 text-sm text-gray-500">
-            Rows per page: 15 | {approvedJobPermits.length > 0 ? `1-${approvedJobPermits.length} of ${approvedJobPermits.length}` : '0-0 of 0'}
+            Showing {filteredPermits.length} Job(s)
           </div>
         </CardContent>
-        <CardFooter>
-          <Button
-            variant="outline"
-            className="border-blue-500 text-blue-500 hover:bg-blue-50"
-            onClick={() => navigate('/dashboard/permits/job-permits')}
-          >
-            Back to Job Permits
-          </Button>
-        </CardFooter>
       </Card>
-
-      {showPTWForm && (
-      <RequestPTW
-        jobPermit={selectedPermit}
-        onClose={handleClosePTWForm}
-        onSubmitSuccess={handlePTWSubmitSuccess}
-      />
-    )}
     </div>
   );
 };
 
-export default PermitToWork;
+export default JobsMonitoring;

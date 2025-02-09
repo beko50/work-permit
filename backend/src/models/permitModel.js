@@ -20,6 +20,8 @@ const permitModel = {
   },
 
   async createPermit(permitData, checkboxSelections, userId, transaction) {
+    const riskAssessmentDoc = permitData.riskAssessmentDocument;
+
     console.log(userId)
     // Ensure contractCompanyName is never NULL for Internal/MPS
     const contractCompanyName = (permitData.contractType === 'Internal / MPS')
@@ -41,7 +43,7 @@ const permitModel = {
       .input('staffId', sql.VarChar(50), permitData.staffID)
       .input('numberOfWorkers', sql.Int, permitData.numberOfWorkers)
       .input('workersNames', sql.VarChar(sql.MAX), permitData.workersNames)
-      .input('riskAssessmentDocument', sql.VarChar(255), permitData.riskAssessmentDocument)
+      .input('riskAssessmentDocument', sql.NVarChar(sql.MAX), riskAssessmentDoc)
       .query(`
         INSERT INTO JobPermits (
           StartDate, EndDate, PermitDuration, Department,
@@ -120,37 +122,44 @@ const permitModel = {
     else if (userRole === 'ISS' && userDepartmentId) {
       query += ` AND jp.AssignedTo = 'ISS'
                  AND (
+                   jp.Department = @departmentId OR
                    jp.Department IN (
                      SELECT DepartmentName 
                      FROM Departments 
-                     WHERE DepartmentID = '${userDepartmentId}'
-                   ) OR 
-                   jp.Department IN (
-                     SELECT DepartmentID 
-                     FROM Departments 
-                     WHERE DepartmentName = '${userDepartmentId}'
+                     WHERE DepartmentID = @departmentId
                    )
                  )`;
+      request.input('departmentId', sql.VarChar(50), userDepartmentId);
     }
     // For HOD - see permits assigned to HOD and matching the user's department
     else if (userRole === 'HOD' && userDepartmentId) {
       query += ` AND jp.AssignedTo = 'HOD'
                  AND (
+                   jp.Department = @departmentId OR
                    jp.Department IN (
                      SELECT DepartmentName 
                      FROM Departments 
-                     WHERE DepartmentID = '${userDepartmentId}'
-                   ) OR 
-                   jp.Department IN (
-                     SELECT DepartmentID 
-                     FROM Departments 
-                     WHERE DepartmentName = '${userDepartmentId}'
+                     WHERE DepartmentID = @departmentId
                    )
                  )`;
+      request.input('departmentId', sql.VarChar(50), userDepartmentId);
     }
-    // For external users and other roles - only see permits they submitted
+    // For ASM, OPS, and IT users - see permits for their department
+  else if (userDepartmentId && (userDepartmentId === 'ASM' || userDepartmentId === 'OPS' || userDepartmentId === 'IT')) {
+    query += ` AND (
+      jp.Department = @departmentId OR
+      jp.Department IN (
+        SELECT DepartmentName 
+        FROM Departments 
+        WHERE DepartmentID = @departmentId
+      )
+    )`;
+    request.input('departmentId', sql.VarChar(50), userDepartmentId);
+  }
+    // For other users - only see permits they submitted
     else {
-      query += ` AND jp.Creator = ${user.userId}`;
+      query += ` AND jp.Creator = @userId`;
+      request.input('userId', sql.Int, user.userId);
     }
   
     query += ` ORDER BY jp.Created DESC`;
@@ -183,48 +192,120 @@ const permitModel = {
     return result.recordset;
   },
 
-  async searchPermits(searchParams) {
+  async searchPermits(searchParams, user) {
     const pool = await poolPromise;
+    const request = pool.request();
+  
     try {
-      const request = pool.request();
-
-      // Add parameters including department
-      request
-        .input('permitReceiver', searchParams.permitReceiver || null)
-        .input('jobPermitId', searchParams.jobPermitId || null)
-        .input('contractCompanyName', searchParams.contractCompanyName || null)
-        .input('status', searchParams.status || null)
-        .input('department', searchParams.department || null)  // Add department parameter
-        .input('startDate', searchParams.startDate ? new Date(searchParams.startDate) : null)
-        .input('endDate', searchParams.endDate ? new Date(searchParams.endDate) : null);
-
-      const result = await request.query(`
+      let query = `
         SELECT 
-          jp.*,
-          jpc.SectionItemID,
-          jpc.Selected,
-          jpc.TextInput,
-          si.ItemLabel,
-          s.SectionName
-        FROM JobPermits jp
-        LEFT JOIN JobPermitCheckboxes jpc ON jp.JobPermitID = jpc.JobPermitID
-        LEFT JOIN SectionItems si ON jpc.SectionItemID = si.SectionItemID
-        LEFT JOIN Sections s ON si.SectionID = s.SectionID
-        WHERE (@permitReceiver IS NULL OR jp.PermitReceiver = @permitReceiver)
-        AND (@jobPermitId IS NULL OR jp.JobPermitID LIKE '%' + @jobPermitId + '%')
-        AND (@contractCompanyName IS NULL OR jp.ContractCompanyName LIKE '%' + @contractCompanyName + '%')
-        AND (@status IS NULL OR jp.Status = @status)
-        AND (@department IS NULL OR jp.Department = @department)  -- Add department filter
-        AND (@startDate IS NULL OR jp.StartDate >= @startDate)
-        AND (@endDate IS NULL OR jp.EndDate <= @endDate)
-        ORDER BY jp.Created DESC
-      `);
-      return result.recordset;
+          p.*,
+          CONCAT(u.FirstName, ' ', u.LastName) as CreatorName,
+          u.DepartmentID as CreatorDepartment,
+          d.DepartmentName,
+          COUNT(*) OVER() as TotalCount
+        FROM JobPermits p
+        LEFT JOIN Users u ON p.Creator = u.UserID
+        LEFT JOIN Departments d ON RTRIM(u.DepartmentID) = RTRIM(d.DepartmentID)
+        WHERE 1=1
+      `;
+  
+      // Department-based filtering logic
+      if (user.roleId === 'QA' || user.departmentId === 'QHSSE') {
+        // QA and QHSSE see all permits
+      } else if (user.departmentId === 'ASM' || user.departmentId === 'OPS' || user.departmentId === 'IT') {
+        // ASM, OPS, and IT see their department permits
+        query += ` AND (
+          p.Department = @departmentId 
+          OR p.Department IN (
+            SELECT DepartmentName 
+            FROM Departments 
+            WHERE DepartmentID = @departmentId
+          )
+        )`;
+        request.input('departmentId', sql.VarChar(50), user.departmentId);
+      } else {
+        // Other users only see their own permits
+        query += ` AND p.Creator = @userId`;
+        request.input('userId', sql.Int, user.userId);
+      }
+  
+      // Add search filters
+      if (searchParams.jobPermitId) {
+        query += ` AND p.JobPermitID = @jobPermitId`;
+        request.input('jobPermitId', sql.VarChar(50), searchParams.jobPermitId);
+      }
+  
+      if (searchParams.permitReceiver) {
+        query += ` AND p.PermitReceiver LIKE @permitReceiver`;
+        request.input('permitReceiver', sql.VarChar(100), `%${searchParams.permitReceiver}%`);
+      }
+  
+      if (searchParams.contractCompanyName) {
+        query += ` AND p.ContractCompanyName LIKE @contractCompanyName`;
+        request.input('contractCompanyName', sql.VarChar(100), `%${searchParams.contractCompanyName}%`);
+      }
+  
+      if (searchParams.status) {
+        query += ` AND p.Status = @status`;
+        request.input('status', sql.VarChar(50), searchParams.status);
+      }
+  
+      if (searchParams.startDate) {
+        query += ` AND CAST(p.Created AS DATE) >= @startDate`;
+        request.input('startDate', sql.Date, new Date(searchParams.startDate));
+      }
+  
+      if (searchParams.endDate) {
+        query += ` AND CAST(p.Created AS DATE) <= @endDate`;
+        request.input('endDate', sql.Date, new Date(searchParams.endDate));
+      }
+
+      // Add department filter if provided
+      if (searchParams.department) {
+        query += ` AND (
+          p.Department = @filterDepartment 
+          OR p.Department IN (
+            SELECT DepartmentName 
+            FROM Departments 
+            WHERE DepartmentID = @filterDepartment
+          )
+        )`;
+        request.input('filterDepartment', sql.VarChar(50), searchParams.department);
+      }
+  
+      // Add sorting and pagination
+      const offset = (searchParams.page - 1) * searchParams.limit;
+      query += `
+        ORDER BY p.Created DESC
+        OFFSET ${offset} ROWS
+        FETCH NEXT ${searchParams.limit} ROWS ONLY
+      `;
+  
+      console.log('Executing query with params:', {
+        user,
+        searchParams,
+        query
+      });
+  
+      const result = await request.query(query);
+      const totalCount = result.recordset[0]?.TotalCount || 0;
+  
+      return {
+        success: true,
+        data: result.recordset,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / searchParams.limit),
+        currentPage: searchParams.page
+      };
     } catch (error) {
       console.error('Error in searchPermits:', error);
-      throw error;
+      return {
+        success: false,
+        error: error.message
+      };
     }
-},
+  },
 
 async getPermitById(permitId) {
   const pool = await poolPromise;
@@ -250,7 +331,7 @@ async getPermitById(permitId) {
           p.StaffID,
           p.NumberOfWorkers,
           p.WorkersNames,
-          p.RiskAssessmentDocument,
+          CAST(p.RiskAssessmentDocument AS NVARCHAR(MAX)) as RiskAssessmentDocument,
           p.Created,
           p.Status,
           p.Creator,
@@ -312,6 +393,16 @@ async getPermitById(permitId) {
       return { permit: null, sections: [], checkboxes: [] };
     }
 
+     // Handle Risk Assessment Document
+    if (result.recordsets[0][0]?.RiskAssessmentDocument) {
+      const docData = result.recordsets[0][0].RiskAssessmentDocument;
+      if (typeof docData === 'string') {
+        result.recordsets[0][0].RiskAssessmentDocument = docData.startsWith('data:') 
+          ? docData 
+          : `data:image/png;base64,${docData}`;
+      }
+    }
+
     // Group checkboxes by section
     const sections = result.recordsets[1];
     const checkboxes = result.recordsets[2];
@@ -327,7 +418,7 @@ async getPermitById(permitId) {
         textInput: checkbox.TextInput
       }))
     }));
-
+    
     return { 
       permit: result.recordset[0], 
       groupedCheckboxes: groupedCheckboxes
@@ -477,14 +568,12 @@ async validateJobPermit(jobPermitId, transaction) {
 
 async getPermitToWorkById(permitToWorkId) {
   const pool = await poolPromise;
-
   try {
     const result = await pool.request()
-      .input('permitToWorkId', sql.Int, parseInt(permitToWorkId))
+      .input('permitToWorkId', sql.Int, permitToWorkId)
       .query(`
         SELECT 
           ptw.*,
-          -- Job Permit details
           jp.JobDescription,
           jp.JobLocation,
           jp.SubLocation,
@@ -494,7 +583,6 @@ async getPermitToWorkById(permitToWorkId) {
           jp.PermitReceiver,
           jp.NumberOfWorkers,
           jp.WorkersNames,
-          -- Approval details with approver names
           CONCAT(issuer.FirstName, ' ', issuer.LastName) as IssuerApproverName,
           CONCAT(hod.FirstName, ' ', hod.LastName) as HODApproverName,
           CONCAT(qa.FirstName, ' ', qa.LastName) as QHSSEApproverName
@@ -505,10 +593,8 @@ async getPermitToWorkById(permitToWorkId) {
         LEFT JOIN Users qa ON ptw.QHSSEApprovedBy = qa.UserID
         WHERE ptw.PermitToWorkID = @permitToWorkId
       `);
-
-    if (result.recordset.length === 0) {
-      return null;
-    }
+    
+    if (result.recordset.length === 0) return null;
 
     const permit = result.recordset[0];
     
@@ -676,7 +762,7 @@ async approvePermitToWork(permitToWorkId, assignedTo, status, comments, userId, 
     .input('userId', sql.Int, userId)
     .input('comments', sql.NVarChar(sql.MAX), comments || '')
     .input('nextApprover', sql.VarChar(50), 
-      nextApprover === 'COMPLETED' ? 'ACTIVE' : nextApprover // Changed from null to 'ACTIVE'
+      nextApprover === 'COMPLETED' ? 'ONGOING' : nextApprover // Changed from null to 'ACTIVE'
     )
     .query(`
       UPDATE PermitToWork 
@@ -686,9 +772,9 @@ async approvePermitToWork(permitToWorkId, assignedTo, status, comments, userId, 
         ${currentStageColumns.approvedBy} = @userId,
         ${currentStageColumns.approvedDate} = GETDATE(),
         AssignedTo = CASE
-          WHEN @status = 'Rejected' THEN NULL
+          WHEN @status = 'Rejected' THEN 'REJECTED'
           WHEN @status = 'Approved' AND @nextApprover IS NOT NULL THEN @nextApprover
-          WHEN @status = 'Approved' AND @assignedTo = 'QA' THEN 'ACTIVE'  -- Changed from NULL to 'ACTIVE'
+          WHEN @status = 'Approved' AND @assignedTo = 'QA' THEN 'ONGOING'    -- Changed from NULL to 'ONGOING'
           ELSE AssignedTo
         END,
         Status = CASE
@@ -715,6 +801,7 @@ async getPermitToWorkByRole(user) {
       jp.JobLocation,
       jp.Department,
       jp.PermitReceiver,
+      jp.ContractCompanyName,
       u.FirstName + ' ' + u.LastName AS IssuerName,
       u.DepartmentID AS IssuerDepartment
     FROM PermitToWork ptw
@@ -726,36 +813,25 @@ async getPermitToWorkByRole(user) {
   const userRole = user.role ? user.role.trim() : null;
   const userDepartmentId = user.departmentId ? user.departmentId.trim() : null;
 
-  if (userRole === 'QA') {
-    query += ` AND ptw.AssignedTo = 'QA'`;
+  if (userRole === 'QA' || userDepartmentId === 'QHSSE') {
+    // QHSSE can see all permits
+    // No additional WHERE clause needed
   }
-  else if (userDepartmentId === 'QHSSE') {
-    // No additional filtering needed
-  }
-  else if (userRole === 'ISS' && userDepartmentId) {
-    query += ` AND ptw.AssignedTo = 'ISS'
-               AND jp.Department IN (
-                 SELECT DepartmentName 
-                 FROM Departments 
-                 WHERE DepartmentID = '${userDepartmentId}'
-                 OR DepartmentName = '${userDepartmentId}'
-               )`;
-  }
-  else if (userRole === 'HOD' && userDepartmentId) {
-    query += ` AND ptw.AssignedTo = 'HOD'
-               AND jp.Department IN (
-                 SELECT DepartmentName 
-                 FROM Departments 
-                 WHERE DepartmentID = '${userDepartmentId}'
-                 OR DepartmentName = '${userDepartmentId}'
-               )`;
+  else if (userRole === 'ISS' || userRole === 'HOD') {
+    query += ` AND jp.Department IN (
+      SELECT DepartmentName 
+      FROM Departments 
+      WHERE DepartmentID = '${userDepartmentId}'
+      OR DepartmentName = '${userDepartmentId}'
+    )`;
   }
   else {
+    // Regular users/receivers only see their own submissions
     query += ` AND ptw.Creator = ${user.userId}`;
   }
 
   query += ` ORDER BY ptw.Created DESC`;
-  const result = await request.query(query)
+  const result = await request.query(query);
   return result;
 },
 

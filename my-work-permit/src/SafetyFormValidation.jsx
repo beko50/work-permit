@@ -87,14 +87,33 @@ const SafetyFormValidation = Yup.object().shape({
     .min(0, 'Number of Workers cannot be less than 0')
     .max(20, 'Number of Workers cannot exceed 20')
     .required('Number of Workers is required'),
-  riskAssessment: Yup.array()
+    riskAssessment: Yup.array()
     .min(1, 'At least one Risk Assessment document is required')
-    .test('file-size', 'Each file must not exceed 4MB', (files) =>
-      files.every((file) => file.size <= 4 * 1024 * 1024)
-    )
-    .test('file-type', 'Unsupported file type', (files) =>
-      files.every((file) => ['jpg', 'jpeg', 'png', 'doc', 'docx', 'pdf'].includes(file.name.split('.').pop().toLowerCase()))
-    ),
+    .test('file-validation', 'Invalid file format or size', function (value) {
+      if (!value) return false;
+      
+      return value.every(file => {
+        // Check if it's a File object
+        if (file instanceof File) {
+          const fileSize = file.size <= 4 * 1024 * 1024;
+          const fileType = ['jpg', 'jpeg', 'png', 'doc', 'docx', 'pdf'].includes(
+            file.name.split('.').pop().toLowerCase()
+          );
+          return fileSize && fileType;
+        }
+        
+        // If it's a base64 string
+        if (typeof file === 'string' && file.startsWith('data:')) {
+          // Check file type from data URL
+          const mimeType = file.split(';')[0].split(':')[1];
+          return ['image/jpeg', 'image/png', 'application/pdf', 'application/msword', 
+                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+            .includes(mimeType);
+        }
+        
+        return false;
+      });
+    }),
   permitRequired: Yup.array().min(1, 'At least one Permit is required'),
 
   workerDetails: Yup.array()

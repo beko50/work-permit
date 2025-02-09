@@ -229,6 +229,13 @@ export const api = {
       };
       
       console.log('Request body before sending:', JSON.stringify(requestBody));
+
+      if (permitData.riskAssessmentDocuments) {
+        permitData.riskAssessmentDocuments = permitData.riskAssessmentDocuments.map(doc => ({
+          ...doc,
+          data: doc.data.startsWith('data:') ? doc.data : `data:image/png;base64,${doc.data}`
+        }));
+      }
   
       const response = await fetch(`${API_URL}/permits`, {
         method: 'POST',
@@ -252,86 +259,33 @@ export const api = {
     }
   },
 
-  async getPermits(searchParams, user) {
+  async getPermits(queryParams, currentUser) {
     try {
-      const queryParams = new URLSearchParams();
-      Object.entries(searchParams).forEach(([key, value]) => {
-        if (value) {
-          queryParams.append(key, value);
+      const params = new URLSearchParams();
+      
+      // Add all query parameters
+      Object.entries(queryParams).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, value);
         }
       });
 
-      // Role-based filtering logic
-    if (user) {
-      const userRoleId = user.roleId?.trim();
-      // Only add department filter for internal users
-      const userDepartmentId = user.departmentId ? user.departmentId.trim() : null;
-
-      if (userRoleId === 'QA') {
-        // No additional filtering for QA
-      } else if (['HOD', 'ISS'].includes(userRoleId) && userDepartmentId) {
-        // Filter by department and assigned role for internal users with HOD/ISS roles
-        queryParams.append('department', userDepartmentId);
-        queryParams.append('assignedTo', userRoleId);
-      } else {
-        // For external users and other roles (like RCV), filter by creator
-        if (user.id) {
-          queryParams.append('creator', user.id);
+      // Add user context for proper filtering
+      if (currentUser) {
+        params.append('userRoleId', currentUser.roleId?.trim() || '');
+        params.append('userDepartmentId', currentUser.departmentId?.trim() || '');
+        
+        // Add full name for ISS assignments
+        if (currentUser.firstName && currentUser.lastName) {
+          params.append('userFullName', `${currentUser.firstName} ${currentUser.lastName}`.trim());
+        }
+        
+        if (currentUser.userId) {
+          params.append('userId', currentUser.userId);
         }
       }
 
-      // Add permit receiver for limited roles
-      if (user.firstName && user.lastName) {
-        queryParams.append('permitReceiver', `${user.firstName} ${user.lastName}`.trim());
-      }
-    }
-  
-      const response = await fetch(`${API_URL}/permits?${queryParams.toString()}`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: getAuthHeaders(),
-      });
-  
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-  
-      const data = await response.json();
-  
-      const formattedPermits = Array.isArray(data.permits) ? data.permits.map(permit => ({
-        JobPermitID: permit.JobPermitID,
-        PermitReceiver: permit.PermitReceiver,
-        ContractCompanyName: permit.ContractCompanyName,
-        Status: permit.Status,
-        Created: permit.Created,
-        Department: permit.Department,
-        AssignedTo: permit.AssignedTo,
-        JobDescription: permit.JobDescription, // Add this line
-        StartDate: permit.StartDate,      
-        EndDate: permit.EndDate,
-        JobLocation: permit.JobLocation,
-        Changed: permit.Changed
-      })) : [];
-  
-      return {
-        data: formattedPermits,
-        total: formattedPermits.length,
-        success: true,
-      };
-    } catch (error) {
-      console.error('Error fetching permits:', error);
-      return {
-        data: [],
-        total: 0,
-        success: false,
-        error: error.message || 'Failed to fetch permits',
-      };
-    }
-  },
-
-  async getPermitById(permitId) {
-    try {
-      const response = await fetch(`${API_URL}/permits/${permitId}`, {
+      const response = await fetch(`${API_URL}/permits?${params.toString()}`, {
         method: 'GET',
         credentials: 'include',
         headers: getAuthHeaders(),
@@ -343,11 +297,52 @@ export const api = {
       }
 
       const data = await response.json();
+      
+      return {
+        success: true,
+        data: data.permits || [],
+        total: data.pagination?.totalCount || 0,
+        totalPages: data.pagination?.totalPages || 0,
+      };
+
+    } catch (error) {
+      console.error('Error fetching permits:', error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        totalPages: 0,
+        error: error.message || 'Failed to fetch permits'
+      };
+    }
+},
+
+  async getPermitById(permitId) {
+    try {
+      const response = await fetch(`${API_URL}/permits/${permitId}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+  
+      const data = await response.json();
+      
+      // Ensure RiskAssessmentDocument is properly formatted
+      if (data.permit?.RiskAssessmentDocument) {
+        if (!data.permit.RiskAssessmentDocument.startsWith('data:')) {
+          data.permit.RiskAssessmentDocument = `data:image/png;base64,${data.permit.RiskAssessmentDocument}`;
+        }
+      }
+  
       return {
         data,
         success: true
       };
-
     } catch (error) {
       console.error('Error fetching permit:', error);
       return {
@@ -387,43 +382,44 @@ export const api = {
   },
 
   // Add search permits method
-  async searchPermits(searchParams) {
+  async searchPermits(searchParams, currentUser) {
     try {
       const queryParams = new URLSearchParams();
       
-      // Map and add search parameters
       Object.entries(searchParams).forEach(([key, value]) => {
-        if (value) {
+        if (value !== undefined && value !== null && value !== '') {
           queryParams.append(key, value);
         }
       });
 
-      const response = await fetch(`${API_URL}/permits/search?${queryParams.toString()}`, {
+      // Ensure the department field matches the backend
+    if (searchParams.department) {
+      queryParams.append('department', searchParams.department); // Use 'department' as the key
+    }
+
+      const response = await fetch(`${API_URL}/permits/search?${queryParams}`, {
         method: 'GET',
-        credentials: 'include',
-        headers: getAuthHeaders(),
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include'
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        throw new Error('Failed to fetch permits');
       }
 
-      const data = await response.json();
-      
-      return {
-        data: data.permits,
-        total: data.total,
-        success: true
-      };
-
+      return await response.json();
     } catch (error) {
-      console.error('Error searching permits:', error);
+      console.error('Error fetching permits:', error);
       return {
+        success: false,
+        error: error.message,
         data: [],
         total: 0,
-        success: false,
-        error: error.message || 'Failed to search permits'
+        totalPages: 0,
+        currentPage: 1
       };
     }
   },
@@ -484,20 +480,15 @@ export const api = {
         headers: getAuthHeaders(),
         credentials: 'include'
       });
-
+  
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Failed to fetch permit to work');
       }
-
-      const data = await response.json();
-    return {
-      success: true,
-      data: {
-        permit: data.permit,
-        jobPermit: data.jobPermit // This will include the related job permit data
-      }
-    };
+  
+      const responseData = await response.json();
+      // Return the data directly without additional wrapping
+      return responseData;
     } catch (error) {
       console.error('Error fetching permit to work:', error);
       throw error;

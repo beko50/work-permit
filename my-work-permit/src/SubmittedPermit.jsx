@@ -6,6 +6,7 @@ import { X, CheckSquare, Check, Clock, AlertTriangle } from 'lucide-react';
 import { api } from './services/api';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
 import logo from './assets/mps_logo.jpg';
+import RiskAssessmentViewer from './components/ui/RiskAssessmentDocumentViewer'
 
 const sectionNameMapping = {
   'Permit Required': 'Permit Required',
@@ -115,14 +116,14 @@ const SubmittedPermit = () => {
               comments: permit.IssuerComments
             },
             {
-              title: "Head of Department",
+              title: "Head of Department/Manager",
               status: permit.HODStatus || 'Pending',
               approverName: permit.HODApproverName,
               approvedDate: permit.HODApprovedDate,
               comments: permit.HODComments
             },
             {
-              title: "QHSSE ",
+              title: "QHSSE Approver",
               status: permit.QHSSEStatus || 'Pending',
               approverName: permit.QHSSEApproverName,
               approvedDate: permit.QHSSEApprovedDate,
@@ -162,7 +163,7 @@ const SubmittedPermit = () => {
               className="h-[80px] w-[80px]" 
             />
           </div>
-          <h2 className="text-xl font-semibold text-center flex-grow">REQUEST FOR JOB PERMIT</h2>
+          <h2 className="text-xl font-semibold text-center flex-grow -ml-16">REQUEST FOR JOB PERMIT</h2>
           <Button variant="ghost" onClick={() => navigate(-1)} className="absolute top-2 right-2 hover:bg-gray-100">
             <X className="h-5 w-5" />
           </Button>
@@ -201,6 +202,16 @@ const SubmittedPermit = () => {
               )) || <li>No workers assigned</li>}
             </ul>
           </div>
+
+          {/* Risk Assessment Document */}
+          {permit.RiskAssessmentDocument && (
+            <div className="mt-6">
+              <h2 className="text-lg font-medium">Risk Assessment Documents</h2>
+              <RiskAssessmentViewer 
+                documentData={permit.RiskAssessmentDocument} 
+              />
+            </div>
+          )}
 
           {/* Safety Checklist Card */}
           <Card>

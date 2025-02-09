@@ -2049,7 +2049,7 @@ import { Button } from './components/ui/button';
 import { Input, Select } from './components/ui/form';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
 import { RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
-import SafetyForm from './SafetyForm';
+//import SafetyForm from './SafetyForm';
 import PermitToWorkForm from './PTWForm';
 
 const JobSafetyPermit = () => {
@@ -2331,3 +2331,861 @@ const JobSafetyPermit = () => {
 };
 
 export default JobSafetyPermit;
+
+
+
+
+
+
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Card, CardHeader, CardContent } from './components/ui/card';
+import { Button } from './components/ui/button';
+import { Input, Select } from './components/ui/form';
+import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
+import { RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
+import SafetyForm from './SafetyForm';
+import PermitToWorkForm from './PTWForm';
+import { api } from './services/api';
+
+const ViewPermit = () => {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('jobPermits');
+  const [permits, setPermits] = useState([]);
+  const [permitToWorks, setPermitToWorks] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isPermitFormOpen, setIsPermitFormOpen] = useState(false);
+
+  const getDepartmentFullName = (departmentCode) => {
+    const departmentMap = {
+      'OPS': 'Operations',
+      'ASM': 'Asset Maintenance',
+    };
+    return departmentMap[departmentCode] || departmentCode;
+  };
+  
+  const [currentUser, setCurrentUser] = useState(null);
+  
+  useEffect(() => {
+    const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
+    const parsedData = JSON.parse(savedData);
+    setCurrentUser(parsedData?.user);
+  }, []);
+
+  const [searchParams, setSearchParams] = useState({
+    jobPermitId: '',
+    permitReceiver: '',
+    contractCompanyName: '',
+    status: '',
+    startDate: '',
+    endDate: '',
+  });
+
+  const TabButton = ({ id, label, active, onClick }) => (
+    <button
+      onClick={() => onClick(id)}
+      className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors
+        ${active 
+          ? 'bg-white border-t-2 border-blue-500 text-blue-600' 
+          : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+    >
+      {label}
+    </button>
+  );
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (!currentUser) return;
+
+      if (activeTab === 'jobPermits') {
+        const response = await api.getPermits(searchParams, currentUser);
+        if (response.success) {
+          setPermits(response.data);
+        } else {
+          setError(response.error || 'Failed to fetch job permits');
+          setPermits([]);
+        }
+      } else {
+        const response = await api.getPermitToWorks(searchParams, currentUser);
+        if (response.success) {
+          setPermitToWorks(response.data);
+        } else {
+          setError(response.error || 'Failed to fetch permit to works');
+          setPermitToWorks([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setError(`Failed to fetch ${activeTab === 'jobPermits' ? 'job permits' : 'permit to works'}. Please try again later.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [currentUser, activeTab]);
+
+  const handleSearch = () => {
+    fetchData();
+  };
+
+  const handleCreatePermit = () => {
+    navigate('/dashboard/permits/job-permits/create');
+  };
+
+  const handleViewPTW = () => {
+    setIsPermitFormOpen(true);
+  };
+  
+  const Dropdown = ({ children, options, onSelect, className = '' }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+          setIsOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, []);
+
+    const handleSelect = (selectedOption) => {
+      onSelect(selectedOption);
+      setIsOpen(false);
+    };
+  
+    return (
+      <div ref={dropdownRef} className={`relative ${className}`}>
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          <span className="text-sm font-medium">Actions</span>
+          <ChevronDown className="h-5 w-5 text-blue-500" />
+        </button>
+        {isOpen && (
+          <ul className="absolute z-10 w-28 border rounded-md mt-2 bg-gray-50 shadow-lg overflow-auto">
+            {options.map((option) => (
+              <li
+                key={option}
+                onClick={() => handleSelect(option)}
+                className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+              >
+                {option}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Rejected': return 'text-red-500';
+      case 'Approved': return 'text-green-500';
+      case 'Pending': return 'text-orange-500';
+      default: return 'text-gray-500';
+    }
+  };
+
+  const handleDropdownAction = (action, permitId) => {
+    switch (action) {
+      case 'View':
+        navigate(`/dashboard/permits/view/${permitId}`);
+        break;
+      case 'Review':
+        navigate(`/dashboard/permits/review/${permitId}`);
+        break;
+      default:
+        console.log(`Unknown action: ${action}`);
+    }
+  };
+
+  const getDropdownOptions = (permit) => {
+    return ['View'];
+  };
+
+  const renderJobPermitsTable = () => (
+    <Table>
+      <TableHead>
+        <TableRow>
+          <TableCell>
+            <Button variant="ghost" className="text-sm font-medium">
+              Actions
+            </Button>
+          </TableCell>
+          <TableCell className="text-base font-medium">Permit ID</TableCell>
+          {currentUser?.roleId === 'QA' && (
+            <TableCell className="text-base font-medium">Department</TableCell>
+          )}
+          <TableCell className="text-base font-medium">Permit Receiver</TableCell>
+          <TableCell className="text-base font-medium">Company</TableCell>
+          <TableCell className="text-base font-medium">Submission Date</TableCell>
+          <TableCell className="text-base font-medium">Assigned To</TableCell>   
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {Array.isArray(permits) && permits.length > 0 ? (
+          permits.map((permit) => (
+            <TableRow key={permit.JobPermitID}>
+              <TableCell>
+                <Dropdown
+                  options={getDropdownOptions(permit)}
+                  onSelect={(action) => handleDropdownAction(action, permit.JobPermitID)}
+                  className="text-sm font-medium"
+                >
+                  Actions
+                </Dropdown>
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-col">
+                  <span>JP-{String(permit.JobPermitID).padStart(4, '0')}</span>
+                  <span className={getStatusColor(permit.Status)}>{permit.Status}</span>
+                </div>
+              </TableCell>
+              {currentUser?.roleId === 'QA' && (
+                <TableCell>{getDepartmentFullName(permit.Department)}</TableCell>
+              )}
+              <TableCell>{permit.PermitReceiver}</TableCell>
+              <TableCell>{permit.ContractCompanyName}</TableCell>
+              <TableCell>
+                {new Date(permit.Created).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric'
+                })}
+              </TableCell>
+              <TableCell>{permit.AssignedTo}</TableCell>
+            </TableRow>
+          ))
+        ) : (
+          <TableRow>
+            <TableCell colSpan={7} className="text-center py-4">
+              No permits found
+            </TableCell>
+          </TableRow>
+        )}
+      </TableBody>
+    </Table>
+  );
+
+  const renderPermitToWorksTable = () => (
+    <Table>
+      <TableHead>
+        <TableRow>
+          <TableCell>
+            <Button variant="ghost" className="text-sm font-medium">
+              Actions
+            </Button>
+          </TableCell>
+          <TableCell className="text-base font-medium">PTW ID</TableCell>
+          <TableCell className="text-base font-medium">Type</TableCell>
+          <TableCell className="text-base font-medium">Location</TableCell>
+          <TableCell className="text-base font-medium">Status</TableCell>
+          <TableCell className="text-base font-medium">Start Date</TableCell>
+          <TableCell className="text-base font-medium">End Date</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {Array.isArray(permitToWorks) && permitToWorks.length > 0 ? (
+          permitToWorks.map((ptw) => (
+            <TableRow key={ptw.id}>
+              <TableCell>
+                <Dropdown
+                  options={['View', 'Print']}
+                  onSelect={(action) => handleDropdownAction(action, ptw.id)}
+                  className="text-sm font-medium"
+                >
+                  Actions
+                </Dropdown>
+              </TableCell>
+              <TableCell>PTW-{String(ptw.id).padStart(4, '0')}</TableCell>
+              <TableCell>{ptw.type}</TableCell>
+              <TableCell>{ptw.location}</TableCell>
+              <TableCell>
+                <span className={getStatusColor(ptw.status)}>{ptw.status}</span>
+              </TableCell>
+              <TableCell>{new Date(ptw.startDate).toLocaleDateString()}</TableCell>
+              <TableCell>{new Date(ptw.endDate).toLocaleDateString()}</TableCell>
+            </TableRow>
+          ))
+        ) : (
+          <TableRow>
+            <TableCell colSpan={7} className="text-center py-4">
+              No permit to works found
+            </TableCell>
+          </TableRow>
+        )}
+      </TableBody>
+    </Table>
+  );
+
+  return (
+    <div className="w-full p-4">
+      {/* Search Section */}
+      <div className="mb-4 flex justify-between items-start gap-2">
+        <Card className="flex-1 p-4">
+          <div className="flex flex-col gap-4">
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <Input 
+                  placeholder="Search Permit ID number" 
+                  value={searchParams.jobPermitId} 
+                  onChange={(e) => setSearchParams({ ...searchParams, jobPermitId: e.target.value })} 
+                  className="w-full"
+                />
+              </div>
+              <div className="flex-1">
+                <Input 
+                  placeholder="Search contractor" 
+                  value={searchParams.contractCompanyName} 
+                  onChange={(e) => setSearchParams({ ...searchParams, contractCompanyName: e.target.value })} 
+                  className="w-full"
+                />
+              </div>
+              <Button variant="primary" onClick={handleSearch} className="w-[150px]">
+                Search
+              </Button>
+            </div>
+
+            {showAdvanced && (
+              <div className="grid grid-cols-12 gap-4">
+                <div className="col-span-3">
+                  <Select 
+                    placeholder="Sort Permit status" 
+                    value={searchParams.status} 
+                    onChange={(e) => setSearchParams({ ...searchParams, status: e.target.value })} 
+                    options={['Approved', 'Pending', 'Rejected']} 
+                    className="w-full"
+                  />
+                </div>
+                <div className="col-span-3">
+                  <Input 
+                    placeholder="Search company" 
+                    value={searchParams.company} 
+                    onChange={(e) => setSearchParams({ ...searchParams, company: e.target.value })}
+                    className="w-full"
+                  />
+                </div>
+                <div className="col-span-6 flex items-center gap-2 pl-20">
+                  <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Filter date:</span>
+                  <div className="flex-1 flex gap-2">
+                    <Input 
+                      type="date" 
+                      value={searchParams.startDate} 
+                      onChange={(e) => setSearchParams({ ...searchParams, startDate: e.target.value })} 
+                      className="flex-1"
+                    />
+                    <span className="self-center text-gray-400">→</span>
+                    <Input 
+                      type="date" 
+                      value={searchParams.endDate} 
+                      onChange={(e) => setSearchParams({ ...searchParams, endDate: e.target.value })} 
+                      className="flex-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+        <Button 
+          variant="outline" 
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="border-blue-500 text-blue-500 hover:bg-blue-50"
+        >
+          {showAdvanced ? 'Hide Advanced Search' : 'Show Advanced Search'}
+        </Button>
+      </div>
+
+      {/* Main Content Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-4">
+            <h1 className="text-2xl font-semibold">
+              View {
+                currentUser 
+                  ? (currentUser.roleId === 'QA' 
+                      ? 'All Permits' 
+                      : `${getDepartmentFullName(currentUser.departmentId)} Department Permits`)
+                  : 'Department Permits'
+              }
+            </h1>
+            <div className="flex gap-2 border-b">
+              <TabButton
+                id="jobPermits"
+                label="Requests for Job Permits"
+                active={activeTab === 'jobPermits'}
+                onClick={setActiveTab}
+              />
+              <TabButton
+                id="permitToWorks"
+                label="Permit To Works"
+                active={activeTab === 'permitToWorks'}
+                onClick={setActiveTab}
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="flex gap-2 mb-4">
+            <Button 
+              variant="secondary" 
+              className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
+              onClick={fetchData}
+            >
+              <RefreshCw className="w-4 h-4" />
+              REFRESH
+            </Button>
+          </div>
+
+          {/* Loading state */}
+          {loading && (
+            <div className="text-center py-4">
+              Loading {activeTab === 'jobPermits' ? 'permits' : 'permit to works'}...
+            </div>
+          )}
+
+          {/* Error state */}
+          {error && (
+            <div className="text-red-500 text-center py-4">
+              {error}
+            </div>
+          )}
+
+          {/* Content based on active tab */}
+          {!loading && !error && (
+            <>
+              {activeTab === 'jobPermits' ? renderJobPermitsTable() : renderPermitToWorksTable()}
+            </>
+          )}
+
+          {/* Pagination info */}
+          <div className="flex justify-end mt-4 text-sm text-gray-500">
+            Rows per page: 15 | {
+              activeTab === 'jobPermits'
+                ? `1-${permits.length} of ${permits.length}`
+                : `1-${permitToWorks.length} of ${permitToWorks.length}`
+            }
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Permit Form Modal */}
+      {isPermitFormOpen && (
+        <PermitToWorkForm onClose={() => setIsPermitFormOpen(false)} />
+      )}
+    </div>
+  );
+};
+
+//export default ViewPermit;
+
+
+
+
+
+//JOBS MONITORING
+
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Card, CardHeader, CardContent, CardFooter } from './components/ui/card';
+import { Button } from './components/ui/button';
+import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
+import Tabs from './components/ui/tabs';
+import { api } from './services/api';
+import { toast } from 'sonner';
+import { RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
+
+const JobsMonitoring = () => {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('jobPermits');
+  const [permits, setPermits] = useState([]);
+  const [permitToWorks, setPermitToWorks] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isPermitFormOpen, setIsPermitFormOpen] = useState(false);
+
+  const getDepartmentFullName = (departmentCode) => {
+    const departmentMap = {
+      'OPS': 'Operations',
+      'ASM': 'Asset Maintenance',
+    };
+    return departmentMap[departmentCode] || departmentCode;
+  };
+  
+  const [currentUser, setCurrentUser] = useState(null);
+  
+  useEffect(() => {
+    const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
+    const parsedData = JSON.parse(savedData);
+    setCurrentUser(parsedData?.user);
+  }, []);
+
+  const [searchParams, setSearchParams] = useState({
+    jobPermitId: '',
+    permitReceiver: '',
+    contractCompanyName: '',
+    status: '',
+    startDate: '',
+    endDate: '',
+  });
+
+  const TabButton = ({ id, label, active, onClick }) => (
+    <button
+      onClick={() => onClick(id)}
+      className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors
+        ${active 
+          ? 'bg-white border-t-2 border-blue-500 text-blue-600' 
+          : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+    >
+      {label}
+    </button>
+  );
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (!currentUser) return;
+
+      if (activeTab === 'jobPermits') {
+        const response = await api.getPermits(searchParams, currentUser);
+        if (response.success) {
+          setPermits(response.data);
+        } else {
+          setError(response.error || 'Failed to fetch job permits');
+          setPermits([]);
+        }
+      } else {
+        const response = await api.getPermitToWorks(searchParams, currentUser);
+        if (response.success) {
+          setPermitToWorks(response.data);
+        } else {
+          setError(response.error || 'Failed to fetch permit to works');
+          setPermitToWorks([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setError(`Failed to fetch ${activeTab === 'jobPermits' ? 'job permits' : 'permit to works'}. Please try again later.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [currentUser, activeTab]);
+
+  const handleSearch = () => {
+    fetchData();
+  };
+
+  const handleCreatePermit = () => {
+    navigate('/dashboard/permits/job-permits/create');
+  };
+
+  const handleViewPTW = () => {
+    setIsPermitFormOpen(true);
+  };
+  
+  const Dropdown = ({ children, options, onSelect, className = '' }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+          setIsOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, []);
+
+    const handleSelect = (selectedOption) => {
+      onSelect(selectedOption);
+      setIsOpen(false);
+    };
+  
+    return (
+      <div ref={dropdownRef} className={`relative ${className}`}>
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          <span className="text-sm font-medium">Actions</span>
+          <ChevronDown className="h-5 w-5 text-blue-500" />
+        </button>
+        {isOpen && (
+          <ul className="absolute z-10 w-28 border rounded-md mt-2 bg-gray-50 shadow-lg overflow-auto">
+            {options.map((option) => (
+              <li
+                key={option}
+                onClick={() => handleSelect(option)}
+                className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+              >
+                {option}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Rejected': return 'text-red-500';
+      case 'Approved': return 'text-green-500';
+      case 'Pending': return 'text-orange-500';
+      default: return 'text-gray-500';
+    }
+  };
+
+  const handleDropdownAction = (action, permitId) => {
+    switch (action) {
+      case 'View':
+        navigate(`/dashboard/permits/view/${permitId}`);
+        break;
+      case 'Review':
+        navigate(`/dashboard/permits/review/${permitId}`);
+        break;
+      default:
+        console.log(`Unknown action: ${action}`);
+    }
+  };
+
+  const getDropdownOptions = (permit) => {
+    return ['View'];
+  };
+
+  const renderJobPermitsTable = () => (
+    <Table>
+      <TableHead>
+        <TableRow>
+          <TableCell>
+            <Button variant="ghost" className="text-sm font-medium">
+              Actions
+            </Button>
+          </TableCell>
+          <TableCell className="text-base font-medium">Permit ID</TableCell>
+          {currentUser?.roleId === 'QA' && (
+            <TableCell className="text-base font-medium">Department</TableCell>
+          )}
+          <TableCell className="text-base font-medium">Permit Receiver</TableCell>
+          <TableCell className="text-base font-medium">Company</TableCell>
+          <TableCell className="text-base font-medium">Submission Date</TableCell>
+          <TableCell className="text-base font-medium">Assigned To</TableCell>   
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {Array.isArray(permits) && permits.length > 0 ? (
+          permits.map((permit) => (
+            <TableRow key={permit.JobPermitID}>
+              <TableCell>
+                <Dropdown
+                  options={getDropdownOptions(permit)}
+                  onSelect={(action) => handleDropdownAction(action, permit.JobPermitID)}
+                  className="text-sm font-medium"
+                >
+                  Actions
+                </Dropdown>
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-col">
+                  <span>JP-{String(permit.JobPermitID).padStart(4, '0')}</span>
+                  <span className={getStatusColor(permit.Status)}>{permit.Status}</span>
+                </div>
+              </TableCell>
+              {currentUser?.roleId === 'QA' && (
+                <TableCell>{getDepartmentFullName(permit.Department)}</TableCell>
+              )}
+              <TableCell>{permit.PermitReceiver}</TableCell>
+              <TableCell>{permit.ContractCompanyName}</TableCell>
+              <TableCell>
+                {new Date(permit.Created).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric'
+                })}
+              </TableCell>
+              <TableCell>{permit.AssignedTo}</TableCell>
+            </TableRow>
+          ))
+        ) : (
+          <TableRow>
+            <TableCell colSpan={7} className="text-center py-4">
+              No permits found
+            </TableCell>
+          </TableRow>
+        )}
+      </TableBody>
+    </Table>
+  );
+
+  const renderPermitToWorksTable = () => (
+    <Table>
+      <TableHead>
+        <TableRow>
+          <TableCell>
+            <Button variant="ghost" className="text-sm font-medium">
+              Actions
+            </Button>
+          </TableCell>
+          <TableCell className="text-base font-medium">PTW ID</TableCell>
+          <TableCell className="text-base font-medium">Type</TableCell>
+          <TableCell className="text-base font-medium">Location</TableCell>
+          <TableCell className="text-base font-medium">Status</TableCell>
+          <TableCell className="text-base font-medium">Start Date</TableCell>
+          <TableCell className="text-base font-medium">End Date</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {Array.isArray(permitToWorks) && permitToWorks.length > 0 ? (
+          permitToWorks.map((ptw) => (
+            <TableRow key={ptw.id}>
+              <TableCell>
+                <Dropdown
+                  options={['View', 'Print']}
+                  onSelect={(action) => handleDropdownAction(action, ptw.id)}
+                  className="text-sm font-medium"
+                >
+                  Actions
+                </Dropdown>
+              </TableCell>
+              <TableCell>PTW-{String(ptw.id).padStart(4, '0')}</TableCell>
+              <TableCell>{ptw.type}</TableCell>
+              <TableCell>{ptw.location}</TableCell>
+              <TableCell>
+                <span className={getStatusColor(ptw.status)}>{ptw.status}</span>
+              </TableCell>
+              <TableCell>{new Date(ptw.startDate).toLocaleDateString()}</TableCell>
+              <TableCell>{new Date(ptw.endDate).toLocaleDateString()}</TableCell>
+            </TableRow>
+          ))
+        ) : (
+          <TableRow>
+            <TableCell colSpan={7} className="text-center py-4">
+              No permit to works found
+            </TableCell>
+          </TableRow>
+        )}
+      </TableBody>
+    </Table>
+  );
+
+  return (
+    <div className="w-full p-4">
+      {/* Search Section */}
+      <div className="mb-4 flex justify-between items-start gap-2">
+        
+        <Button 
+          variant="outline" 
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="border-blue-500 text-blue-500 hover:bg-blue-50"
+        >
+          {showAdvanced ? 'Hide Advanced Search' : 'Show Advanced Search'}
+        </Button>
+      </div>
+
+      {/* Main Content Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-4">
+            <h1 className="text-2xl font-semibold">
+              View {
+                currentUser 
+                  ? (currentUser.roleId === 'QA' 
+                      ? 'All Permits' 
+                      : `${getDepartmentFullName(currentUser.departmentId)} Department Permits`)
+                  : 'Department Permits'
+              }
+            </h1>
+            <div className="flex gap-2 border-b">
+              <TabButton
+                id="jobPermits"
+                label="Requests for Job Permits"
+                active={activeTab === 'jobPermits'}
+                onClick={setActiveTab}
+              />
+              <TabButton
+                id="permitToWorks"
+                label="Permit To Works"
+                active={activeTab === 'permitToWorks'}
+                onClick={setActiveTab}
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="flex gap-2 mb-4">
+            <Button 
+              variant="secondary" 
+              className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
+              onClick={fetchData}
+            >
+              <RefreshCw className="w-4 h-4" />
+              REFRESH
+            </Button>
+          </div>
+
+          {/* Loading state */}
+          {loading && (
+            <div className="text-center py-4">
+              Loading {activeTab === 'jobPermits' ? 'permits' : 'permit to works'}...
+            </div>
+          )}
+
+          {/* Error state */}
+          {error && (
+            <div className="text-red-500 text-center py-4">
+              {error}
+            </div>
+          )}
+
+          {/* Content based on active tab */}
+          {!loading && !error && (
+            <>
+              {activeTab === 'jobPermits' ? renderJobPermitsTable() : renderPermitToWorksTable()}
+            </>
+          )}
+
+          {/* Pagination info */}
+          <div className="flex justify-end mt-4 text-sm text-gray-500">
+            Rows per page: 15 | {
+              activeTab === 'jobPermits'
+                ? `1-${permits.length} of ${permits.length}`
+                : `1-${permitToWorks.length} of ${permitToWorks.length}`
+            }
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Permit Form Modal */}
+      {isPermitFormOpen && (
+        <PermitToWorkForm onClose={() => setIsPermitFormOpen(false)} />
+      )}
+    </div>
+  );
+};
+
+export default JobsMonitoring;

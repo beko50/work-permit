@@ -195,6 +195,8 @@ const permitController = {
     }
   },
 
+
+
   async approvePermit(req, res) {
     const pool = await poolPromise;
     const transaction = await pool.transaction();
@@ -310,6 +312,70 @@ const permitController = {
     }
   },
 
+  async searchPermits(req, res) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      // Normalize search parameters
+      const searchParams = {
+        jobPermitId: req.query.jobPermitId,
+        permitReceiver: req.query.permitReceiver,
+        contractCompanyName: req.query.contractCompanyName,
+        status: req.query.status,
+        startDate: req.query.startDate,
+        endDate: req.query.endDate,
+        page: parseInt(req.query.page) || 1,
+        limit: parseInt(req.query.limit) || 10
+      };
+
+      // Normalize user data
+      const user = {
+        userId: req.user.userId,
+        roleId: req.user.roleId ? req.user.roleId.trim() : null,
+        departmentId: req.user.departmentId ? req.user.departmentId.trim() : null
+      };
+
+      const result = await permitModel.searchPermits(searchParams, user);
+      
+      if (result.success) {
+        // If the search was successful but returned no results
+        if (result.data.length === 0) {
+          return res.json({
+            success: false,
+            message: searchParams.jobPermitId ? 
+              'Permit number not found' : 
+              'No permits found matching your search criteria',
+            data: [],
+            total: 0,
+            totalPages: 0,
+            currentPage: searchParams.page
+          });
+        }
+  
+        res.json({
+          success: true,
+          data: result.data,
+          total: result.total,
+          totalPages: result.totalPages,
+          currentPage: searchParams.page
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: result.error || 'An error occurred while searching permits'
+        });
+      }
+    } catch (error) {
+      console.error('Error in searchPermits controller:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+},
+  
 
   // PERMIT TO WORK  -- SECOND PHASE
   async createPermitToWork(req, res) {
@@ -395,9 +461,11 @@ const permitController = {
 async getPermitToWorkById(req, res) {
   try {
     const { permitToWorkId } = req.params;
-    
+    console.log('Fetching PermitToWork for PermitToWorkID:', permitToWorkId); // Log the ID
+
     const result = await permitModel.getPermitToWorkById(permitToWorkId);
-    
+    console.log('Fetched Data:', result); // Log the fetched data
+
     if (!result) {
       return res.status(404).json({ 
         success: false,

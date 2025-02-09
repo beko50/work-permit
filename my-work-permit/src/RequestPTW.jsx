@@ -122,19 +122,6 @@ const RequestPTW = ({ jobPermit, onClose, onSubmitSuccess }) => {
         setShowConfirmation(false);
       }
     };
-  
-    const CustomInput = React.forwardRef(({ value, onClick }, ref) => (
-      <div className="relative">
-        <Input
-          ref={ref}
-          value={value}
-          readOnly
-          className="w-full pl-10 cursor-pointer"
-          onClick={onClick}
-        />
-        <Calendar className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 cursor-pointer" onClick={onClick} />
-      </div>
-    ));
 
     const formatDate = (date) => {
       return date ? new Date(date).toLocaleDateString('en-GB') : 'N/A';
@@ -148,8 +135,8 @@ const RequestPTW = ({ jobPermit, onClose, onSubmitSuccess }) => {
               <div className="w-[80px]">
                 <img src={logo} alt="Company Logo" className="h-[80px] w-[80px]" />
               </div>
-              <div className="flex-grow ml-32">
-                <h1 className="text-xl font-semibold text-right">REQUEST PERMIT TO WORK</h1>
+              <div className="flex-grow ml-40">
+                <h1 className="text-xl font-semibold">REQUEST PERMIT TO WORK</h1>
               </div>
             </div>
           </CardHeader>
@@ -162,49 +149,54 @@ const RequestPTW = ({ jobPermit, onClose, onSubmitSuccess }) => {
           </div>
   
           <CardContent>
-  <form onSubmit={handleSubmit} className="space-y-8">
-    <div className="grid grid-cols-2 gap-6">
-      <div className="flex flex-col">
-        <Label className="mb-2">Entry Date</Label>
-        <DatePicker
-          selected={formData.entryDate}
-          onChange={(date) => setFormData((prev) => ({ ...prev, entryDate: date, exitDate: null }))}
-          minDate={new Date()}
-          dateFormat="dd/MM/yyyy"
-          customInput={<CustomInput />}
-        />
-      </div>
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="flex flex-col">
+                  <Label className="mb-2">Entry Date</Label>
+                  <div className="relative">
+                    <DatePicker
+                      selected={formData.entryDate}
+                      onChange={(date) => setFormData(prev => ({ ...prev, entryDate: date, exitDate: null }))}
+                      minDate={new Date()}
+                      dateFormat="dd/MM/yyyy"
+                      className="w-full p-2 border rounded-md pl-10"
+                      placeholderText="Select entry date"
+                    />
+                    <Calendar className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
 
-      <div className="flex flex-col">
-        <Label className="mb-2">Exit Date</Label>
-        <DatePicker
-          selected={formData.exitDate}
-          onChange={date => setFormData({ ...formData, exitDate: date })}
-          minDate={formData.entryDate || new Date()}
-          dateFormat="dd/MM/yyyy"
-          customInput={<CustomInput />}
-          onCalendarOpen={() => {}}
-          onClickOutside={() => {}}
-        />
-      </div>
-    </div>
+                <div className="flex flex-col">
+                  <Label className="mb-2">Exit Date</Label>
+                  <div className="relative">
+                    <DatePicker
+                      selected={formData.exitDate}
+                      onChange={(date) => setFormData(prev => ({ ...prev, exitDate: date }))}
+                      minDate={formData.entryDate || new Date()}
+                      dateFormat="dd/MM/yyyy"
+                      className="w-full p-2 border rounded-md pl-10"
+                      placeholderText="Select exit date"
+                    />
+                    <Calendar className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
 
-    <div className="flex flex-col w-48">
-      <Label className="mb-2">Work Duration (Days)</Label>
-      <Input 
-        type="number"
-        required
-        disabled
-        value={formData.workDuration}
-        className="bg-gray-100 text-center"
-      />
-      {error && (
-        <p className="text-sm text-red-500 break-normal">{error}</p>
-      )}
-    </div>
-  </form>
-</CardContent>
-
+              <div className="flex flex-col w-48">
+                <Label className="mb-2">Work Duration (Days)</Label>
+                <Input 
+                  type="number"
+                  required
+                  disabled
+                  value={formData.workDuration}
+                  className="bg-gray-100 text-center"
+                />
+                {error && (
+                  <p className="text-sm text-red-500 break-normal">{error}</p>
+                )}
+              </div>
+            </form>
+          </CardContent>
   
           <CardFooter className="flex justify-end gap-4">
             <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -241,6 +233,7 @@ const RequestPTW = ({ jobPermit, onClose, onSubmitSuccess }) => {
                   Cancel
                 </Button>
                 <Button 
+                  variant='success'
                   onClick={handleConfirm}
                   disabled={isSubmitting}
                 >

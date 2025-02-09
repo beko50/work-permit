@@ -5,6 +5,7 @@ import { Button } from './components/ui/button';
 import { X, ArrowLeft, Check, Clock, AlertTriangle, CheckSquare } from 'lucide-react';
 import { api } from './services/api';
 import { toast } from 'sonner';
+import RiskAssessmentViewer from './components/ui/RiskAssessmentDocumentViewer';
 
 const sectionNameMapping = {
   'Permit Required': 'Permit Required',
@@ -51,7 +52,7 @@ const PermitReview = () => {
               comments: permit.IssuerComments
             },
             {
-              title: "Head of Department",
+              title: "Head of Department / Manager",
               status: permit.HODStatus || 'Pending',
               isCurrentApprover: permit.AssignedTo === 'HOD',
               approverName: permit.HODApproverName,
@@ -59,7 +60,7 @@ const PermitReview = () => {
               comments: permit.HODComments
             },
             {
-              title: "QHSSE Approval",
+              title: "QHSSE Approver",
               status: permit.QHSSEStatus || 'Pending',
               isCurrentApprover: permit.AssignedTo === 'QA',
               approverName: permit.QHSSEApproverName,
@@ -192,6 +193,13 @@ const PermitReview = () => {
             <h3 className="text-lg font-semibold mb-2">Job Description</h3>
             <p>{permit.JobDescription}</p>
           </div>
+
+          {/* Risk Assessment Document */}
+          {permit.RiskAssessmentDocument && (
+            <div className="mt-4">
+              <RiskAssessmentViewer documentData={permit.RiskAssessmentDocument} />
+            </div>
+          )}
 
           {/* Safety Checklist */}
           <div className="mt-4">

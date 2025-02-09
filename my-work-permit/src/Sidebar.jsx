@@ -74,6 +74,7 @@ const getUserRoleDisplay = () => {
         case 'RCV': return 'Permit Receiver';
         case 'ISS': return 'Permit Issuer';
         case 'HOD': return 'Head of Department';
+        case 'QA': return 'QHSSE Approver';
         // default: return 'User';
     }
 };
@@ -215,7 +216,7 @@ const getUserRoleDisplay = () => {
             >
               <Icons.Menu />
             </button>
-            <div className="text-lg font-semibold">QHSSE Management System</div>
+            <div className="text-lg font-semibold">MPS Work Permit System</div>
           </div>
           <div className="flex items-center space-x-4">
             <button className="p-2">
