@@ -1,18 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardHeader, CardContent } from './components/ui/card';
+import { Card, CardHeader, CardContent, CardFooter } from './components/ui/card';
 import { Button } from './components/ui/button';
-import { X, Check, Clock, AlertTriangle,Eye } from 'lucide-react';
+import { X, Check, Clock, AlertTriangle, Eye, CheckCircle2, ClipboardCheck } from 'lucide-react';
+import { Dialog } from './components/ui/dialog';
 import { api } from './services/api';
+import CompletionWorkflow from './CompleteWorkflow';
 import logo from './assets/mps_logo.jpg';
 
-const SubmittedPTW = () => {
+const JobReview = () => {
   const { permitToWorkId } = useParams();
   const navigate = useNavigate();
   const [ptw, setPtw] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [approvals, setApprovals] = useState([]);
+  
+  // Job completion states
+  const [showModal, setShowModal] = useState(false);
+  const [remarks, setRemarks] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [canComplete, setCanComplete] = useState(false);
+  const [completionError, setCompletionError] = useState(null);
+  
 
   const formatDate = (dateString, dateOnly = false) => {
     if (!dateString) return '';
@@ -27,9 +38,28 @@ const SubmittedPTW = () => {
           hour12: true
         });
   };
-  
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, completionStatus) => {
+    // First check completion status
+    if (completionStatus === 'Job Completed') {
+      return (
+        <div className="inline-flex items-center px-3 py-1 bg-green-600 text-white rounded-full text-sm">
+          <Check size={16} className="mr-1" />
+          Job Completed
+        </div>
+      );
+    }
+    
+    if (completionStatus === 'In Progress') {
+      return (
+        <div className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+          <Clock size={16} className="mr-1" />
+          In Progress
+        </div>
+      );
+    }
+
+    // Fallback to approval status badges if needed
     switch (status?.toLowerCase()) {
       case 'approved':
         return (
@@ -58,18 +88,32 @@ const SubmittedPTW = () => {
   };
 
   useEffect(() => {
-      const fetchPTWDetails = async () => {
-        try {
-          setLoading(true);
-          // Change this to use getPermitToWorkById instead
-          const response = await api.getPermitToWorkById(permitToWorkId);
-          
-          if (response.success && response.data?.permit) {
-            setPtw({
-              ...response.data.permit,
-              jobPermit: response.data.jobPermit
-            });
-          
+    try {
+      const savedData = localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
+      if (savedData) {
+        const userData = JSON.parse(savedData)?.user;
+        setCurrentUser(userData);
+        const hasPermission = ['ISS', 'QA', 'HOD'].includes(userData?.roleId);
+        setCanComplete(hasPermission);
+      }
+    } catch (err) {
+      console.error('Error loading user data:', err);
+      setCanComplete(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const fetchPTWDetails = async () => {
+      try {
+        setLoading(true);
+        const response = await api.getPermitToWorkById(permitToWorkId);
+        
+        if (response.success && response.data?.permit) {
+          setPtw({
+            ...response.data.permit,
+            jobPermit: response.data.jobPermit
+          });
+        
           const workflowStages = [
             {
               title: "Permit Issuer",
@@ -110,6 +154,27 @@ const SubmittedPTW = () => {
     }
   }, [permitToWorkId]);
 
+  const handleSubmitCompletion = async (completionData) => {
+    try {
+      // Update the UI with the new PTW data
+      const response = await api.getPermitToWorkById(permitToWorkId);
+      if (response.success && response.data?.permit) {
+        setPtw({
+          ...response.data.permit,
+          jobPermit: response.data.jobPermit
+        });
+        
+        // Navigate back only for QA completion
+        if (currentUser?.roleId === 'QA') {
+          navigate(-1);
+        }
+      }
+    } catch (err) {
+      console.error('Error updating PTW data:', err);
+      setCompletionError('Error updating job status. Please refresh the page.');
+    }
+  };
+
   if (loading) return <div className="text-center">Loading PTW details...</div>;
   if (error) return <div className="text-red-500 text-center">{error}</div>;
   if (!ptw) return <div className="text-center">No PTW details found</div>;
@@ -129,7 +194,7 @@ const SubmittedPTW = () => {
                 className="h-[80px] w-[80px]" 
               />
             </div>
-            <h2 className="text-xl font-semibold text-center flex-grow -ml-16">ISSUANCE OF PERMIT TO WORK</h2>
+            <h2 className="text-xl font-semibold text-center flex-grow -ml-16">JOB REVIEW</h2>
             <Button 
               variant="ghost" 
               onClick={() => navigate(-1)} 
@@ -161,7 +226,7 @@ const SubmittedPTW = () => {
                 </div>
                 <div>
                 <p className="text-sm text-gray-500">
-                    <span className="font-bold">Status:</span> {getStatusBadge(ptw.Status)}
+                    <span className="font-bold">Status:</span> {getStatusBadge(ptw.Status, ptw.CompletionStatus)}
                   </p>
                 </div>
               </div>
@@ -169,11 +234,10 @@ const SubmittedPTW = () => {
           </Card>
 
           <Card className="shadow-sm">
-          <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Details</div>
-
+            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Details</div>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
-              <div>
+                <div>
                   <p className="font-semibold text-sm">Permit Receiver:</p>
                   <p className="text-gray-700 text-sm">{ptw.jobPermit.PermitReceiver}</p>
                 </div>
@@ -203,8 +267,7 @@ const SubmittedPTW = () => {
           </Card>
 
           <Card className="shadow-sm">
-          <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Work Duration</div>
-
+            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Work Duration</div>
             <CardContent>
               <div className="grid grid-cols-3 gap-4">
                 <div>
@@ -224,7 +287,7 @@ const SubmittedPTW = () => {
           </Card>
 
           <Card className="shadow-sm">
-          <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Approval Status</div>
+            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Approval Status</div>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -254,7 +317,7 @@ const SubmittedPTW = () => {
           </Card>
 
           {isFullyApproved && (
-            <div className="text-sm text-gray-700 p-2 bg-gray-50 rounded">
+           <div className="text-sm text-gray-700 p-2 bg-gray-50 rounded">
            This permit has been reviewed and approved by the necessary parties to proceed with the job described at 
            <span className="font-bold"> {ptw.jobPermit.JobLocation}</span>,  
            <span className="font-bold"> {ptw.jobPermit.SubLocation}</span> from 
@@ -264,19 +327,20 @@ const SubmittedPTW = () => {
          </div>
           )}
 
-<div className="flex justify-end mt-4 gap-4">
-  <Button 
-    onClick={() => window.print()}
-    variant="secondary"
-    className="bg-gray-600 text-white hover:bg-gray-700"
-  >
-    Print
-  </Button>
-</div>
+        {ptw.Status === 'Approved' && canComplete && (
+        <CompletionWorkflow
+          ptw={ptw}
+          currentUser={currentUser}
+          onSubmitCompletion={handleSubmitCompletion}
+          remarks={remarks}
+          setRemarks={setRemarks}
+          completionError={completionError}
+        />
+      )}
         </div>
       </div>
     </div>
   );
 };
 
-export default SubmittedPTW;
+export default JobReview;

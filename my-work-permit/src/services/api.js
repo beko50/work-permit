@@ -571,7 +571,31 @@ export const api = {
     }
   },
 
-  async updatePermitStatus(permitId, status) {
+  async completePermitToWork(permitToWorkId, completionData) {
+    try {
+      const response = await fetch(`${API_URL}/permits/permit-to-work/${permitToWorkId}/complete`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          stage: completionData.stage,
+          remarks: completionData.remarks
+        })
+      });
+  
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to process completion');
+      }
+  
+      return await response.json();
+    } catch (error) {
+      console.error('Error processing permit completion:', error);
+      throw error;
+    }
+  },
+  
+  /*async updatePermitStatus(permitId, status) {
     const response = await fetch(`${API_URL}/permits/status`, {
       method: 'PUT',
       headers: getAuthHeaders(),
@@ -585,7 +609,7 @@ export const api = {
     }
 
     return await response.json();
-  }
+  } */
 };
 
 // Initialize the cache when the module loads

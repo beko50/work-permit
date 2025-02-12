@@ -145,17 +145,22 @@ const permitModel = {
       request.input('departmentId', sql.VarChar(50), userDepartmentId);
     }
     // For ASM, OPS, and IT users - see permits for their department
-  else if (userDepartmentId && (userDepartmentId === 'ASM' || userDepartmentId === 'OPS' || userDepartmentId === 'IT')) {
-    query += ` AND (
-      jp.Department = @departmentId OR
-      jp.Department IN (
-        SELECT DepartmentName 
-        FROM Departments 
-        WHERE DepartmentID = @departmentId
-      )
-    )`;
-    request.input('departmentId', sql.VarChar(50), userDepartmentId);
-  }
+    else if (userDepartmentId && (userDepartmentId === 'ASM' || userDepartmentId === 'OPS' || userDepartmentId === 'IT')) {
+      query += ` AND (
+        jp.Department = @departmentId OR
+        jp.Department IN (
+          SELECT DepartmentName 
+          FROM Departments 
+          WHERE DepartmentID = @departmentId
+        )
+      )`;
+      request.input('departmentId', sql.VarChar(50), userDepartmentId);
+    }
+    // For RCV users - only see permits they created (both internal and external)
+    else if (userRole === 'RCV') {
+      query += ` AND jp.Creator = @userId`;
+      request.input('userId', sql.Int, user.userId);
+    }
     // For other users - only see permits they submitted
     else {
       query += ` AND jp.Creator = @userId`;
@@ -585,12 +590,16 @@ async getPermitToWorkById(permitToWorkId) {
           jp.WorkersNames,
           CONCAT(issuer.FirstName, ' ', issuer.LastName) as IssuerApproverName,
           CONCAT(hod.FirstName, ' ', hod.LastName) as HODApproverName,
-          CONCAT(qa.FirstName, ' ', qa.LastName) as QHSSEApproverName
+          CONCAT(qa.FirstName, ' ', qa.LastName) as QHSSEApproverName,
+          CONCAT(issuerCompleter.FirstName, ' ', issuerCompleter.LastName) as IssuerCompleterName,
+          CONCAT(qaCompleter.FirstName, ' ', qaCompleter.LastName) as QHSSECompleterName
         FROM PermitToWork ptw
         INNER JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
         LEFT JOIN Users issuer ON ptw.IssuerApprovedBy = issuer.UserID
         LEFT JOIN Users hod ON ptw.HODApprovedBy = hod.UserID
         LEFT JOIN Users qa ON ptw.QHSSEApprovedBy = qa.UserID
+        LEFT JOIN Users issuerCompleter ON ptw.IssuerCompletedBy = issuerCompleter.UserID
+        LEFT JOIN Users qaCompleter ON ptw.QHSSECompletedBy = qaCompleter.UserID
         WHERE ptw.PermitToWorkID = @permitToWorkId
       `);
     
@@ -598,7 +607,6 @@ async getPermitToWorkById(permitToWorkId) {
 
     const permit = result.recordset[0];
     
-    // Restructure the data to include both PTW and Job Permit details
     return {
       permit: {
         PermitToWorkID: permit.PermitToWorkID,
@@ -607,6 +615,7 @@ async getPermitToWorkById(permitToWorkId) {
         ExitDate: permit.ExitDate,
         WorkDuration: permit.WorkDuration,
         Status: permit.Status,
+        CompletionStatus: permit.CompletionStatus,
         Created: permit.Created,
         AssignedTo: permit.AssignedTo,
         // Approval details
@@ -621,7 +630,15 @@ async getPermitToWorkById(permitToWorkId) {
         QHSSEStatus: permit.QHSSEStatus,
         QHSSEComments: permit.QHSSEComments,
         QHSSEApproverName: permit.QHSSEApproverName,
-        QHSSEApprovedDate: permit.QHSSEApprovedDate
+        QHSSEApprovedDate: permit.QHSSEApprovedDate,
+        // Completion details
+        IssuerCompletionStatus: permit.IssuerCompletionStatus,
+        IssuerCompletionDate: permit.IssuerCompletionDate,
+        IssuerCompleterName: permit.IssuerCompleterName,
+        QHSSECompletionStatus: permit.QHSSECompletionStatus,
+        QHSSECompletionDate: permit.QHSSECompletionDate,
+        QHSSECompleterName: permit.QHSSECompleterName,
+        QHSSECompletionComments: permit.QHSSECompletionComments
       },
       jobPermit: {
         JobDescription: permit.JobDescription,
@@ -835,7 +852,86 @@ async getPermitToWorkByRole(user) {
   return result;
 },
 
-  async updatePermitStatus(permitId, status, changerId, transaction) {
+async verifyPermitStatus(permitToWorkId, transaction) {
+  const result = await transaction.request()
+    .input('permitToWorkId', sql.Int, permitToWorkId)
+    .query(`
+      SELECT 
+        Status,
+        IssuerCompletionStatus,
+        QHSSECompletionStatus,
+        IsRevoked,
+        CompletionStatus
+      FROM PermitToWork 
+      WHERE PermitToWorkID = @permitToWorkId
+    `);
+
+  return result.recordset[0];
+},
+
+async completePermitToWork(permitToWorkId, completionData, userId, transaction) {
+  const { stage, remarks } = completionData;
+
+  if (!userId) {
+    throw new Error('User ID is required for completion');
+  }
+
+  const columnMap = {
+    'ISS': {
+      status: 'IssuerCompletionStatus',
+      date: 'IssuerCompletionDate',
+      completedBy: 'IssuerCompletedBy'
+    },
+    'QA': {
+      status: 'QHSSECompletionStatus',
+      date: 'QHSSECompletionDate',
+      completedBy: 'QHSSECompletedBy',
+      comments: 'QHSSECompletionComments'
+    }
+  };
+
+  const currentStageColumns = columnMap[stage];
+
+  // Build the query dynamically based on the stage
+  let query = `
+    UPDATE PermitToWork 
+    SET
+      ${currentStageColumns.status} = 'Completed',
+      ${currentStageColumns.date} = GETDATE(),
+      ${currentStageColumns.completedBy} = @userId,
+  `;
+
+  // When Issuer completes, set QHSSE status to 'Pending Completion'
+  if (stage === 'ISS') {
+    query += `
+      QHSSECompletionStatus = 'Pending Completion',
+      CompletionStatus = 'Pending Completion',
+    `;
+  } else if (stage === 'QA') {
+    // When QHSSE completes, update final completion status
+    query += `
+      CompletionStatus = 'Job Completed',
+      ${currentStageColumns.comments} = @remarks,
+    `;
+  }
+
+  query += `
+      Changed = GETDATE(),
+      Changer = @userId
+    WHERE PermitToWorkID = @permitToWorkId
+  `;
+
+  const result = await transaction.request()
+    .input('permitToWorkId', sql.Int, permitToWorkId)
+    .input('userId', sql.Int, userId)
+    .input('remarks', sql.NVarChar(sql.MAX), remarks || '')
+    .input('stage', sql.VarChar(3), stage)
+    .query(query);
+
+  return result.rowsAffected[0];
+},
+
+  /* async updatePermitStatus(permitId, status, changerId, transaction) {
     const result = await transaction.request()
       .input('permitId', sql.Int, permitId)
       .input('status', sql.VarChar(50), status)
@@ -848,7 +944,7 @@ async getPermitToWorkByRole(user) {
         WHERE JobPermitID = @permitId;
       `);
     return result.rowsAffected[0];
-  }
+  } */
 };
 
 module.exports = permitModel;

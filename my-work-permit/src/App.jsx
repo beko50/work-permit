@@ -20,6 +20,7 @@ import SubmittedPTW from './SubmittedPTW';
 import ReviewPTW from './ReviewPTW';
 import PermitReview from './ReviewPermit';
 import JobsMonitoring from './JobMonitoring';
+import JobReview from './JobReview';
 
 function App() {
   return (
@@ -54,8 +55,9 @@ function App() {
             <Route path="view-permits" element={<ViewPermits />} />
             <Route path="approval-history" element={<ApprovalHistory />} />
           </Route>
-          <Route>
-            <Route path="jobs-monitoring" element={<JobsMonitoring />} />
+          <Route path="jobs-monitoring">
+            <Route index element={<JobsMonitoring />} />
+            <Route path="review/:permitToWorkId" element={<JobReview />} />
           </Route>
           </Route>
         </Routes>

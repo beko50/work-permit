@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardContent } from './components/ui/card';
+import { Card, CardHeader, CardContent, CardFooter } from './components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/form';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
-import { Eye, RefreshCw } from 'lucide-react';
+import { Eye, XCircle } from 'lucide-react';
 import { api } from './services/api';
+import Checkbox from './components/ui/checkbox';
+import logo from './assets/mps_logo.jpg';
 
 const ApprovalHistory = () => {
   const navigate = useNavigate();
@@ -20,6 +22,11 @@ const ApprovalHistory = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [selectedPermits, setSelectedPermits] = useState([]);
+  const [showRevokeModal, setShowRevokeModal] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [revokeReason, setRevokeReason] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
@@ -32,7 +39,6 @@ const ApprovalHistory = () => {
       setLoading(true);
       setError(null);
 
-      // Fetch job permits
       let jobPermitsResponse;
       if (currentUser?.roleId === 'QA') {
         jobPermitsResponse = await api.getPermits({}, currentUser);
@@ -42,19 +48,15 @@ const ApprovalHistory = () => {
         jobPermitsResponse = await api.getPermits(searchParams, currentUser);
       }
 
-      // Fetch permit to works
       const ptwResponse = await api.getPermitsToWork();
 
       if (jobPermitsResponse.success && ptwResponse.success) {
-        // Format job permits
         const jobPermits = jobPermitsResponse.data
-          .filter(permit => 
-            permit.Status?.toLowerCase() === 'approved' || 
-            permit.Status?.toLowerCase() === 'rejected'
-          )
+          .filter(permit => permit.Status?.toLowerCase() === 'approved')
           .map(permit => ({
             type: 'Job Permit',
             id: `JP-${String(permit.JobPermitID).padStart(4, '0')}`,
+            permitId: permit.JobPermitID,
             status: permit.Status,
             jobDescription: permit.JobDescription,
             lastApprovedDate: new Date(permit.LastApproved || permit.Created).toLocaleDateString('en-US', {
@@ -65,15 +67,12 @@ const ApprovalHistory = () => {
             routePath: `/dashboard/permits/view/${permit.JobPermitID}`
           }));
 
-        // Format permit to works
         const ptwPermits = ptwResponse.data
-          .filter(permit => 
-            permit.Status?.toLowerCase() === 'approved' || 
-            permit.Status?.toLowerCase() === 'rejected'
-          )
+          .filter(permit => permit.Status?.toLowerCase() === 'approved')
           .map(permit => ({
             type: 'Permit to Work',
-            id: `PTW-${String(permit.JobPermitID).padStart(4, '0')}`,
+            id: `PTW-${String(permit.PermitToWorkID).padStart(4, '0')}`,
+            permitId: permit.PermitToWorkID,
             status: permit.Status,
             jobDescription: permit.WorkDescription,
             lastApprovedDate: new Date(permit.LastApproved || permit.Created).toLocaleDateString('en-US', {
@@ -81,7 +80,7 @@ const ApprovalHistory = () => {
               month: 'short',
               day: 'numeric'
             }),
-            routePath: `/dashboard/permits/permit-to-work/job-permit/${permit.JobPermitID}`
+            routePath: `/dashboard/permits/permit-to-work/job-permit/${permit.PermitToWorkID}`
           }));
 
         setApprovalHistory([...jobPermits, ...ptwPermits]);
@@ -111,6 +110,53 @@ const ApprovalHistory = () => {
       case 'rejected': return 'text-red-500';
       case 'approved': return 'text-green-500';
       default: return 'text-gray-500';
+    }
+  };
+
+  const canRevokePermits = () => {
+    const currentUserRole = currentUser?.roleId;
+    return ['ISS', 'QA'].includes(currentUserRole);
+  };
+
+  const handleCheckboxChange = (permitId) => {
+    setSelectedPermits(prev => {
+      if (prev.includes(permitId)) {
+        return prev.filter(id => id !== permitId);
+      }
+      return [...prev, permitId];
+    });
+  };
+
+  const handleRevoke = () => {
+    setShowRevokeModal(true);
+  };
+
+  const handleRevokeSubmit = () => {
+    if (revokeReason.trim().length < 10) {
+      setError('Reason must be at least 10 characters long');
+      return;
+    }
+    setError(null);
+    setShowConfirmation(true);
+  };
+
+  const handleConfirmRevoke = async () => {
+    try {
+      setIsSubmitting(true);
+      const response = await api.revokePermits(selectedPermits, revokeReason);
+      if (response.success) {
+        setShowRevokeModal(false);
+        setShowConfirmation(false);
+        setSelectedPermits([]);
+        setRevokeReason('');
+        fetchApprovals();
+      } else {
+        setError('Failed to revoke permits');
+      }
+    } catch (err) {
+      setError('Error revoking permits');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -184,11 +230,22 @@ const ApprovalHistory = () => {
 
       {/* Main Content Card */}
       <Card>
-        <CardHeader>
+      <CardHeader>
+        <div className="flex flex-col gap-4">
           <h1 className="text-2xl font-semibold">Approval History</h1>
-        </CardHeader>
+          {canRevokePermits() && selectedPermits.length > 0 && (
+            <Button 
+              variant="danger"
+              onClick={handleRevoke}
+              className="w-fit flex items-center gap-2"
+            >
+              <XCircle className="w-4 h-4" />
+              REVOKE PERMIT{selectedPermits.length > 1 ? 'S' : ''}
+            </Button>
+          )}
+        </div>
+      </CardHeader>
         <CardContent className="p-4">
-
           {loading && (
             <div className="text-center py-4">
               Loading approval history...
@@ -205,6 +262,11 @@ const ApprovalHistory = () => {
             <Table>
               <TableHead>
                 <TableRow>
+                  {canRevokePermits() && (
+                    <TableCell className="w-12">
+                      <Checkbox disabled />
+                    </TableCell>
+                  )}
                   <TableCell className="text-base font-medium">Actions</TableCell>
                   <TableCell className="text-base font-medium">Permit ID</TableCell>
                   <TableCell className="text-base font-medium">Permit Type</TableCell>
@@ -215,6 +277,14 @@ const ApprovalHistory = () => {
               <TableBody>
                 {approvalHistory.map((item, index) => (
                   <TableRow key={index}>
+                    {canRevokePermits() && (
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedPermits.includes(item.permitId)}
+                          onCheckedChange={() => handleCheckboxChange(item.permitId)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell>
                       <Button
                         variant="primary"
@@ -245,8 +315,92 @@ const ApprovalHistory = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Revoke Modal */}
+      {showRevokeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-3xl">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <div className="w-[80px]">
+                  <img src={logo} alt="Company Logo" className="h-[80px] w-[80px]" />
+                </div>
+                <div className="flex-grow ml-40">
+                  <h1 className="text-xl font-semibold">REVOKE PERMIT TO WORK</h1>
+                </div>
+              </div>
+            </CardHeader>
+
+            <div className="px-6 py-2 border-b">
+              <p className="text-sm text-gray-500">
+                Selected Permits: {selectedPermits.length} {selectedPermits.length === 1 ? 'permit' : 'permits'}
+              </p>
+            </div>
+
+            <CardContent>
+              <div className="flex flex-col">
+                <label className="mb-2">Reason for Revocation</label>
+                <textarea
+                  value={revokeReason}
+                  onChange={(e) => {
+                    setRevokeReason(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="Enter detailed reason for revoking the permit(s)..."
+                  className="w-full min-h-[150px] p-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {error && (
+                  <p className="text-sm text-red-500 mt-2">{error}</p>
+                )}
+              </div>
+            </CardContent>
+
+            <CardFooter className="flex justify-end gap-4">
+              <Button variant="outline" onClick={() => setShowRevokeModal(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="danger"
+                onClick={handleRevokeSubmit}
+                disabled={isSubmitting}
+              >
+                Revoke Permit{selectedPermits.length > 1 ? 's' : ''}
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+
+      {/* Confirmation Dialog */}
+      {showConfirmation && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md p-6">
+            <div className="text-center">
+              <p className="mb-4 text-gray-700">
+                Are you sure you want to initiate the revoking process for {selectedPermits.length} {selectedPermits.length === 1 ? 'permit' : 'permits'}?
+              </p>
+              <div className="flex justify-center space-x-4">
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowConfirmation(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={handleConfirmRevoke}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Revoking...' : 'Confirm Revoke'}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };
 
-export default ApprovalHistory
+export default ApprovalHistory;

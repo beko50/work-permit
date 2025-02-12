@@ -26,11 +26,13 @@ router.get('/permit-to-work/:permitToWorkId', authMiddleware, permitController.g
 // Keep this route for initial PTW creation
 router.get('/permit-to-work/job-permit/:jobPermitId', authMiddleware, permitController.getPermitToWorkByJobPermitId);
 router.post('/permit-to-work/:permitToWorkId/approve', authMiddleware, permitController.approvePermitToWork);
+router.post('/permit-to-work/:permitToWorkId/complete', authMiddleware, permitController.completePermitToWork);
+
 
 router.get('/:permitId', authMiddleware, permitController.getPermitById);
 router.get('/department/:departmentId', permitController.getPermitsByDepartment);
 router.post('/approve', authMiddleware, permitController.approvePermit);
-router.put('/status',  permitController.updatePermitStatus);
+//router.put('/status',  permitController.updatePermitStatus);
 
 // // Debug/testing routes
 router.get('/test-checkboxes/:permitId', authMiddleware, async (req, res) => {

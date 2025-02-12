@@ -172,9 +172,9 @@ const PermitToWork = () => {
           permit.Status.toLowerCase() === 'approved' && 
           permit.AssignedTo === 'ONGOING'
         );
-      case 'expired':
+      case 'completed-job':
         return permits.filter(permit => 
-          permit.Status.toLowerCase() === 'expired'
+          permit.Status.toLowerCase() === 'completed'
         );
       case 'revoked-rejected':
         return permits.filter(permit => {
@@ -208,9 +208,9 @@ const PermitToWork = () => {
                 onClick={setCurrentTab}
               />
               <TabButton
-                id="expired"
-                label="Expired"
-                active={currentTab === 'expired'}
+                id="completed"
+                label="Completed Job"
+                active={currentTab === 'completed'}
                 onClick={setCurrentTab}
               />
               <TabButton

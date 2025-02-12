@@ -5,6 +5,7 @@ import { Button } from './components/ui/button';
 import { X, ArrowLeft, Check, Clock, AlertTriangle, CheckSquare } from 'lucide-react';
 import { api } from './services/api';
 import { toast } from 'sonner';
+import logo from './assets/mps_logo.jpg';
 import RiskAssessmentViewer from './components/ui/RiskAssessmentDocumentViewer';
 
 const sectionNameMapping = {
@@ -161,7 +162,7 @@ const PermitReview = () => {
           >
             <ArrowLeft className="mr-2 h-5 w-5" /> Back
           </Button>
-          <h2 className="text-xl font-semibold text-center flex-grow">Job Safety Permit Review</h2>
+          <h2 className="text-xl font-semibold text-center flex-grow">JOB PERMIT REVIEW</h2>
           <Button 
             variant="ghost" 
             onClick={() => navigate('/dashboard/permits/job-permits')} 
@@ -173,64 +174,85 @@ const PermitReview = () => {
 
         <CardContent className="p-6 space-y-6">
           {/* Permit Overview Section */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p>Permit ID: JP-{String(permit.JobPermitID).padStart(4, '0')}</p>
-              <p>Permit Receiver: {permit.PermitReceiver}</p>
-              <p>Company: {permit.ContractCompanyName}</p>
-              <p>Job Location: {permit.JobLocation}</p>
-            </div>
-            <div>
-              <p>Start Date: {formatDate(permit.StartDate)}</p>
-              <p>End Date: {formatDate(permit.EndDate)}</p>
-              <p>Status: {permit.Status}</p>
-              <p>Department: {permit.Department}</p>
-            </div>
-          </div>
+          <div className="grid grid-cols-2 gap-6 items-start">
+                  <div>
+                    <h2 className="font-bold text-l border-b pb-2 mb-3">Job Details</h2>
+                    <p className="text-base text-gray-700"><span className="font-bold">Permit ID:</span> JP-{String(permit.JobPermitID).padStart(4, '0')}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">Start Date:</span> {formatDate(permit.StartDate)}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">End Date:</span> {formatDate(permit.EndDate)}</p>
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-l border-b pb-2 mb-3">Job Location</h2>
+                    <p className="text-base text-gray-700"><span className="font-bold">Department:</span> {permit.Department}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">Job Location:</span> {permit.JobLocation}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">Sub Location:</span> {permit.SubLocation}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">Location Detail:</span> {permit.LocationDetail}</p>
+                  </div>
+                </div>
 
           {/* Job Description */}
-          <div className="mt-4">
-            <h3 className="text-lg font-semibold mb-2">Job Description</h3>
-            <p>{permit.JobDescription}</p>
-          </div>
+         <Card className="shadow-sm">
+              <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50 mt-1">Job Description</div>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-700">{permit.JobDescription}</p>
+              </CardContent>
+            </Card>
+
+          {/* Workers List Card */}
+          <Card className="shadow-sm">
+              <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Workers ({permit.NumberOfWorkers})</div>
+              <CardContent className="p-4">
+                <ul className="list-disc pl-6 text-sm text-gray-700">
+                  {permit.WorkersNames?.split(',').map((worker, index) => (
+                    <li key={index}>{worker.trim()}</li>
+                  )) || <li>No workers assigned</li>}
+                </ul>
+              </CardContent>
+            </Card>
 
           {/* Risk Assessment Document */}
           {permit.RiskAssessmentDocument && (
-            <div className="mt-4">
-              <RiskAssessmentViewer documentData={permit.RiskAssessmentDocument} />
+            <div className="mt-6">
+              <h2 className="text-lg font-medium">Risk Assessment Documents</h2>
+              <RiskAssessmentViewer 
+                documentData={permit.RiskAssessmentDocument} 
+              />
             </div>
           )}
 
           {/* Safety Checklist */}
-          <div className="mt-4">
-            <h3 className="text-lg font-semibold mb-4">Safety Checklist</h3>
-            <div className="space-y-6">
-              {groupedCheckboxes.map((section) => (
-                <div key={section.sectionId} className="space-y-2">
-                  <h3 className="font-semibold text-lg border-b pb-2">
-                    {sectionNameMapping[section.sectionName] || section.sectionName}
-                  </h3>
-                  <div className="space-y-2 pl-4">
-                    {section.items.map((item) => (
-                      <div key={item.sectionItemId} className="flex items-start gap-2">
-                        <div className="mt-1">
-                          <CheckSquare className="h-4 w-4 text-green-600" />
+          {/* Safety Checklist Card */}
+                    <Card>
+                      <CardHeader className="font-bold text-lg">Safety Checklist</CardHeader>
+                      <CardContent>
+                        <div className="space-y-6">
+                          {groupedCheckboxes.map((section) => (
+                            <div key={section.sectionId} className="space-y-2">
+                              <h3 className="font-medium text-base border-b pb-2">
+                                {sectionNameMapping[section.sectionName] || section.sectionName}
+                              </h3>
+                              <div className="space-y-2 pl-4">
+                                {section.items.map((item) => (
+                                  <div key={item.sectionItemId} className="flex items-start gap-2">
+                                    <div className="mt-1">
+                                      <CheckSquare className="h-4 w-4 text-green-600" />
+                                    </div>
+                                    <div>
+                                      <p>{item.itemLabel}</p>
+                                      {item.textInput && (
+                                        <p className="text-sm text-gray-600 mt-1">
+                                          Additional Info: {item.textInput}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        <div>
-                          <p>{item.itemLabel}</p>
-                          {item.textInput && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              Additional Info: {item.textInput}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                      </CardContent>
+                    </Card>
 
           {/* Approval Workflow */}
           <div className="mt-6">

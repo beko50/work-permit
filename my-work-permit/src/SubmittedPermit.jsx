@@ -169,39 +169,47 @@ const SubmittedPermit = () => {
           </Button>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Job Details Section */}
-          <div className="job-details mt-6">
-            <h2 className="text-lg font-medium">Job Details</h2>
-            <p><span className="font-semibold">Permit ID:</span> JP-{String(permit.JobPermitID).padStart(4, '0')}</p>
-            <p><span className="font-semibold">Start Date:</span> {formatDate(permit.StartDate)}</p>
-            <p><span className="font-semibold">End Date:</span> {formatDate(permit.EndDate)}</p>
-          </div>
+        <div className="p-4 space-y-4">
+      {/* Job Details & Location */}
+      <Card className="shadow-sm">
+      <CardContent className="p-5">
+  <div className="grid grid-cols-2 gap-6 items-start">
+    <div>
+      <h2 className="font-bold text-l border-b pb-2 mb-3">Job Details</h2>
+      <p className="text-base text-gray-700"><span className="font-bold">Permit ID:</span> JP-{String(permit.JobPermitID).padStart(4, '0')}</p>
+      <p className="text-base text-gray-700"><span className="font-bold">Start Date:</span> {formatDate(permit.StartDate)}</p>
+      <p className="text-base text-gray-700"><span className="font-bold">End Date:</span> {formatDate(permit.EndDate)}</p>
+    </div>
+    <div>
+      <h2 className="font-bold text-l border-b pb-2 mb-3">Job Location</h2>
+      <p className="text-base text-gray-700"><span className="font-bold">Department:</span> {permit.Department}</p>
+      <p className="text-base text-gray-700"><span className="font-bold">Job Location:</span> {permit.JobLocation}</p>
+      <p className="text-base text-gray-700"><span className="font-bold">Sub Location:</span> {permit.SubLocation}</p>
+      <p className="text-base text-gray-700"><span className="font-bold">Location Detail:</span> {permit.LocationDetail}</p>
+    </div>
+  </div>
+</CardContent>
+      </Card>
 
-          {/* Job Location Section */}
-          <div className="job-details mt-6">
-            <h2 className="text-lg font-medium">Job Location</h2>
-            <p><span className="font-semibold">Department:</span> {permit.Department}</p>
-            <p><span className="font-semibold">Job Location:</span> {permit.JobLocation}</p>
-            <p><span className="font-semibold">Sub Location:</span> {permit.SubLocation}</p>
-            <p><span className="font-semibold">Location Detail:</span> {permit.LocationDetail}</p>
-          </div>
+      {/* Job Description */}
+      <Card className="shadow-sm">
+        <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Description</div>
+        <CardContent className="p-4">
+          <p className="text-sm text-gray-700">{permit.JobDescription}</p>
+        </CardContent>
+      </Card>
 
-          {/* Job Description Section */}
-          <div className="job-description mt-6">
-            <h2 className="text-lg font-medium">Job Description</h2>
-            <p>{permit.JobDescription}</p>
-          </div>
-
-          {/* Workers Section */}
-          <div className="workers mt-6">
-            <h2 className="text-lg font-medium">Workers ({permit.NumberOfWorkers})</h2>
-            <ul className="list-disc pl-6">
-              {permit.WorkersNames?.split(',').map((worker, index) => (
-                <li key={index}>{worker.trim()}</li>
-              )) || <li>No workers assigned</li>}
-            </ul>
-          </div>
+      {/* Workers List */}
+      <Card className="shadow-sm">
+        <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Workers ({permit.NumberOfWorkers})</div>
+        <CardContent className="p-4">
+          <ul className="list-disc pl-6 text-sm text-gray-700">
+            {permit.WorkersNames?.split(',').map((worker, index) => (
+              <li key={index}>{worker.trim()}</li>
+            )) || <li>No workers assigned</li>}
+          </ul>
+        </CardContent>
+      </Card>
 
           {/* Risk Assessment Document */}
           {permit.RiskAssessmentDocument && (
@@ -249,7 +257,7 @@ const SubmittedPermit = () => {
           {/* Approvals Section */}
           {/* Approval Workflow */}
           <Card>
-            <CardHeader>Approval Workflow</CardHeader>
+          <CardHeader className="font-bold text-xl">Approval Workflow</CardHeader>
             <CardContent>
               <div className="relative">
                 <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />

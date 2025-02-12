@@ -52,13 +52,18 @@ const ViewPermit = () => {
     const fetchDepartments = async () => {
       try {
         const departmentsData = await api.getDepartments();
-        setDepartments(departmentsData || []);
+        // Transform department data to match the required format
+        const formattedDepartments = departmentsData.map(dept => ({
+          value: dept.DepartmentID,
+          label: getDepartmentFullName(dept.DepartmentID)
+        }));
+        setDepartments(formattedDepartments || []);
       } catch (error) {
         console.error('Error fetching departments:', error);
         setDepartments([]);
       }
     };
-  
+
     fetchDepartments();
   }, []);
 

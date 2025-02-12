@@ -338,7 +338,7 @@ const permitController = {
       };
 
       const result = await permitModel.searchPermits(searchParams, user);
-      
+
       if (result.success) {
         // If the search was successful but returned no results
         if (result.data.length === 0) {
@@ -353,7 +353,7 @@ const permitController = {
             currentPage: searchParams.page
           });
         }
-  
+
         res.json({
           success: true,
           data: result.data,
@@ -637,34 +637,108 @@ async approvePermitToWork(req, res) {
     }
   },
 
-  async updatePermitStatus(req, res) {
-    const pool = await poolPromise;
-    const transaction = await pool.transaction();
+  async completePermitToWork(req, res) {
+    const { permitToWorkId } = req.params;
+    const { stage, remarks } = req.body;
 
     try {
-      const { permitId, status } = req.body;
-
-      if (!permitId || !status) {
-        return res.status(400).json({ message: 'Missing required fields' });
+      if (!permitToWorkId || !stage) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Permit ID and completion stage are required' 
+        });
       }
 
-      await transaction.begin();
-
-      const rowsAffected = await permitModel.updatePermitStatus(permitId, status, req.user.userId, transaction);
-
-      if (rowsAffected === 0) {
-        await transaction.rollback();
-        return res.status(404).json({ message: 'Permit not found' });
+      // Add authentication check
+      if (!req.user || !req.user.userId) {
+        return res.status(401).json({ 
+          success: false,
+          message: 'User not authenticated' 
+        });
       }
 
-      await transaction.commit();
-      res.json({ message: 'Permit status updated successfully' });
+      const pool = await poolPromise;
+      const transaction = await pool.transaction();
+      
+      try {
+        await transaction.begin();
+
+        // Verify permit status using the model
+        const permit = await permitModel.verifyPermitStatus(permitToWorkId, transaction);
+
+        if (!permit) {
+          throw new Error('Permit not found');
+        }
+
+        if (permit.IsRevoked) {
+          throw new Error('Cannot complete a revoked permit');
+        }
+
+        // Validate based on completion stage
+        if (stage === 'ISS') {
+          if (permit.Status !== 'Approved') {
+            throw new Error('Permit must be fully approved before completion');
+          }
+          
+          if (permit.IssuerCompletionStatus === 'Completed') {
+            throw new Error('Issuer has already completed this permit');
+          }
+
+          // Check if user has Issuer role
+          if (req.user.role !== 'ISS') {
+            throw new Error('Only Issuers can complete this stage');
+          }
+        } else if (stage === 'QA') {
+          if (permit.IssuerCompletionStatus !== 'Completed') {
+            throw new Error('Issuer must complete the permit first');
+          }
+          
+          if (permit.QHSSECompletionStatus === 'Completed') {
+            throw new Error('QHSSE has already completed this permit');
+          }
+
+          if (!remarks) {
+            throw new Error('Completion comments are required for QHSSE completion');
+          }
+
+          // Check if user has QA role
+          if (req.user.role !== 'QA') {
+            throw new Error('Only QHSSE can complete this stage');
+          }
+        } else {
+          throw new Error('Invalid completion stage');
+        }
+
+        // Process the completion
+        await permitModel.completePermitToWork(
+          permitToWorkId,
+          { stage, remarks },
+          req.user.userId, // Pass the authenticated user's ID
+          transaction
+        );
+
+        await transaction.commit();
+
+        res.json({
+          success: true,
+          message: `Permit successfully completed by ${stage === 'ISS' ? 'Issuer' : 'QHSSE'}`
+        });
+
+      } catch (error) {
+        if (transaction._begun) {
+          await transaction.rollback();
+        }
+        throw error;
+      }
+
     } catch (error) {
-      await transaction.rollback();
-      console.error('Error updating permit status:', error);
-      res.status(500).json({ message: 'Error updating permit status' });
+      console.error('Error in completePermitToWork:', error);
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to complete permit'
+      });
     }
-  }
+}
 };
 
 module.exports = permitController;

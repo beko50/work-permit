@@ -112,7 +112,9 @@ const RequestJobPermit = () => {
         page: currentPage,
         limit: itemsPerPage,
         sortBy: sortConfig.key,
-        sortDirection: sortConfig.direction
+        sortDirection: sortConfig.direction,
+        // Add creator ID for permit receivers to see their own submissions
+        ...(isLimitedUser && { createdBy: currentUser.id })
       };
   
       if (isSearching) {
@@ -162,7 +164,7 @@ const RequestJobPermit = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentUser, searchParams, currentPage, itemsPerPage, sortConfig]);
+  }, [currentUser, searchParams, currentPage, itemsPerPage, sortConfig,isLimitedUser]);
   
   // Update search handler to include user assignment
   const handleSearch = () => {
@@ -184,17 +186,11 @@ const RequestJobPermit = () => {
   };
 
   // Modify your useEffect hooks
-useEffect(() => {
-  if (currentUser) {
-    fetchPermits();
-  }
-}, [currentUser, fetchPermits]);
-
-useEffect(() => {
+  useEffect(() => {
     if (currentUser) {
       fetchPermits();
     }
-  }, [currentPage, currentUser, fetchPermits]);
+  }, [currentUser, currentPage, fetchPermits]);
 
 
 // Add reset filters function
@@ -533,19 +529,6 @@ const resetFilters = () => {
               <PlusCircle className="w-4 h-4" />
               CREATE PERMIT
             </Button>
-            
-            {!isLimitedUser && (
-              <>
-                <Button 
-                  variant="destructive"
-                  className="flex items-center gap-2 text-red-600 hover:bg-red-50 border-none"
-                  onClick={() => console.log('revoke')}
-                >
-                  <XCircle className="w-4 h-4" />
-                  REVOKE PERMIT
-                </Button>
-              </>
-            )}
             
 
           </div>
