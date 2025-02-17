@@ -22,7 +22,8 @@ router.get('/search', authMiddleware, permitController.searchPermits);
 // Permit to Work routes - Make sure these come BEFORE the general permitId route
 router.post('/permit-to-work', authMiddleware, permitController.createPermitToWork);
 router.get('/permit-to-work', authMiddleware, permitController.getPermitToWork);
-router.get('/permit-to-work/:permitToWorkId', authMiddleware, permitController.getPermitToWorkById);
+router.get('/permit-to-work/search', authMiddleware, permitController.searchPTW);  // Move this line UP
+router.get('/permit-to-work/:permitToWorkId', authMiddleware, permitController.getPermitToWorkById);  // Move this line DOWN
 // Keep this route for initial PTW creation
 router.get('/permit-to-work/job-permit/:jobPermitId', authMiddleware, permitController.getPermitToWorkByJobPermitId);
 router.post('/permit-to-work/:permitToWorkId/approve', authMiddleware, permitController.approvePermitToWork);
@@ -32,6 +33,9 @@ router.post('/permit-to-work/:permitToWorkId/complete', authMiddleware, permitCo
 router.get('/:permitId', authMiddleware, permitController.getPermitById);
 router.get('/department/:departmentId', permitController.getPermitsByDepartment);
 router.post('/approve', authMiddleware, permitController.approvePermit);
+router.post('/revoke/initiate', authMiddleware, permitController.initiateRevocation);
+router.get('/revoke/pending', authMiddleware, permitController.getPendingRevocations);
+router.post('/revoke/approve', authMiddleware, permitController.approveRevocation);
 //router.put('/status',  permitController.updatePermitStatus);
 
 // // Debug/testing routes

@@ -43,7 +43,18 @@ const RequestJobPermit = () => {
   };
 
   // Add role display mapping function
-  const getRoleDisplayName = (roleId) => {
+  const getRoleDisplayName = (roleId, status) => {
+    // If status is Revoked, return null or empty
+    if (status === 'Revoked') {
+      return null;
+    }
+
+    // First check if status is Revocation Pending
+    if (status === 'Revocation Pending') {
+      return 'QHSSE APPROVER';
+    }
+
+    // For other statuses, use the regular role mapping
     const roleDisplayMap = {
       'ISS': 'PERMIT ISSUER',
       'HOD': 'HOD / MANAGER',
@@ -52,6 +63,24 @@ const RequestJobPermit = () => {
     };
     
     return roleDisplayMap[roleId] || roleId;
+  };
+
+  const formatDisplayDate = (permit) => {
+    const date = permit.Status === 'Revocation Pending' 
+      ? permit.RevocationInitiatedDate 
+      : permit.Created;
+    
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const getDateLabel = (permit) => {
+    return permit.Status === 'Revocation Pending' 
+      ? 'Revocation Initiated'
+      : 'Submission Date';
   };
   
   useEffect(() => {
@@ -72,7 +101,9 @@ const RequestJobPermit = () => {
     sortOrder: 'newest',
     department: '',
     startDate: '',
-    endDate: ''
+    endDate: '',
+    page: 1, 
+    limit: itemsPerPage 
   });
 
   const [sortConfig, setSortConfig] = useState({
@@ -104,36 +135,30 @@ const RequestJobPermit = () => {
   
       // Check if any search parameters are filled
       const isSearching = Object.values(searchParams).some(param => 
-        param !== '' && param !== 'newest'
+        param !== '' && param !== 'newest' && param !== searchParams.page && param !== searchParams.limit
       );
   
       let response;
       const queryParams = {
-        page: currentPage,
+        page: searchParams.page,  // Use from searchParams instead of currentPage
         limit: itemsPerPage,
         sortBy: sortConfig.key,
         sortDirection: sortConfig.direction,
-        // Add creator ID for permit receivers to see their own submissions
         ...(isLimitedUser && { createdBy: currentUser.id })
       };
   
       if (isSearching) {
-        // Use searchPermits when search parameters are provided
         response = await api.searchPermits({
           ...queryParams,
           ...searchParams,
-          // Add both assignedTo AND department filtering
           assignedTo: currentUser.id,
-          // Add department filter unless user is QA or QHSSE
           ...(currentUser.roleId !== 'QA' && currentUser.departmentId !== 'QHSSE' && {
             department: currentUser.departmentId
           })
         }, currentUser);
       } else {
-        // Use getPermits for normal fetching
         response = await api.getPermits({
           ...queryParams,
-          // Add department filter unless user is QA or QHSSE
           ...(currentUser.roleId !== 'QA' && currentUser.departmentId !== 'QHSSE' && {
             department: currentUser.departmentId
           })
@@ -141,13 +166,12 @@ const RequestJobPermit = () => {
       }
   
       if (response.success) {
-        // Sort the permits by submission date if needed
         const sortedPermits = response.data.sort((a, b) => {
           const dateA = new Date(a.Created);
           const dateB = new Date(b.Created);
           return sortConfig.direction === 'desc' ? dateB - dateA : dateA - dateB;
         });
-
+  
         setPermits(sortedPermits || []);
         setTotalPages(response.totalPages || 0);
         setTotalPermits(response.total || 0);
@@ -164,24 +188,32 @@ const RequestJobPermit = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentUser, searchParams, currentPage, itemsPerPage, sortConfig,isLimitedUser]);
+  }, [currentUser, searchParams, sortConfig, isLimitedUser]);
   
   // Update search handler to include user assignment
   const handleSearch = () => {
-    setCurrentPage(1); // Reset to first page on new search
-    fetchPermits();
+    setSearchParams(prev => ({
+      ...prev,
+      page: 1 // Reset to first page on new search
+    }));
   };
 
   // Pagination handlers
   const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(prev => prev + 1);
+    if (searchParams.page < totalPages) {
+      setSearchParams(prev => ({
+        ...prev,
+        page: prev.page + 1
+      }));
     }
   };
 
   const handlePreviousPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(prev => prev - 1);
+    if (searchParams.page > 1) {
+      setSearchParams(prev => ({
+        ...prev,
+        page: prev.page - 1
+      }));
     }
   };
 
@@ -201,34 +233,35 @@ const resetFilters = () => {
     status: '',
     department: '',
     contractCompanyName: '',
+    sortOrder: 'newest',
     startDate: '',
-    endDate: ''
+    endDate: '',
+    page: 1,
+    limit: itemsPerPage
   });
-  setCurrentPage(1);
-  fetchPermits();
 };
 
   // Pagination Controls Component
   const PaginationControls = () => (
     <div className="flex justify-end items-center mt-4 space-x-2 text-sm text-gray-500">
       <span>
-        {`${(currentPage - 1) * itemsPerPage + 1}-${Math.min(currentPage * itemsPerPage, totalPermits)} of ${totalPermits}`}
+        {`${(searchParams.page - 1) * itemsPerPage + 1}-${Math.min(searchParams.page * itemsPerPage, totalPermits)} of ${totalPermits}`}
       </span>
       <div className="flex items-center space-x-2">
         <Button 
           variant="outline" 
           size="sm" 
           onClick={handlePreviousPage} 
-          disabled={currentPage === 1}
+          disabled={searchParams.page === 1}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span>{`Page ${currentPage} of ${totalPages}`}</span>
+        <span>{`Page ${searchParams.page} of ${totalPages}`}</span>
         <Button 
           variant="outline" 
           size="sm" 
           onClick={handleNextPage} 
-          disabled={currentPage === totalPages}
+          disabled={searchParams.page === totalPages}
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -308,6 +341,7 @@ const resetFilters = () => {
       case 'Rejected': return 'text-red-500';
       case 'Approved': return 'text-green-500';
       case 'Pending': return 'text-orange-500';
+      case 'Revoked': return 'text-gray-500'; // Added for revoked status
       default: return 'text-gray-500';
     }
   };
@@ -391,7 +425,7 @@ const resetFilters = () => {
                       placeholder="Filter by Permit status" 
                       value={searchParams.status} 
                       onChange={(e) => setSearchParams({ ...searchParams, status: e.target.value })} 
-                      options={['Approved', 'Pending', 'Rejected']} 
+                      options={['Approved', 'Pending', 'Rejected', 'Revoked']} // Added Revoked
                       className="w-full"
                     />
                   </div>
@@ -455,7 +489,7 @@ const resetFilters = () => {
                     setCurrentPage(1);
                     fetchPermits();
                   }} 
-                  options={['Approved', 'Pending', 'Rejected']} 
+                  options={['Approved', 'Pending', 'Rejected', 'Revoked']} // Added Revoked
                   className="w-full"
                 />
               </div>
@@ -598,7 +632,9 @@ const resetFilters = () => {
                         day: 'numeric'
                       })}
                     </TableCell>
-                    <TableCell>{getRoleDisplayName(permit.AssignedTo)}</TableCell>
+                    <TableCell>
+                      {getRoleDisplayName(permit.AssignedTo, permit.Status) || '—'} {/* Display "—" if null */}
+                    </TableCell>
                   </TableRow>
                 ))
               ) : (

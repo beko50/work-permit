@@ -637,6 +637,74 @@ async approvePermitToWork(req, res) {
     }
   },
 
+  async searchPTW(req, res) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+  
+      // Normalize search parameters
+      const searchParams = {
+        permitId: req.query.permitId,
+        jobPermitId: req.query.jobPermitId,
+        status: req.query.status,
+        issuerStatus: req.query.issuerStatus,
+        hodStatus: req.query.hodStatus,
+        qhsseStatus: req.query.qhsseStatus,
+        assignedTo: req.query.assignedTo,
+        entryDate: req.query.entryDate,
+        exitDate: req.query.exitDate,
+        department: req.query.department,
+        page: parseInt(req.query.page) || 1,
+        limit: parseInt(req.query.limit) || 10
+      };
+  
+      // Normalize user data
+      const user = {
+        userId: req.user.userId,
+        roleId: req.user.roleId ? req.user.roleId.trim() : null,
+        departmentId: req.user.departmentId ? req.user.departmentId.trim() : null
+      };
+  
+      const result = await permitModel.searchPTW(searchParams, user);
+  
+      if (result.success) {
+        // If the search was successful but returned no results
+        if (result.data.length === 0) {
+          return res.json({
+            success: false,
+            message: searchParams.permitId || searchParams.jobPermitId ? 
+              'Permit not found' : 
+              'No permits found matching your search criteria',
+            data: [],
+            total: 0,
+            totalPages: 0,
+            currentPage: searchParams.page
+          });
+        }
+  
+        res.json({
+          success: true,
+          data: result.data,
+          total: result.total,
+          totalPages: result.totalPages,
+          currentPage: searchParams.page
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: result.error || 'An error occurred while searching permits'
+        });
+      }
+    } catch (error) {
+      console.error('Error in searchPTW controller:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  },
+
   async completePermitToWork(req, res) {
     const { permitToWorkId } = req.params;
     const { stage, remarks } = req.body;
@@ -738,7 +806,219 @@ async approvePermitToWork(req, res) {
         message: error.message || 'Failed to complete permit'
       });
     }
+},
+
+
+
+//PERMIT REVOCATION PHASE
+async initiateRevocation(req, res) {
+  const pool = await poolPromise;
+  const transaction = await pool.transaction();
+
+  try {
+    const { permits, reason } = req.body;
+    
+    if (!permits || !permits.length || !reason) {
+      return res.status(400).json({ 
+        message: 'Permits and reason are required' 
+      });
+    }
+
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ 
+        message: 'User not authenticated' 
+      });
+    }
+
+    // Check user permission
+    const hasPermission = await permitModel.checkUserPermissionForRevocation(
+      req.user.userId,
+      req.user.role
+    );
+
+    if (!hasPermission) {
+      return res.status(403).json({
+        message: 'User does not have permission to initiate revocation'
+      });
+    }
+
+    await transaction.begin();
+
+    const results = await Promise.all(permits.map(async permit => {
+      if (permit.type === 'job') {
+        return permitModel.initiateJobPermitRevocation(
+          permit.id,
+          reason,
+          req.user.userId,
+          transaction
+        );
+      } else {
+        return permitModel.initiatePermitToWorkRevocation(
+          permit.id,
+          reason,
+          req.user.userId,
+          transaction
+        );
+      }
+    }));
+
+    // Check if all operations were successful
+    if (results.some(result => result === 0)) {
+      await transaction.rollback();
+      return res.status(404).json({
+        message: 'One or more permits not found or already revoked'
+      });
+    }
+
+    await transaction.commit();
+
+    const isQHSSE = req.user.role === 'QA';
+    res.json({
+      message: isQHSSE ? 
+        'Selected permits have been revoked' : 
+        'Revocation request has been initiated and pending QHSSE approval'
+    });
+
+  } catch (error) {
+    if (transaction._begun) {
+      await transaction.rollback();
+    }
+    console.error('Error initiating revocation:', error);
+    res.status(500).json({
+      message: 'Error initiating revocation',
+      error: error.message
+    });
+  }
+},
+
+async getPendingRevocations(req, res) {
+  const pool = await poolPromise;
+  
+  try {
+    if (!req.user || !req.user.userId || req.user.role !== 'QA') {
+      return res.status(403).json({ 
+        message: 'Only QHSSE/QA users can view pending revocations' 
+      });
+    }
+
+    // Query both JobPermits and PermitToWork tables for pending revocations
+    const result = await pool.request().query(`
+      -- Get Job Permits pending revocation
+      SELECT 
+        'job' as type,
+        jp.JobPermitID as id,
+        jp.JobDescription,
+        jp.Department,
+        jp.JobLocation,
+        jp.Status,
+        jp.RevocationInitiatedDate,
+        jp.RevocationReason,
+        u.UserName as InitiatedBy
+      FROM JobPermits jp
+      LEFT JOIN Users u ON jp.RevocationInitiatedBy = u.UserID
+      WHERE jp.Status = 'Revocation Pending'
+
+      UNION ALL
+
+      -- Get Permit to Work records pending revocation
+      SELECT 
+        'work' as type,
+        ptw.PermitToWorkID as id,
+        jp.JobDescription,
+        jp.Department,
+        jp.JobLocation,
+        ptw.Status,
+        ptw.RevocationInitiatedDate,
+        ptw.RevocationReason,
+        u.UserName as InitiatedBy
+      FROM PermitToWork ptw
+      JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+      LEFT JOIN Users u ON ptw.RevocationInitiatedBy = u.UserID
+      WHERE ptw.Status = 'Revocation Pending'
+      ORDER BY RevocationInitiatedDate DESC
+    `);
+
+    res.json(result.recordset);
+
+  } catch (error) {
+    console.error('Error fetching pending revocations:', error);
+    res.status(500).json({
+      message: 'Error fetching pending revocations',
+      error: error.message
+    });
+  }
+},
+
+async approveRevocation(req, res) {
+  const pool = await poolPromise;
+  const transaction = await pool.transaction();
+
+  try {
+    const { permits, status, comments } = req.body;
+
+    if (!permits || !permits.length || !status) {
+      return res.status(400).json({ 
+        message: 'Permits and status are required' 
+      });
+    }
+
+    if (!req.user || !req.user.userId || req.user.role !== 'QA') {
+      return res.status(403).json({ 
+        message: 'Only QHSSE/QA users can approve revocations' 
+      });
+    }
+
+    await transaction.begin();
+
+    try {
+      await Promise.all(permits.map(async permit => {
+        return permitModel.approveRevocation(
+          permit.id,
+          permit.type === 'job',
+          status,
+          comments,
+          req.user.userId,
+          transaction
+        );
+      }));
+
+      await transaction.commit();
+
+      const statusMessage = status === 'Approved' 
+        ? 'Permit has been revoked successfully'
+        : 'Revocation request has been rejected, permit restored to approved state';
+
+      res.json({
+        message: statusMessage
+      });
+
+    } catch (error) {
+      await transaction.rollback();
+      
+      if (error.message.includes('not in a valid state')) {
+        return res.status(400).json({
+          message: 'Permit is not in a valid state for revocation'
+        });
+      }
+      
+      if (error.message.includes('not found')) {
+        return res.status(404).json({
+          message: 'Permit not found'
+        });
+      }
+
+      throw error; // Re-throw other errors to be caught by outer catch block
+    }
+
+  } catch (error) {
+    console.error('Error processing revocation:', error);
+    res.status(500).json({
+      message: 'Error processing revocation',
+      error: error.message
+    });
+  }
 }
+
 };
 
 module.exports = permitController;

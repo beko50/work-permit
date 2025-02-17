@@ -90,34 +90,55 @@ const JobsMonitoring = () => {
     });
   };
 
+  const getSelectedPermitNumbers = () => {
+    return permits
+      .filter(permit => selectedPermits.includes(permit.PermitToWorkID))
+      .map(permit => `PTW-${String(permit.PermitToWorkID).padStart(4, '0')}`)
+      .join(', ');
+  };
+
+  const handleModalClose = () => {
+    setShowRevokeModal(false);
+    setError(null);
+    setRevokeReason('');
+    fetchPermits(); // Refresh the table data
+  };
+
   const handleRevoke = () => {
+    setError(null); // Clear any existing errors
     setShowRevokeModal(true);
   };
 
-  const handleRevokeSubmit = () => {
+  const handleRevokeSubmit = async () => {
     if (revokeReason.trim().length < 10) {
       setError('Reason must be at least 10 characters long');
       return;
     }
-    setError(null);
+
+    // Show confirmation dialog
     setShowConfirmation(true);
   };
 
   const handleConfirmRevoke = async () => {
     try {
       setIsSubmitting(true);
-      const response = await api.revokePermits(selectedPermits, revokeReason);
+      const permitsToRevoke = selectedPermits.map(permitId => ({
+        id: permitId,
+        type: 'work' // Indicates Permit to Work
+      }));
+
+      const response = await api.revokePermits(permitsToRevoke, revokeReason);
       if (response.success) {
         setShowRevokeModal(false);
         setShowConfirmation(false);
         setSelectedPermits([]);
         setRevokeReason('');
-        fetchPermits();
+        fetchPermits(); // Refresh the list
       } else {
-        setError('Failed to revoke permits');
+        setError(response.error || 'Failed to revoke permits');
       }
     } catch (err) {
-      setError('Error revoking permits');
+      setError('Error revoking permits: ' + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -143,38 +164,38 @@ const JobsMonitoring = () => {
 
   const getFilteredPermits = () => {
     if (!currentUser) return [];
-
+  
     const currentUserRole = currentUser.roleId;
     const isQHSSE = currentUserRole === 'QA';
     const isIssuer = currentUserRole === 'ISS';
     const isHOD = currentUserRole === 'HOD';
-
+  
     return permits.filter(permit => {
-      // Check if user has any kind of access
       if (!hasViewAccess()) return false;
-
-      // For HOD, only show permits from their department
       if (isHOD && !isInUserDepartment(permit)) return false;
-
+  
       switch (currentTab) {
         case 'ongoing':
           return permit.Status === 'Approved' && 
                  (!permit.CompletionStatus || 
                   permit.CompletionStatus === 'In Progress');
-
+  
         case 'completed':
           return permit.CompletionStatus === 'Job Completed';
-
+  
         case 'revoked':
-          return ['Revoked'].includes(permit.Status);
-
+          return permit.Status === 'Revoked';
+  
         default:
           return false;
       }
     });
   };
 
-  const getStatusColor = (status, completionStatus) => {
+  const getStatusColor = (status, completionStatus, currentTab) => {
+    if (currentTab === 'revoked') {
+      return 'text-gray-500';
+    }
     switch (completionStatus?.toLowerCase()) {
       case 'job completed':
         return 'text-green-500';
@@ -189,16 +210,19 @@ const JobsMonitoring = () => {
   };
 
   const getDisplayStatus = (status, completionStatus, currentTab) => {
+    if (status === 'Revoked') {
+      return 'REVOKED';
+    }
     if (completionStatus === 'In Progress') {
       return 'ONGOING';
     }
     if (completionStatus === 'Job Completed') {
       return 'COMPLETED';
     }
-    if (['Revoked', 'Rejected'].includes(status)) {
-      return status.toUpperCase();
+    if (status === 'Rejected') {
+      return 'REJECTED';
     }
-    return 'ONGOING'; // Default case
+    return 'ONGOING';
   };
 
   const filteredPermits = getFilteredPermits();
@@ -252,10 +276,10 @@ const JobsMonitoring = () => {
     <Table>
       <TableHead>
         <TableRow>
-          {canRevokePermits() && (
+          {canRevokePermits() && currentTab === 'ongoing' && (
             <TableCell className="w-12">
-            <Checkbox disabled />
-          </TableCell>
+              <Checkbox disabled />
+            </TableCell>
           )}
           <TableCell className="text-base font-medium">Actions</TableCell>
           <TableCell className="text-base font-medium">Permit ID</TableCell>
@@ -267,55 +291,55 @@ const JobsMonitoring = () => {
         </TableRow>
       </TableHead>
       <TableBody>
-        {filteredPermits.length > 0 ? (
-          filteredPermits.map((permit) => (
-            <TableRow key={permit.PermitToWorkID}>
-              {canRevokePermits() && (
+          {filteredPermits.length > 0 ? (
+            filteredPermits.map((permit) => (
+              <TableRow key={permit.PermitToWorkID}>
+                {canRevokePermits() && currentTab === 'ongoing' && (
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedPermits.includes(permit.PermitToWorkID)}
+                      onCheckedChange={() => handleCheckboxChange(permit.PermitToWorkID)}
+                    />
+                  </TableCell>
+                )}
                 <TableCell>
-                  <Checkbox
-                    checked={selectedPermits.includes(permit.PermitToWorkID)}
-                    onCheckedChange={() => handleCheckboxChange(permit.PermitToWorkID)}
-                  />
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleView(permit)}
+                    className="inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-medium"
+                  >
+                    <Eye size={14} className="mr-1" /> View
+                  </Button>
                 </TableCell>
-              )}
-              <TableCell>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => handleView(permit)}
-                  className="inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-medium"
-                >
-                  <Eye size={14} className="mr-1" /> View
-                </Button>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span>PTW-{String(permit.PermitToWorkID).padStart(4, '0')}</span>
+                    <span className={getStatusColor(permit.Status, permit.CompletionStatus, currentTab)}>
+                      {currentTab === 'completed' 
+                        ? 'Job Completed' 
+                        : currentTab === 'ongoing' 
+                          ? 'In Progress'
+                          : permit.Status}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>{permit.PermitReceiver}</TableCell>
+                <TableCell>{permit.JobLocation}</TableCell>
+                <TableCell>{formatDate(permit.EntryDate)}</TableCell>
+                <TableCell>{formatDate(permit.ExitDate)}</TableCell>
+                <TableCell>{getDisplayStatus(permit.Status, permit.CompletionStatus, currentTab)}</TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              {canRevokePermits() && currentTab === 'ongoing' && <TableCell />}
+              <TableCell colSpan={7} className="text-center py-4">
+                No jobs found for this tab
               </TableCell>
-              <TableCell>
-                <div className="flex flex-col">
-                  <span>PTW-{String(permit.PermitToWorkID).padStart(4, '0')}</span>
-                  <span className={getStatusColor(permit.Status, permit.CompletionStatus)}>
-                  {currentTab === 'completed' 
-                    ? 'Job Completed' 
-                    : currentTab === 'ongoing' 
-                      ? 'In Progress'
-                      : permit.Status}
-                </span>
-                </div>
-              </TableCell>
-              <TableCell>{permit.PermitReceiver}</TableCell>
-              <TableCell>{permit.JobLocation}</TableCell>
-              <TableCell>{formatDate(permit.EntryDate)}</TableCell>
-              <TableCell>{formatDate(permit.ExitDate)}</TableCell>
-              <TableCell>{getDisplayStatus(permit.Status, permit.CompletionStatus, currentTab)}</TableCell>
             </TableRow>
-          ))
-        ) : (
-          <TableRow>
-            {canRevokePermits() && <TableCell />}
-            <TableCell colSpan={7} className="text-center py-4">
-              No jobs found for this tab
-            </TableCell>
-          </TableRow>
-        )}
-      </TableBody>
+          )}
+        </TableBody>
     </Table>
   )}
   
@@ -341,8 +365,8 @@ const JobsMonitoring = () => {
                    </CardHeader>
 
             <div className="px-6 py-2 border-b">
-              <p className="text-sm text-gray-500">
-                Selected Permits: {selectedPermits.length} {selectedPermits.length === 1 ? 'permit' : 'permits'}
+              <p className="text-sm text-gray-600">
+              Selected Permits: {getSelectedPermitNumbers()}
               </p>
             </div>
 
@@ -365,7 +389,7 @@ const JobsMonitoring = () => {
             </CardContent>
 
             <CardFooter className="flex justify-end gap-4">
-              <Button variant="outline" onClick={() => setShowRevokeModal(false)}>
+              <Button variant="outline" onClick={handleModalClose}>
                 Cancel
               </Button>
               <Button 
@@ -382,33 +406,31 @@ const JobsMonitoring = () => {
 
       {/* Confirmation Dialog */}
       {showConfirmation && (
-        <Dialog
-          isOpen={showConfirmation}
-          onClose={() => !isSubmitting && setShowConfirmation(false)}
-          title="Confirm Permit Revocation"
-        >
-          <div className="text-center">
-            <p className="mb-4 text-gray-700">
-              Are you sure you want to initiate the revoking process for {selectedPermits.length} {selectedPermits.length === 1 ? 'permit' : 'permits'}?
-            </p>
-            <div className="flex justify-center space-x-4">
-              <Button 
-                variant="outline"
-                onClick={() => setShowConfirmation(false)}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button 
-                variant="destructive"
-                onClick={handleConfirmRevoke}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? 'Revoking...' : 'Confirm Revoke'}
-              </Button>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md p-6">
+            <div className="text-center">
+              <p className="mb-4 text-gray-700">
+                Are you sure you want to revoke the following permits: {getSelectedPermitNumbers()}?
+              </p>
+              <div className="flex justify-center space-x-4">
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowConfirmation(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={handleConfirmRevoke}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Revoking...' : 'Confirm Revoke'}
+                </Button>
+              </div>
             </div>
-          </div>
-        </Dialog>
+          </Card>
+        </div>
       )}
     </div>
   );

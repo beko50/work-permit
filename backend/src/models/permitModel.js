@@ -110,9 +110,9 @@ const permitModel = {
     const userRole = user.role ? user.role.trim() : null;
     const userDepartmentId = user.departmentId ? user.departmentId.trim() : null;
   
-    // For QA role - only see permits assigned to QA
-    if (userRole === 'QA') {
-      query += ` AND jp.AssignedTo = 'QA'`;
+    // For QA role - see permits assigned to QA and all Revocation Pending permits
+    if (userRole === 'QA' || userDepartmentId === 'QHSSE') {
+      query += ` AND (jp.AssignedTo = 'QA' OR jp.Status = 'Revocation Pending')`;
     }
     // For QHSSE department - see ALL permits without any department filter
     else if (userDepartmentId === 'QHSSE') {
@@ -282,7 +282,7 @@ const permitModel = {
       // Add sorting and pagination
       const offset = (searchParams.page - 1) * searchParams.limit;
       query += `
-        ORDER BY p.Created DESC
+        ORDER BY p.Changed DESC
         OFFSET ${offset} ROWS
         FETCH NEXT ${searchParams.limit} ROWS ONLY
       `;
@@ -356,14 +356,28 @@ async getPermitById(permitId) {
           p.QHSSEComments,
           p.QHSSEApprovedBy,
           p.QHSSEApprovedDate,
+          -- Revocation data
+          p.RevocationInitiatedBy,
+          p.RevocationInitiatedDate,
+          p.RevocationReason,
+          p.RevocationApprovedBy,
+          p.RevocationApprovedDate,
+          p.RevocationComments,
+          p.QHSSERevocationStatus,
           -- Get approver names
           CONCAT(issuer.FirstName, ' ', issuer.LastName) as IssuerApproverName,
           CONCAT(hod.FirstName, ' ', hod.LastName) as HODApproverName,
-          CONCAT(qa.FirstName, ' ', qa.LastName) as QHSSEApproverName
+          CONCAT(qa.FirstName, ' ', qa.LastName) as QHSSEApproverName,
+          -- Get revocation initiator name
+          CONCAT(revInitiator.FirstName, ' ', revInitiator.LastName) as RevocationInitiatedByName,
+          -- Get revocation approver name
+          CONCAT(revApprover.FirstName, ' ', revApprover.LastName) as RevocationApprovedByName
         FROM JobPermits p
         LEFT JOIN Users issuer ON p.IssuerApprovedBy = issuer.UserID
         LEFT JOIN Users hod ON p.HODApprovedBy = hod.UserID
         LEFT JOIN Users qa ON p.QHSSEApprovedBy = qa.UserID
+        LEFT JOIN Users revInitiator ON p.RevocationInitiatedBy = revInitiator.UserID
+        LEFT JOIN Users revApprover ON p.RevocationApprovedBy = revApprover.UserID
         WHERE p.JobPermitID = @permitId;
 
         -- First, get all unique sections that have selected checkboxes
@@ -588,11 +602,15 @@ async getPermitToWorkById(permitToWorkId) {
           jp.PermitReceiver,
           jp.NumberOfWorkers,
           jp.WorkersNames,
+          -- Approver names
           CONCAT(issuer.FirstName, ' ', issuer.LastName) as IssuerApproverName,
           CONCAT(hod.FirstName, ' ', hod.LastName) as HODApproverName,
           CONCAT(qa.FirstName, ' ', qa.LastName) as QHSSEApproverName,
           CONCAT(issuerCompleter.FirstName, ' ', issuerCompleter.LastName) as IssuerCompleterName,
-          CONCAT(qaCompleter.FirstName, ' ', qaCompleter.LastName) as QHSSECompleterName
+          CONCAT(qaCompleter.FirstName, ' ', qaCompleter.LastName) as QHSSECompleterName,
+          -- Revocation details
+          CONCAT(revInitiator.FirstName, ' ', revInitiator.LastName) as RevocationInitiatedByName,
+          CONCAT(revApprover.FirstName, ' ', revApprover.LastName) as RevocationApprovedByName
         FROM PermitToWork ptw
         INNER JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
         LEFT JOIN Users issuer ON ptw.IssuerApprovedBy = issuer.UserID
@@ -600,6 +618,8 @@ async getPermitToWorkById(permitToWorkId) {
         LEFT JOIN Users qa ON ptw.QHSSEApprovedBy = qa.UserID
         LEFT JOIN Users issuerCompleter ON ptw.IssuerCompletedBy = issuerCompleter.UserID
         LEFT JOIN Users qaCompleter ON ptw.QHSSECompletedBy = qaCompleter.UserID
+        LEFT JOIN Users revInitiator ON ptw.RevocationInitiatedBy = revInitiator.UserID
+        LEFT JOIN Users revApprover ON ptw.RevocationApprovedBy = revApprover.UserID
         WHERE ptw.PermitToWorkID = @permitToWorkId
       `);
     
@@ -631,6 +651,16 @@ async getPermitToWorkById(permitToWorkId) {
         QHSSEComments: permit.QHSSEComments,
         QHSSEApproverName: permit.QHSSEApproverName,
         QHSSEApprovedDate: permit.QHSSEApprovedDate,
+        // Revocation details
+        RevocationInitiatedBy: permit.RevocationInitiatedBy,
+        RevocationInitiatedByName: permit.RevocationInitiatedByName,
+        RevocationInitiatedDate: permit.RevocationInitiatedDate,
+        RevocationReason: permit.RevocationReason,
+        RevocationApprovedBy: permit.RevocationApprovedBy,
+        RevocationApprovedByName: permit.RevocationApprovedByName,
+        RevocationApprovedDate: permit.RevocationApprovedDate,
+        RevocationComments: permit.RevocationComments,
+        QHSSERevocationStatus: permit.QHSSERevocationStatus,
         // Completion details
         IssuerCompletionStatus: permit.IssuerCompletionStatus,
         IssuerCompletionDate: permit.IssuerCompletionDate,
@@ -869,6 +899,138 @@ async verifyPermitStatus(permitToWorkId, transaction) {
   return result.recordset[0];
 },
 
+async searchPTW(searchParams, user) {
+  const pool = await poolPromise;
+  const request = pool.request();
+
+  try {
+    let query = `
+      SELECT 
+        p.*,
+        CONCAT(u.FirstName, ' ', u.LastName) as CreatorName,
+        u.DepartmentID as CreatorDepartment,
+        d.DepartmentName,
+        jp.Department as JobPermitDepartment,
+        COUNT(*) OVER() as TotalCount
+      FROM PermitToWork p
+      LEFT JOIN Users u ON p.Creator = u.UserID
+      LEFT JOIN Departments d ON RTRIM(u.DepartmentID) = RTRIM(d.DepartmentID)
+      LEFT JOIN JobPermits jp ON p.JobPermitID = jp.JobPermitID
+      WHERE 1=1
+    `;
+
+    // Department-based filtering logic - aligned with searchPermits
+    if (user.roleId === 'QA' || user.departmentId === 'QHSSE') {
+      // QA and QHSSE see all permits
+    } else if (user.departmentId === 'ASM' || user.departmentId === 'OPS' || user.departmentId === 'IT') {
+      // ASM, OPS, and IT see their department permits
+      query += ` AND (
+        jp.Department = @departmentId 
+        OR jp.Department IN (
+          SELECT DepartmentName 
+          FROM Departments 
+          WHERE DepartmentID = @departmentId
+        )
+      )`;
+      request.input('departmentId', sql.VarChar(50), user.departmentId);
+    } else {
+      // Other users only see their own permits
+      query += ` AND p.Creator = @userId`;
+      request.input('userId', sql.Int, user.userId);
+    }
+
+    // Add search filters
+    if (searchParams.permitId) {
+      query += ` AND p.PermitToWorkID = @permitId`;
+      request.input('permitId', sql.Int, searchParams.permitId);
+    }
+
+    if (searchParams.jobPermitId) {
+      query += ` AND p.JobPermitID = @jobPermitId`;
+      request.input('jobPermitId', sql.VarChar(50), searchParams.jobPermitId);
+    }
+
+    if (searchParams.status) {
+      query += ` AND p.Status = @status`;
+      request.input('status', sql.VarChar(50), searchParams.status);
+    }
+
+    if (searchParams.issuerStatus) {
+      query += ` AND p.IssuerStatus = @issuerStatus`;
+      request.input('issuerStatus', sql.VarChar(50), searchParams.issuerStatus);
+    }
+
+    if (searchParams.hodStatus) {
+      query += ` AND p.HODStatus = @hodStatus`;
+      request.input('hodStatus', sql.VarChar(50), searchParams.hodStatus);
+    }
+
+    if (searchParams.qhsseStatus) {
+      query += ` AND p.QHSSEStatus = @qhsseStatus`;
+      request.input('qhsseStatus', sql.VarChar(50), searchParams.qhsseStatus);
+    }
+
+    if (searchParams.assignedTo) {
+      query += ` AND p.AssignedTo = @assignedTo`;
+      request.input('assignedTo', sql.VarChar(50), searchParams.assignedTo);
+    }
+
+    if (searchParams.entryDate) {
+      query += ` AND CAST(p.EntryDate AS DATE) = @entryDate`;
+      request.input('entryDate', sql.Date, new Date(searchParams.entryDate));
+    }
+
+    if (searchParams.exitDate) {
+      query += ` AND CAST(p.ExitDate AS DATE) = @exitDate`;
+      request.input('exitDate', sql.Date, new Date(searchParams.exitDate));
+    }
+
+    // Add department filter if provided
+    if (searchParams.department) {
+      query += ` AND (
+        jp.Department = @filterDepartment 
+        OR jp.Department IN (
+          SELECT DepartmentName 
+          FROM Departments 
+          WHERE DepartmentID = @filterDepartment
+        )
+      )`;
+      request.input('filterDepartment', sql.VarChar(50), searchParams.department);
+    }
+
+    // Add sorting and pagination
+    const offset = (searchParams.page - 1) * searchParams.limit;
+    query += `
+      ORDER BY p.Created DESC
+      OFFSET ${offset} ROWS
+      FETCH NEXT ${searchParams.limit} ROWS ONLY
+    `;
+
+    console.log('Executing PTW search query:', {
+      user,
+      searchParams,
+      query
+    });
+
+    const result = await request.query(query);
+    const totalCount = result.recordset[0]?.TotalCount || 0;
+
+    return {
+      success: true,
+      data: result.recordset,
+      total: totalCount,
+      totalPages: Math.ceil(totalCount / searchParams.limit),
+      currentPage: searchParams.page
+    };
+  } catch (error) {
+    console.error('Error in searchPTW:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+},
+
 async completePermitToWork(permitToWorkId, completionData, userId, transaction) {
   const { stage, remarks } = completionData;
 
@@ -945,6 +1107,191 @@ async completePermitToWork(permitToWorkId, completionData, userId, transaction) 
       `);
     return result.rowsAffected[0];
   } */
-};
 
+
+
+//REVOCATION PROCESS
+async checkUserPermissionForRevocation(userId, role) {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('userId', sql.Int, userId)
+      .query(`
+        SELECT RoleID 
+        FROM Users 
+        WHERE UserID = @userId AND (RoleID = 'ISS' OR RoleID = 'QA')
+      `);
+    
+    return result.recordset.length > 0;
+  },
+  
+  async initiatePermitToWorkRevocation(permitToWorkId, reason, userId, transaction) {
+    const result = await transaction.request()
+      .input('permitToWorkId', sql.Int, permitToWorkId)
+      .input('userId', sql.Int, userId)
+      .input('reason', sql.NVarChar(sql.MAX), reason)
+      .query(`
+        UPDATE PermitToWork
+        SET Status = CASE 
+              WHEN (SELECT RoleID FROM Users WHERE UserID = @userId) = 'QA' 
+              THEN 'Revoked'
+              ELSE 'Revocation Pending'
+            END,
+            RevocationInitiatedBy = @userId,
+            RevocationInitiatedDate = GETDATE(),
+            RevocationReason = @reason,
+            RevocationApprovedBy = CASE 
+              WHEN (SELECT RoleID FROM Users WHERE UserID = @userId) = 'QA' 
+              THEN @userId
+              ELSE NULL
+            END,
+            RevocationApprovedDate = CASE 
+              WHEN (SELECT RoleID FROM Users WHERE UserID = @userId) = 'QA' 
+              THEN GETDATE()
+              ELSE NULL
+            END,
+            Changed = GETDATE(),
+            Changer = @userId
+        WHERE PermitToWorkID = @permitToWorkId;
+      `);
+    
+    return result.rowsAffected[0];
+  },
+
+  async initiateJobPermitRevocation(jobPermitId, reason, userId, transaction) {
+    // First get the user's role
+    const userRole = await transaction.request()
+        .input('userId', sql.Int, userId)
+        .query(`SELECT RoleID FROM Users WHERE UserID = @userId`);
+    
+    const isQHSSE = userRole.recordset[0]?.RoleID === 'QA';
+
+    const result = await transaction.request()
+        .input('jobPermitId', sql.Int, jobPermitId)
+        .input('userId', sql.Int, userId)
+        .input('reason', sql.NVarChar(sql.MAX), reason)
+        .input('isQHSSE', sql.Bit, isQHSSE ? 1 : 0)  // Add this line
+        .query(`
+            UPDATE JobPermits 
+            SET 
+                Status = CASE 
+                    WHEN @isQHSSE = 1 THEN 'Revoked' 
+                    ELSE 'Revocation Pending' 
+                END,
+                RevocationInitiatedBy = @userId,
+                RevocationInitiatedDate = GETDATE(),
+                RevocationReason = @reason,
+                Changed = GETDATE(),
+                Changer = @userId
+            WHERE JobPermitID = @jobPermitId;
+        `);
+
+    return result.rowsAffected[0];
+},
+
+async approveRevocation(permitId, isJobPermit, status, comments, userId, transaction) {
+  if (isJobPermit) {
+    // Job Permit revocation logic remains the same
+    const result = await transaction.request()
+      .input('permitId', sql.Int, permitId)
+      .input('userId', sql.Int, userId)
+      .input('status', sql.VarChar(50), status)
+      .input('comments', sql.NVarChar(sql.MAX), comments)
+      .query(`
+        BEGIN TRANSACTION;
+        
+        -- Update the Job Permit
+        UPDATE JobPermits
+        SET Status = CASE 
+              WHEN @status = 'Approved' THEN 'Revoked'     
+              WHEN @status = 'Rejected' THEN 'Approved'    
+              ELSE Status
+            END,
+            QHSSERevocationStatus = @status,              
+            RevocationApprovedBy = @userId,
+            RevocationApprovedDate = GETDATE(),
+            RevocationComments = @comments,
+            Changed = GETDATE(),
+            Changer = @userId
+        WHERE JobPermitID = @permitId;
+
+        -- Update all related Permits to Work when approved
+        IF @status = 'Approved'
+        BEGIN
+          UPDATE PermitToWork
+          SET Status = 'Revoked',
+              QHSSERevocationStatus = 'Approved',
+              RevocationApprovedBy = @userId,
+              RevocationApprovedDate = GETDATE(),
+              RevocationComments = CONCAT('Automatically revoked due to Job Permit ', @permitId, ' revocation. ', @comments),
+              Changed = GETDATE(),
+              Changer = @userId,
+              RevocationInitiatedBy = @userId,
+              RevocationInitiatedDate = GETDATE(),
+              RevocationReason = CONCAT('Job Permit ', @permitId, ' was revoked')
+          WHERE JobPermitID = @permitId
+          AND Status IN ('Pending', 'Approved', 'Revocation Pending');
+        END
+        ELSE IF @status = 'Rejected'
+        BEGIN
+          UPDATE PermitToWork
+          SET Status = 'Approved',
+              QHSSERevocationStatus = @status,
+              RevocationApprovedBy = @userId,
+              RevocationApprovedDate = GETDATE(),
+              RevocationComments = @comments,
+              Changed = GETDATE(),
+              Changer = @userId
+          WHERE JobPermitID = @permitId
+          AND Status = 'Revocation Pending';
+        END
+
+        COMMIT TRANSACTION;
+      `);
+
+    return result.rowsAffected[0];
+  } else {
+    // Modified Permit to Work revocation logic
+    const result = await transaction.request()
+      .input('permitId', sql.Int, permitId)
+      .input('userId', sql.Int, userId)
+      .input('status', sql.VarChar(50), status)
+      .input('comments', sql.NVarChar(sql.MAX), comments)
+      .query(`
+        -- First check if the permit exists and can be revoked
+        DECLARE @currentStatus VARCHAR(50)
+        SELECT @currentStatus = Status 
+        FROM PermitToWork 
+        WHERE PermitToWorkID = @permitId;
+
+        IF @currentStatus IS NULL
+          THROW 50001, 'Permit not found', 1;
+        
+        -- Proceed with the update if permit exists
+        UPDATE PermitToWork
+        SET Status = CASE 
+              WHEN @status = 'Approved' THEN 'Revoked'
+              WHEN @status = 'Rejected' THEN 'Approved'
+              ELSE Status
+            END,
+            QHSSERevocationStatus = @status,
+            RevocationApprovedBy = @userId,
+            RevocationApprovedDate = GETDATE(),
+            RevocationComments = @comments,
+            Changed = GETDATE(),
+            Changer = @userId
+        WHERE PermitToWorkID = @permitId
+        AND Status IN ('Pending', 'Approved', 'Revocation Pending');
+
+        SELECT @@ROWCOUNT as AffectedRows;
+      `);
+
+    if (result.recordset[0].AffectedRows === 0) {
+      throw new Error(`Permit ${permitId} is not in a valid state for revocation`);
+    }
+
+    return result.recordset[0].AffectedRows;
+  }
+}
+
+};
 module.exports = permitModel;

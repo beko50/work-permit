@@ -5,6 +5,7 @@ import { Button } from './components/ui/button';
 import { X, Check, Clock, AlertTriangle,Eye } from 'lucide-react';
 import { api } from './services/api';
 import logo from './assets/mps_logo.jpg';
+import PermitRevocation from './components/ui/Revocation';
 
 const SubmittedPTW = () => {
   const { permitToWorkId } = useParams();
@@ -13,6 +14,8 @@ const SubmittedPTW = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [approvals, setApprovals] = useState([]);
+  const [revocationData, setRevocationData] = useState(null);
+    const [currentUser, setCurrentUser] = useState(null);
 
   const formatDate = (dateString, dateOnly = false) => {
     if (!dateString) return '';
@@ -27,7 +30,6 @@ const SubmittedPTW = () => {
           hour12: true
         });
   };
-  
 
   const getStatusBadge = (status) => {
     switch (status?.toLowerCase()) {
@@ -52,24 +54,46 @@ const SubmittedPTW = () => {
             Rejected
           </div>
         );
+      case 'revoked':
+        return (
+          <div className="inline-flex items-center px-3 py-1 bg-gray-700 text-white rounded-full text-sm">
+            <X size={16} className="mr-1" />
+            Revoked
+          </div>
+        );
       default:
         return null;
     }
   };
 
   useEffect(() => {
-      const fetchPTWDetails = async () => {
-        try {
-          setLoading(true);
-          // Change this to use getPermitToWorkById instead
-          const response = await api.getPermitToWorkById(permitToWorkId);
-          
-          if (response.success && response.data?.permit) {
-            setPtw({
-              ...response.data.permit,
-              jobPermit: response.data.jobPermit
-            });
-          
+    const fetchPTWDetails = async () => {
+      try {
+        setLoading(true);
+        const response = await api.getPermitToWorkById(permitToWorkId);
+
+        if (response.success && response.data?.permit) {
+          setPtw({
+            ...response.data.permit,
+            jobPermit: response.data.jobPermit
+          });
+
+          // Check if revocation data exists
+          if (response.data.permit.RevocationInitiatedBy || 
+            response.data.permit.Status === 'Revocation Pending' || 
+            response.data.permit.Status === 'Revoked') {
+          setRevocationData({
+            RevocationInitiatedBy: response.data.permit.RevocationInitiatedByName || 
+                                  `User ID: ${response.data.permit.RevocationInitiatedBy}`,
+            RevocationInitiatedDate: response.data.permit.RevocationInitiatedDate,
+            RevocationReason: response.data.permit.RevocationReason,
+            RevocationApprovedBy: response.data.permit.RevocationApprovedByName,
+            RevocationApprovedDate: response.data.permit.RevocationApprovedDate,
+            RevocationComments: response.data.permit.RevocationComments,
+            Status: response.data.permit.Status
+          });
+        }
+
           const workflowStages = [
             {
               title: "Permit Issuer",
@@ -149,7 +173,7 @@ const SubmittedPTW = () => {
                     <span className="font-bold">PTW ID:</span> PTW-{String(ptw.PermitToWorkID).padStart(4, '0')}
                   </p>
                   <p className="text-sm text-gray-500">
-                    <span className="font-bold">Job Permit ID:</span> 
+                    <span className="font-bold">Job Permit Document ID:</span> 
                     <Button 
                       variant="link" 
                       className="pl-1 text-blue-600 hover:underline"
@@ -160,7 +184,7 @@ const SubmittedPTW = () => {
                   </p>
                 </div>
                 <div>
-                <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500">
                     <span className="font-bold">Status:</span> {getStatusBadge(ptw.Status)}
                   </p>
                 </div>
@@ -169,11 +193,10 @@ const SubmittedPTW = () => {
           </Card>
 
           <Card className="shadow-sm">
-          <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Details</div>
-
+            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Details</div>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
-              <div>
+                <div>
                   <p className="font-semibold text-sm">Permit Receiver:</p>
                   <p className="text-gray-700 text-sm">{ptw.jobPermit.PermitReceiver}</p>
                 </div>
@@ -203,8 +226,7 @@ const SubmittedPTW = () => {
           </Card>
 
           <Card className="shadow-sm">
-          <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Work Duration</div>
-
+            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Work Duration</div>
             <CardContent>
               <div className="grid grid-cols-3 gap-4">
                 <div>
@@ -223,8 +245,20 @@ const SubmittedPTW = () => {
             </CardContent>
           </Card>
 
+          {revocationData && (
+            <PermitRevocation 
+              permitId={permitToWorkId}
+              revocationData={revocationData}
+              onRevocationProcessed={() => {
+                // Refresh the PTW details after revocation is processed
+                fetchPTWDetails();
+              }}
+              isQHSSEUser={currentUser?.roleId === 'QA'} // Pass the current user's role
+            />
+          )}
+
           <Card className="shadow-sm">
-          <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Approval Status</div>
+            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Approval Status</div>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -255,24 +289,24 @@ const SubmittedPTW = () => {
 
           {isFullyApproved && (
             <div className="text-sm text-gray-700 p-2 bg-gray-50 rounded">
-           This permit has been reviewed and approved by the necessary parties to proceed with the job described at 
-           <span className="font-bold"> {ptw.jobPermit.JobLocation}</span>,  
-           <span className="font-bold"> {ptw.jobPermit.SubLocation}</span> from 
-           <span className="font-bold"> {formatDate(ptw.EntryDate)}</span> to 
-           <span className="font-bold"> {formatDate(ptw.ExitDate)}</span>. 
-           All appropriate safety measures and precautions must be followed throughout the duration of work.
-         </div>
+              This permit has been reviewed and approved by the necessary parties to proceed with the job described at 
+              <span className="font-bold"> {ptw.jobPermit.JobLocation}</span>,  
+              <span className="font-bold"> {ptw.jobPermit.SubLocation}</span> from 
+              <span className="font-bold"> {formatDate(ptw.EntryDate)}</span> to 
+              <span className="font-bold"> {formatDate(ptw.ExitDate)}</span>. 
+              All appropriate safety measures and precautions must be followed throughout the duration of work.
+            </div>
           )}
 
-<div className="flex justify-end mt-4 gap-4">
-  <Button 
-    onClick={() => window.print()}
-    variant="secondary"
-    className="bg-gray-600 text-white hover:bg-gray-700"
-  >
-    Print
-  </Button>
-</div>
+          <div className="flex justify-end mt-4 gap-4">
+            <Button 
+              onClick={() => window.print()}
+              variant="secondary"
+              className="bg-gray-600 text-white hover:bg-gray-700"
+            >
+              Print
+            </Button>
+          </div>
         </div>
       </div>
     </div>

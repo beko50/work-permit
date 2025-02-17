@@ -7,6 +7,7 @@ import { api } from './services/api';
 import { toast } from 'sonner';
 import logo from './assets/mps_logo.jpg';
 import RiskAssessmentViewer from './components/ui/RiskAssessmentDocumentViewer';
+import PermitRevocation from './components/ui/Revocation';
 
 const sectionNameMapping = {
   'Permit Required': 'Permit Required',
@@ -30,6 +31,23 @@ const PermitReview = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [comments, setComments] = useState('');
+  const [revocationData, setRevocationData] = useState(null);
+  const [currentUserRole, setCurrentUserRole] = useState(null);
+
+  const handleRevocationProcessed = () => {
+    // Refresh permit data or navigate away
+    navigate('/dashboard/permits/job-permits');
+  };
+
+  // Fetch current user role from local storage
+  useEffect(() => {
+    const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
+    const userData = JSON.parse(savedData)?.user;
+    if (userData) {
+      // Compare directly with 'QA' instead of checking roleId
+      setCurrentUserRole(userData.roleId === 'QA' ? 'QA' : userData.roleId);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchPermitDetails = async () => {
@@ -41,6 +59,19 @@ const PermitReview = () => {
           const { permit, groupedCheckboxes } = permitResponse.data;
           setPermit(permit);
           setGroupedCheckboxes(groupedCheckboxes);
+
+          if (permit.RevocationInitiatedBy || permit.Status === 'Revocation Pending' || permit.Status === "Revoked") {
+            setRevocationData({
+              RevocationInitiatedBy: permit.RevocationInitiatedByName || `User ID: ${permit.RevocationInitiatedBy}`,
+              RevocationInitiatedDate: permit.RevocationInitiatedDate,
+              RevocationReason: permit.RevocationReason,
+              RevocationApprovedBy: permit.RevocationApprovedByName,
+              RevocationApprovedDate: permit.RevocationApprovedDate,
+              RevocationComments: permit.RevocationComments,
+              Status: permit.Status,
+              QHSSERevocationStatus: permit.QHSSERevocationStatus // Add this field
+            });
+          }
 
           // Updated workflow stages with approver details
           const workflowStages = [
@@ -177,7 +208,7 @@ const PermitReview = () => {
           <div className="grid grid-cols-2 gap-6 items-start">
                   <div>
                     <h2 className="font-bold text-l border-b pb-2 mb-3">Job Details</h2>
-                    <p className="text-base text-gray-700"><span className="font-bold">Permit ID:</span> JP-{String(permit.JobPermitID).padStart(4, '0')}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">Job Permit Document ID:</span> JP-{String(permit.JobPermitID).padStart(4, '0')}</p>
                     <p className="text-base text-gray-700"><span className="font-bold">Start Date:</span> {formatDate(permit.StartDate)}</p>
                     <p className="text-base text-gray-700"><span className="font-bold">End Date:</span> {formatDate(permit.EndDate)}</p>
                   </div>
@@ -254,83 +285,97 @@ const PermitReview = () => {
                       </CardContent>
                     </Card>
 
+                    <div className="mt-4"> {/* Adjust margin-top as needed */}
+                    <PermitRevocation
+                      permitId={permitId}
+                      revocationData={revocationData}
+                      onRevocationProcessed={() => navigate('/dashboard/permits/job-permits')}
+                      isQHSSEUser={currentUserRole === 'QA'}
+                    />
+                  </div>
+
           {/* Approval Workflow */}
           <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-4">Documentation Approval </h3>
-            <div className="relative">
-              <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
-              {approvals.map((approval, index) => (
-                <div key={index} className="relative pl-10 pb-6">
-                  <div 
-                    className={`absolute left-0 rounded-full border-2 w-6 h-6 transition-all duration-300
-                      ${approval.status === 'Approved' ? 'bg-green-500 border-green-500' : 
-                        approval.status === 'Rejected' ? 'bg-red-500 border-red-500' :
-                        approval.isCurrentApprover ? 'bg-blue-500 border-blue-500' : 
-                        'bg-gray-200 border-gray-300'}`}
-                  />
-                  <div className="border rounded-md p-4">
-                    <div className="mb-4">
-                      <h4 className="font-medium text-lg mb-2">{approval.title}</h4>
-                      {getStatusBadge(approval.status)}
-                    </div>
-
-                    {/* Show previous approver details */}
-                    {approval.status !== 'Pending' && (
-                      <div className="mb-4 text-sm">
-                        <p className="text-gray-600">
-                          Approver: {approval.approverName || 'Not yet approved'}
-                        </p>
-                        {approval.approvedDate && (
-                          <p className="text-gray-600">
-                            Date: {formatDate(approval.approvedDate)}
-                          </p>
-                        )}
-                        {approval.comments && (
-                          <div className="mt-2">
-                            <p className="text-gray-600">Comments:</p>
-                            <p className="bg-gray-50 p-2 rounded mt-1">{approval.comments}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Show approval actions only for current approver */}
-                    {approval.isCurrentApprover && (
-                      <>
-                        <div className="mb-4">
-                          <label className="block text-sm text-gray-600 mb-2">
-                            Approval Comments
-                          </label>
-                          <textarea 
-                            className="w-full border rounded-md p-2"
-                            rows="3"
-                            value={comments}
-                            onChange={(e) => setComments(e.target.value)}
-                            placeholder="Enter your comments here..."
-                          />
-                        </div>
-
-                        <div className="flex justify-end gap-3 mt-4">
-                          <Button 
-                            variant="danger" 
-                            onClick={() => handleApproval('Rejected')}
-                          >
-                            Reject
-                          </Button>
-                          <Button 
-                            variant="success" 
-                            onClick={() => handleApproval('Approved')}
-                          >
-                            Approve
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
+  <h3 className="text-lg font-semibold mb-4">Permit Documentation Approvals</h3>
+  <div className="relative">
+    <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
+    {approvals.map((approval, index) => (
+      <div key={index} className="relative pl-10 pb-6">
+        <div 
+          className={`absolute left-0 rounded-full border-2 w-5 h-5 transition-all duration-300
+            ${approval.status === 'Approved' ? 'bg-green-500 border-green-500' : 
+              approval.status === 'Rejected' ? 'bg-red-500 border-red-500' :
+              approval.isCurrentApprover ? 'bg-blue-500 border-blue-500' : 
+              'bg-gray-200 border-gray-300'}`}
+        />
+        <div className="border rounded-md p-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+            {/* Left column: Title and Status */}
+            <div>
+              <h4 className="font-medium text-base mb-1">{approval.title}</h4>
+              {getStatusBadge(approval.status)}
+            </div>
+            
+            {/* Right column: Approver and Date */}
+            <div className="text-sm text-gray-600">
+              <p>
+                <span className="font-medium">Approver:</span> {approval.approverName || 'Not yet approved'}
+              </p>
+              {approval.approvedDate && (
+                <p>
+                  <span className="font-medium">Date:</span> {formatDate(approval.approvedDate)}
+                </p>
+              )}
             </div>
           </div>
+          
+          {/* Comments section below both columns */}
+          {approval.comments && (
+            <div className="mt-2">
+              <p className="text-sm text-gray-600 mb-1">
+                <span className="font-medium">Comments:</span>
+              </p>
+              <p className="bg-gray-50 p-2 rounded text-sm">{approval.comments}</p>
+            </div>
+          )}
+
+          {/* Approval actions for current approver */}
+          {approval.isCurrentApprover && (
+            <>
+              <div className="mt-4">
+                <label className="block text-sm text-gray-600 mb-2">
+                  Approval Comments
+                </label>
+                <textarea 
+                  className="w-full border rounded-md p-2"
+                  rows="3"
+                  value={comments}
+                  onChange={(e) => setComments(e.target.value)}
+                  placeholder="Enter your comments here..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 mt-4">
+                <Button 
+                  variant="danger" 
+                  onClick={() => handleApproval('Rejected')}
+                >
+                  Reject
+                </Button>
+                <Button 
+                  variant="success" 
+                  onClick={() => handleApproval('Approved')}
+                >
+                  Approve
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
         </CardContent>
       </Card>
     </div>

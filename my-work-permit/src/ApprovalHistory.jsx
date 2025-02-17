@@ -9,14 +9,27 @@ import { api } from './services/api';
 import Checkbox from './components/ui/checkbox';
 import logo from './assets/mps_logo.jpg';
 
+const TabButton = ({ id, label, active, onClick }) => (
+  <button
+    onClick={() => onClick(id)}
+    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors
+      ${active 
+        ? 'bg-white border-t-2 border-blue-500 text-blue-600' 
+        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+  >
+    {label}
+  </button>
+);
+
 const ApprovalHistory = () => {
   const navigate = useNavigate();
+  const [currentTab, setCurrentTab] = useState('jobPermits');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [searchParams, setSearchParams] = useState({
     permitId: '',
-    permitType: '',
     startDate: '',
-    endDate: ''
+    endDate: '',
+    status: 'approved'
   });
   const [approvalHistory, setApprovalHistory] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -27,6 +40,12 @@ const ApprovalHistory = () => {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [revokeReason, setRevokeReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalPermits, setTotalPermits] = useState(0);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
@@ -39,51 +58,46 @@ const ApprovalHistory = () => {
       setLoading(true);
       setError(null);
 
-      let jobPermitsResponse;
-      if (currentUser?.roleId === 'QA') {
-        jobPermitsResponse = await api.getPermits({}, currentUser);
-      } else if (currentUser?.roleId === 'HOD' || currentUser?.roleId === 'ISS') {
-        jobPermitsResponse = await api.getPermitsByDepartment(currentUser.departmentId);
+      let response;
+      if (currentTab === 'jobPermits') {
+        response = await api.searchPermits({
+          ...searchParams,
+          page: currentPage,
+          limit: itemsPerPage,
+          status: 'approved'
+        }, currentUser);
       } else {
-        jobPermitsResponse = await api.getPermits(searchParams, currentUser);
+        response = await api.searchPTW({
+          ...searchParams,
+          page: currentPage,
+          limit: itemsPerPage,
+          status: 'approved'
+        }, currentUser);
       }
 
-      const ptwResponse = await api.getPermitsToWork();
+      if (response.success) {
+        const formattedData = response.data.map(permit => ({
+          type: currentTab === 'jobPermits' ? 'Job Permit' : 'Permit to Work',
+          id: currentTab === 'jobPermits' 
+            ? `JP-${String(permit.JobPermitID).padStart(4, '0')}`
+            : `PTW-${String(permit.PermitToWorkID).padStart(4, '0')}`,
+          permitId: currentTab === 'jobPermits' ? permit.JobPermitID : permit.PermitToWorkID,
+          status: permit.Status,
+          permitReceiver: permit.PermitReceiver,
+          jobDescription: permit.JobDescription,
+          lastApprovedDate: new Date(permit.QHSSEApprovedDate).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          }),
+          routePath: currentTab === 'jobPermits'
+            ? `/dashboard/permits/view/${permit.JobPermitID}`
+            : `/dashboard/permits/permit-to-work/view/${permit.PermitToWorkID}`
+        }));
 
-      if (jobPermitsResponse.success && ptwResponse.success) {
-        const jobPermits = jobPermitsResponse.data
-          .filter(permit => permit.Status?.toLowerCase() === 'approved')
-          .map(permit => ({
-            type: 'Job Permit',
-            id: `JP-${String(permit.JobPermitID).padStart(4, '0')}`,
-            permitId: permit.JobPermitID,
-            status: permit.Status,
-            jobDescription: permit.JobDescription,
-            lastApprovedDate: new Date(permit.LastApproved || permit.Created).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric'
-            }),
-            routePath: `/dashboard/permits/view/${permit.JobPermitID}`
-          }));
-
-        const ptwPermits = ptwResponse.data
-          .filter(permit => permit.Status?.toLowerCase() === 'approved')
-          .map(permit => ({
-            type: 'Permit to Work',
-            id: `PTW-${String(permit.PermitToWorkID).padStart(4, '0')}`,
-            permitId: permit.PermitToWorkID,
-            status: permit.Status,
-            jobDescription: permit.WorkDescription,
-            lastApprovedDate: new Date(permit.LastApproved || permit.Created).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric'
-            }),
-            routePath: `/dashboard/permits/permit-to-work/job-permit/${permit.PermitToWorkID}`
-          }));
-
-        setApprovalHistory([...jobPermits, ...ptwPermits]);
+        setApprovalHistory(formattedData);
+        setTotalPages(response.totalPages);
+        setTotalPermits(response.total);
       } else {
         setError('Failed to fetch permits');
       }
@@ -99,7 +113,7 @@ const ApprovalHistory = () => {
     if (currentUser) {
       fetchApprovals();
     }
-  }, [currentUser]);
+  }, [currentUser, currentTab, currentPage]);
 
   const handleView = (routePath) => {
     navigate(routePath);
@@ -111,6 +125,13 @@ const ApprovalHistory = () => {
       case 'approved': return 'text-green-500';
       default: return 'text-gray-500';
     }
+  };
+
+  const getSelectedPermitNumbers = () => {
+    return approvalHistory
+      .filter(permit => selectedPermits.includes(permit.permitId)) 
+      .map(permit => permit.id) 
+      .join(', ');
   };
 
   const canRevokePermits = () => {
@@ -127,7 +148,15 @@ const ApprovalHistory = () => {
     });
   };
 
+  const handleModalClose = () => {
+    setShowRevokeModal(false);
+    setError(null);
+    setRevokeReason('');
+    fetchApprovals(); // Refresh the table data
+  };
+
   const handleRevoke = () => {
+    setError(null); // Clear any existing errors
     setShowRevokeModal(true);
   };
 
@@ -142,23 +171,37 @@ const ApprovalHistory = () => {
 
   const handleConfirmRevoke = async () => {
     try {
-      setIsSubmitting(true);
-      const response = await api.revokePermits(selectedPermits, revokeReason);
-      if (response.success) {
-        setShowRevokeModal(false);
-        setShowConfirmation(false);
-        setSelectedPermits([]);
-        setRevokeReason('');
-        fetchApprovals();
-      } else {
-        setError('Failed to revoke permits');
-      }
+        setIsSubmitting(true);
+        const permitsToRevoke = selectedPermits.map(permitId => ({
+            id: permitId,
+            type: currentTab === 'jobPermits' ? 'job' : 'work'
+        }));
+
+        const response = await api.revokePermits(permitsToRevoke, revokeReason);
+        
+        if (response.success) {
+            setShowRevokeModal(false);
+            setShowConfirmation(false);
+            setSelectedPermits([]);
+            setRevokeReason('');
+            
+            // Show appropriate message based on user role
+            const message = currentUser?.roleId === 'QA' 
+                ? 'Permits have been successfully revoked'
+                : 'Revocation request has been submitted for QHSSE approval';
+                
+            // You might want to add a toast notification here
+            
+            fetchApprovals(); // Refresh the list
+        } else {
+            setError(response.error || 'Failed to revoke permits');
+        }
     } catch (err) {
-      setError('Error revoking permits');
+        setError('Error revoking permits: ' + err.message);
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
-  };
+};
 
   return (
     <div className="w-full p-4">
@@ -175,16 +218,23 @@ const ApprovalHistory = () => {
                   className="w-full"
                 />
               </div>
-              <div className="flex-1">
-                <select
-                  value={searchParams.permitType}
-                  onChange={(e) => setSearchParams({ ...searchParams, permitType: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md"
-                >
-                  <option value="">All Permit Types</option>
-                  <option value="Job Permit">Job Permit</option>
-                  <option value="Permit to Work">Permit to Work</option>
-                </select>
+              <div className="flex-1 flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-600 whitespace-nowrap">
+                  Last approved date:
+                </span>
+                <Input 
+                  type="date"
+                  value={searchParams.startDate}
+                  onChange={(e) => setSearchParams({ ...searchParams, startDate: e.target.value })}
+                  className="flex-1"
+                />
+                <span className="self-center text-gray-400">→</span>
+                <Input 
+                  type="date"
+                  value={searchParams.endDate}
+                  onChange={(e) => setSearchParams({ ...searchParams, endDate: e.target.value })}
+                  className="flex-1"
+                />
               </div>
               <Button 
                 variant="primary" 
@@ -194,57 +244,43 @@ const ApprovalHistory = () => {
                 Search
               </Button>
             </div>
-
-            {showAdvanced && (
-              <div className="col-span-6 flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-600 whitespace-nowrap">
-                  Last approved date:
-                </span>
-                <div className="flex-1 flex gap-2">
-                  <Input 
-                    type="date"
-                    value={searchParams.startDate}
-                    onChange={(e) => setSearchParams({ ...searchParams, startDate: e.target.value })}
-                    className="flex-1"
-                  />
-                  <span className="self-center text-gray-400">→</span>
-                  <Input 
-                    type="date"
-                    value={searchParams.endDate}
-                    onChange={(e) => setSearchParams({ ...searchParams, endDate: e.target.value })}
-                    className="flex-1"
-                  />
-                </div>
-              </div>
-            )}
           </div>
         </Card>
-        <Button 
-          variant="outline"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="border-blue-500 text-blue-500 hover:bg-blue-50"
-        >
-          {showAdvanced ? 'Hide Advanced Search' : 'Show Advanced Search'}
-        </Button>
       </div>
 
       {/* Main Content Card */}
       <Card>
-      <CardHeader>
-        <div className="flex flex-col gap-4">
-          <h1 className="text-2xl font-semibold">Approval History</h1>
-          {canRevokePermits() && selectedPermits.length > 0 && (
-            <Button 
-              variant="danger"
-              onClick={handleRevoke}
-              className="w-fit flex items-center gap-2"
-            >
-              <XCircle className="w-4 h-4" />
-              REVOKE PERMIT{selectedPermits.length > 1 ? 'S' : ''}
-            </Button>
-          )}
-        </div>
-      </CardHeader>
+        <CardHeader>
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <h1 className="text-2xl font-semibold">Approval History</h1>
+            </div>
+            <div className="flex gap-2 border-b">
+              <TabButton
+                id="jobPermits"
+                label="Job Permits"
+                active={currentTab === 'jobPermits'}
+                onClick={setCurrentTab}
+              />
+              <TabButton
+                id="permitToWork"
+                label="Permit to Work"
+                active={currentTab === 'permitToWork'}
+                onClick={setCurrentTab}
+              />
+            </div>
+            {currentTab === 'jobPermits' && canRevokePermits() && selectedPermits.length > 0 && (
+              <Button 
+                variant="danger"
+                onClick={handleRevoke}
+                className="w-fit flex items-center gap-2"
+              >
+                <XCircle className="w-4 h-4" />
+                REVOKE PERMIT{selectedPermits.length > 1 ? 'S' : ''}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
         <CardContent className="p-4">
           {loading && (
             <div className="text-center py-4">
@@ -262,26 +298,26 @@ const ApprovalHistory = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  {canRevokePermits() && (
+                  {currentTab === 'jobPermits' && canRevokePermits() && (
                     <TableCell className="w-12">
                       <Checkbox disabled />
                     </TableCell>
                   )}
                   <TableCell className="text-base font-medium">Actions</TableCell>
                   <TableCell className="text-base font-medium">Permit ID</TableCell>
-                  <TableCell className="text-base font-medium">Permit Type</TableCell>
+                  <TableCell className="text-base font-medium">Permit Receiver</TableCell>
                   <TableCell className="text-base font-medium">Job Description</TableCell>
                   <TableCell className="text-base font-medium">Last Approved Date</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {approvalHistory.map((item, index) => (
+                {approvalHistory.map((permit, index) => (
                   <TableRow key={index}>
-                    {canRevokePermits() && (
+                    {currentTab === 'jobPermits' && canRevokePermits() && (
                       <TableCell>
                         <Checkbox
-                          checked={selectedPermits.includes(item.permitId)}
-                          onCheckedChange={() => handleCheckboxChange(item.permitId)}
+                          checked={selectedPermits.includes(permit.permitId)}
+                          onCheckedChange={() => handleCheckboxChange(permit.permitId)}
                         />
                       </TableCell>
                     )}
@@ -289,7 +325,7 @@ const ApprovalHistory = () => {
                       <Button
                         variant="primary"
                         size="sm"
-                        onClick={() => handleView(item.routePath)}
+                        onClick={() => handleView(permit.routePath)}
                         className="inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-medium"
                       >
                         <Eye size={14} className="mr-1" /> View
@@ -297,21 +333,41 @@ const ApprovalHistory = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span>{item.id}</span>
-                        <span className={getStatusColor(item.status)}>{item.status}</span>
+                        <span>{permit.id}</span>
+                        <span className={getStatusColor(permit.status)}>{permit.status}</span>
                       </div>
                     </TableCell>
-                    <TableCell>{item.type}</TableCell>
-                    <TableCell>{item.jobDescription}</TableCell>
-                    <TableCell>{item.lastApprovedDate}</TableCell>
+                    <TableCell>{permit.permitReceiver}</TableCell>
+                    <TableCell>{permit.jobDescription}</TableCell>
+                    <TableCell>{permit.lastApprovedDate}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           )}
 
-          <div className="flex justify-end mt-4 text-sm text-gray-500">
-            Rows per page: 15 | {`1-${approvalHistory.length} of ${approvalHistory.length}`}
+          <div className="flex justify-between mt-4 text-sm text-gray-500">
+            <div>
+              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalPermits)} of {totalPermits} permits
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -326,14 +382,14 @@ const ApprovalHistory = () => {
                   <img src={logo} alt="Company Logo" className="h-[80px] w-[80px]" />
                 </div>
                 <div className="flex-grow ml-40">
-                  <h1 className="text-xl font-semibold">REVOKE PERMIT TO WORK</h1>
+                  <h1 className="text-xl font-semibold">REVOKE PERMIT DOCUMENTATION</h1>
                 </div>
               </div>
             </CardHeader>
 
             <div className="px-6 py-2 border-b">
               <p className="text-sm text-gray-500">
-                Selected Permits: {selectedPermits.length} {selectedPermits.length === 1 ? 'permit' : 'permits'}
+              Selected Permits: {getSelectedPermitNumbers()}
               </p>
             </div>
 
@@ -356,7 +412,7 @@ const ApprovalHistory = () => {
             </CardContent>
 
             <CardFooter className="flex justify-end gap-4">
-              <Button variant="outline" onClick={() => setShowRevokeModal(false)}>
+              <Button variant="outline" onClick={handleModalClose}>
                 Cancel
               </Button>
               <Button 
@@ -364,7 +420,7 @@ const ApprovalHistory = () => {
                 onClick={handleRevokeSubmit}
                 disabled={isSubmitting}
               >
-                Revoke Permit{selectedPermits.length > 1 ? 's' : ''}
+                Revoke {selectedPermits.length > 1 ? 's' : ''}
               </Button>
             </CardFooter>
           </Card>
@@ -377,7 +433,7 @@ const ApprovalHistory = () => {
           <Card className="w-full max-w-md p-6">
             <div className="text-center">
               <p className="mb-4 text-gray-700">
-                Are you sure you want to initiate the revoking process for {selectedPermits.length} {selectedPermits.length === 1 ? 'permit' : 'permits'}?
+                Are you sure you want to initiate the revoking process for {getSelectedPermitNumbers()}?
               </p>
               <div className="flex justify-center space-x-4">
                 <Button 

@@ -571,6 +571,41 @@ export const api = {
     }
   },
 
+  async searchPTW(searchParams, currentUser) {
+    try {
+      const queryParams = new URLSearchParams();
+      
+      if (searchParams.permitId) {
+        // Ensure permitId is passed as a number
+        queryParams.append('permitId', searchParams.permitId.toString());
+      }
+      
+      queryParams.append('page', searchParams.page);
+      queryParams.append('limit', searchParams.limit);
+  
+      const response = await fetch(`${API_URL}/permits/permit-to-work/search?${queryParams}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
+  
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to search permits');
+      }
+  
+      return data;
+    } catch (error) {
+      console.error('Error searching permits:', error);
+      return {
+        success: false,
+        message: error.message,
+        data: []
+      };
+    }
+  },
+  
   async completePermitToWork(permitToWorkId, completionData) {
     try {
       const response = await fetch(`${API_URL}/permits/permit-to-work/${permitToWorkId}/complete`, {
@@ -610,6 +645,119 @@ export const api = {
 
     return await response.json();
   } */
+
+
+  //REVOCATION PHASE
+  async initiateRevocation(permits, reason) {
+    try {
+      const response = await fetch(`${API_URL}/permits/revoke/initiate`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          permits,
+          reason
+        })
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+  
+      return await response.json();
+    } catch (error) {
+      console.error('Error initiating revocation:', error);
+      throw error;
+    }
+  },
+
+  async revokePermits(permits, reason) {
+    try {
+        const response = await fetch(`${API_URL}/permits/revoke/initiate`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                ...getAuthHeaders(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                permits,  // Keep the full permit objects with id and type
+                reason
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to initiate permit revocation');
+        }
+
+        const data = await response.json();
+        return {
+            success: true,
+            data,
+            message: data.message
+        };
+
+    } catch (error) {
+        console.error('Error in revokePermits:', error);
+        throw error;
+    }
+},
+  
+  // Approve revocation (QHSSE/QA only)
+  async approveRevocation(permits, status, comments) {
+    try {
+      const response = await fetch(`${API_URL}/permits/revoke/approve`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          permits,
+          status, // Include the status parameter
+          comments
+        })
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+  
+      return await response.json();
+    } catch (error) {
+      console.error('Error approving revocation:', error);
+      throw error;
+    }
+  },
+  
+  // Get permits pending revocation approval (for QHSSE/QA dashboard)
+  async getPendingRevocations() {
+    try {
+      const response = await fetch(`${API_URL}/permits/revoke/pending`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: getAuthHeaders()
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+  
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching pending revocations:', error);
+      throw error;
+    }
+  },
+
 };
 
 // Initialize the cache when the module loads

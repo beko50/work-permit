@@ -6,6 +6,7 @@ import { X, ArrowLeft, Check, Clock, AlertTriangle } from 'lucide-react';
 import { api } from './services/api';
 import { toast } from 'sonner';
 import logo from './assets/mps_logo.jpg';
+import PermitRevocation from './components/ui/Revocation';
 
 const ReviewPTW = () => {
   const { permitToWorkId } = useParams();
@@ -15,6 +16,8 @@ const ReviewPTW = () => {
   const [error, setError] = useState(null);
   const [approvals, setApprovals] = useState([]);
   const [comments, setComments] = useState('');
+  const [revocationData, setRevocationData] = useState(null);
+  const [currentUserRole, setCurrentUserRole] = useState(null);
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -55,6 +58,14 @@ const ReviewPTW = () => {
         return null;
     }
   };
+
+  useEffect(() => {
+    const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
+    const userData = JSON.parse(savedData)?.user;
+    if (userData) {
+      setCurrentUserRole(userData.roleId === 'QA' ? 'QA' : userData.roleId);
+    }
+  }, []);
 
   const handleApproval = async (status) => {
     try {
@@ -97,6 +108,22 @@ const ReviewPTW = () => {
             jobPermit: response.data.jobPermit
           });
           
+          // Set revocation data if available
+          const permit = response.data.permit;
+        if (permit.RevocationInitiatedBy || permit.Status === 'Revocation Pending' || permit.Status === 'Revoked') {
+          setRevocationData({
+            RevocationInitiatedBy: permit.RevocationInitiatedByName || `User ID: ${permit.RevocationInitiatedBy}`,
+            RevocationInitiatedDate: permit.RevocationInitiatedDate,
+            RevocationReason: permit.RevocationReason,
+            RevocationApprovedBy: permit.RevocationApprovedByName,
+            RevocationApprovedDate: permit.RevocationApprovedDate,
+            RevocationComments: permit.RevocationComments,
+            Status: permit.Status,
+            InitiatorRole: permit.RevocationInitiatorRole,
+            QHSSERevocationStatus: permit.QHSSERevocationStatus
+          });
+        }
+
           // Update workflow stages with proper isCurrentApprover logic
           const workflowStages = [
             {
@@ -183,7 +210,7 @@ const ReviewPTW = () => {
                         <span className="font-bold">PTW ID:</span> PTW-{String(ptw.PermitToWorkID).padStart(4, '0')}
                       </p>
                       <p className="text-sm text-gray-500">
-                        <span className="font-bold">Job Permit ID:</span> 
+                        <span className="font-bold">Job Permit Document ID:</span> 
                         <Button 
                           variant="link" 
                           className="pl-1 text-blue-600 hover:underline"
@@ -258,6 +285,18 @@ const ReviewPTW = () => {
                 </div>
               </CardContent>
           </Card>
+
+          {revocationData && (
+            <div className="mt-4">
+              <PermitRevocation
+                permitId={permitToWorkId}
+                revocationData={revocationData}
+                onRevocationProcessed={() => navigate('/dashboard/permits/permit-to-work')}
+                isQHSSEUser={currentUserRole === 'QA'}
+                permitType="work"  // Add this line to specify it's a Permit to Work
+              />
+            </div>
+          )}
 
           {/* Approval Workflow */}
           <Card>

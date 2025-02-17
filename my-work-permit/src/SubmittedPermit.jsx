@@ -6,7 +6,8 @@ import { X, CheckSquare, Check, Clock, AlertTriangle } from 'lucide-react';
 import { api } from './services/api';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
 import logo from './assets/mps_logo.jpg';
-import RiskAssessmentViewer from './components/ui/RiskAssessmentDocumentViewer'
+import RiskAssessmentViewer from './components/ui/RiskAssessmentDocumentViewer';
+import PermitRevocation from './components/ui/Revocation';
 
 const sectionNameMapping = {
   'Permit Required': 'Permit Required',
@@ -52,6 +53,8 @@ const SubmittedPermit = () => {
   const [approvals, setApprovals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [revocationData, setRevocationData] = useState(null);
+
   const handlePrint = () => {
     window.print();
   };
@@ -107,6 +110,17 @@ const SubmittedPermit = () => {
           setPermit(permit);
           setGroupedCheckboxes(groupedCheckboxes);
 
+          if (permit.RevocationInitiatedBy || permit.Status === 'Revocation Pending' || permit.Status === "Revoked") {
+            setRevocationData({
+              RevocationInitiatedBy: permit.RevocationInitiatedByName || `User ID: ${permit.RevocationInitiatedBy}`,
+              RevocationInitiatedDate: permit.RevocationInitiatedDate,
+              RevocationReason: permit.RevocationReason,
+              RevocationApprovedBy: permit.RevocationApprovedByName,
+              RevocationApprovedDate: permit.RevocationApprovedDate,
+              RevocationComments: permit.RevocationComments
+            });
+          }
+
           const workflowStages = [
             {
               title: "Permit Issuer",
@@ -152,166 +166,178 @@ const SubmittedPermit = () => {
 
   return (
     <>
-    <style>{printStyles}</style>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white z-10 border-b pb-2 pt-2 flex items-center">
-          <div className="ml-8">
-            <img 
-              src={logo}
-              alt="Company Logo" 
-              className="h-[80px] w-[80px]" 
-            />
-          </div>
-          <h2 className="text-xl font-semibold text-center flex-grow -ml-16">REQUEST FOR JOB PERMIT</h2>
-          <Button variant="ghost" onClick={() => navigate(-1)} className="absolute top-2 right-2 hover:bg-gray-100">
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-
-        <div className="p-4 space-y-4">
-      {/* Job Details & Location */}
-      <Card className="shadow-sm">
-      <CardContent className="p-5">
-  <div className="grid grid-cols-2 gap-6 items-start">
-    <div>
-      <h2 className="font-bold text-l border-b pb-2 mb-3">Job Details</h2>
-      <p className="text-base text-gray-700"><span className="font-bold">Permit ID:</span> JP-{String(permit.JobPermitID).padStart(4, '0')}</p>
-      <p className="text-base text-gray-700"><span className="font-bold">Start Date:</span> {formatDate(permit.StartDate)}</p>
-      <p className="text-base text-gray-700"><span className="font-bold">End Date:</span> {formatDate(permit.EndDate)}</p>
-    </div>
-    <div>
-      <h2 className="font-bold text-l border-b pb-2 mb-3">Job Location</h2>
-      <p className="text-base text-gray-700"><span className="font-bold">Department:</span> {permit.Department}</p>
-      <p className="text-base text-gray-700"><span className="font-bold">Job Location:</span> {permit.JobLocation}</p>
-      <p className="text-base text-gray-700"><span className="font-bold">Sub Location:</span> {permit.SubLocation}</p>
-      <p className="text-base text-gray-700"><span className="font-bold">Location Detail:</span> {permit.LocationDetail}</p>
-    </div>
-  </div>
-</CardContent>
-      </Card>
-
-      {/* Job Description */}
-      <Card className="shadow-sm">
-        <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Description</div>
-        <CardContent className="p-4">
-          <p className="text-sm text-gray-700">{permit.JobDescription}</p>
-        </CardContent>
-      </Card>
-
-      {/* Workers List */}
-      <Card className="shadow-sm">
-        <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Workers ({permit.NumberOfWorkers})</div>
-        <CardContent className="p-4">
-          <ul className="list-disc pl-6 text-sm text-gray-700">
-            {permit.WorkersNames?.split(',').map((worker, index) => (
-              <li key={index}>{worker.trim()}</li>
-            )) || <li>No workers assigned</li>}
-          </ul>
-        </CardContent>
-      </Card>
-
-          {/* Risk Assessment Document */}
-          {permit.RiskAssessmentDocument && (
-            <div className="mt-6">
-              <h2 className="text-lg font-medium">Risk Assessment Documents</h2>
-              <RiskAssessmentViewer 
-                documentData={permit.RiskAssessmentDocument} 
+      <style>{printStyles}</style>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white z-10 border-b pb-2 pt-2 flex items-center">
+            <div className="ml-8">
+              <img 
+                src={logo}
+                alt="Company Logo" 
+                className="h-[80px] w-[80px]" 
               />
             </div>
-          )}
+            <h2 className="text-xl font-semibold text-center flex-grow -ml-16">REQUEST FOR JOB PERMIT</h2>
+            <Button variant="ghost" onClick={() => navigate(-1)} className="absolute top-2 right-2 hover:bg-gray-100">
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
 
-          {/* Safety Checklist Card */}
-          <Card>
-            <CardHeader className="font-bold text-lg">Safety Checklist</CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {groupedCheckboxes.map((section) => (
-                  <div key={section.sectionId} className="space-y-2">
-                    <h3 className="font-medium text-base border-b pb-2">
-                      {sectionNameMapping[section.sectionName] || section.sectionName}
-                    </h3>
-                    <div className="space-y-2 pl-4">
-                      {section.items.map((item) => (
-                        <div key={item.sectionItemId} className="flex items-start gap-2">
-                          <div className="mt-1">
-                            <CheckSquare className="h-4 w-4 text-green-600" />
+          <div className="p-4 space-y-4">
+            {/* Job Details & Location */}
+            <Card className="shadow-sm">
+              <CardContent className="p-5">
+                <div className="grid grid-cols-2 gap-6 items-start">
+                  <div>
+                    <h2 className="font-bold text-l border-b pb-2 mb-3">Job Details</h2>
+                    <p className="text-base text-gray-700"><span className="font-bold">Job Permit Document ID:</span> JP-{String(permit.JobPermitID).padStart(4, '0')}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">Start Date:</span> {formatDate(permit.StartDate)}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">End Date:</span> {formatDate(permit.EndDate)}</p>
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-l border-b pb-2 mb-3">Job Location</h2>
+                    <p className="text-base text-gray-700"><span className="font-bold">Department:</span> {permit.Department}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">Job Location:</span> {permit.JobLocation}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">Sub Location:</span> {permit.SubLocation}</p>
+                    <p className="text-base text-gray-700"><span className="font-bold">Location Detail:</span> {permit.LocationDetail}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Job Description */}
+            <Card className="shadow-sm">
+              <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Description</div>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-700">{permit.JobDescription}</p>
+              </CardContent>
+            </Card>
+
+            {/* Workers List */}
+            <Card className="shadow-sm">
+              <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Workers ({permit.NumberOfWorkers})</div>
+              <CardContent className="p-4">
+                <ul className="list-disc pl-6 text-sm text-gray-700">
+                  {permit.WorkersNames?.split(',').map((worker, index) => (
+                    <li key={index}>{worker.trim()}</li>
+                  )) || <li>No workers assigned</li>}
+                </ul>
+              </CardContent>
+            </Card>
+
+            {/* Risk Assessment Document */}
+            {permit.RiskAssessmentDocument && (
+              <div className="mt-6">
+                <h2 className="text-lg font-medium">Risk Assessment Documents</h2>
+                <RiskAssessmentViewer 
+                  documentData={permit.RiskAssessmentDocument} 
+                />
+              </div>
+            )}
+
+            {/* Safety Checklist Card */}
+            <Card>
+              <CardHeader className="font-bold text-lg">Safety Checklist</CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {groupedCheckboxes.map((section) => (
+                    <div key={section.sectionId} className="space-y-2">
+                      <h3 className="font-medium text-base border-b pb-2">
+                        {sectionNameMapping[section.sectionName] || section.sectionName}
+                      </h3>
+                      <div className="space-y-2 pl-4">
+                        {section.items.map((item) => (
+                          <div key={item.sectionItemId} className="flex items-start gap-2">
+                            <div className="mt-1">
+                              <CheckSquare className="h-4 w-4 text-green-600" />
+                            </div>
+                            <div>
+                              <p>{item.itemLabel}</p>
+                              {item.textInput && (
+                                <p className="text-sm text-gray-600 mt-1">
+                                  Additional Info: {item.textInput}
+                                </p>
+                              )}
+                            </div>
                           </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Revocation Section */}
+            {revocationData && (
+              <PermitRevocation revocationData={revocationData} />
+            )}
+
+            {/* Approvals Section */}
+            <Card>
+              <CardHeader className="font-bold text-l">Permit Documentation Approvals</CardHeader>
+              <CardContent>
+                <div className="relative">
+                  <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
+                  {approvals.map((approval, index) => (
+                    <div key={index} className="relative pl-10 pb-4">
+                      <div 
+                        className={`absolute left-0 rounded-full border-2 w-5 h-5 transition-all duration-300
+                          ${approval.status === 'Approved' ? 'bg-green-500 border-green-500' : 
+                            approval.status === 'Rejected' ? 'bg-red-500 border-red-500' :
+                            'bg-gray-200 border-gray-300'}`}
+                      />
+                      <div className="border rounded-md p-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                          {/* Left column: Title and Status */}
                           <div>
-                            <p>{item.itemLabel}</p>
-                            {item.textInput && (
-                              <p className="text-sm text-gray-600 mt-1">
-                                Additional Info: {item.textInput}
+                            <h4 className="font-medium text-base mb-1">{approval.title}</h4>
+                            {getStatusBadge(approval.status)}
+                          </div>
+                          
+                          {/* Right column: Approver and Date */}
+                          <div className="text-sm text-gray-600">
+                            <p>
+                              <span className="font-medium">Approver:</span> {approval.approverName || 'Not yet approved'}
+                            </p>
+                            {approval.approvedDate && (
+                              <p>
+                                <span className="font-medium">Date:</span> {formatDate(approval.approvedDate)}
                               </p>
                             )}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Approvals Section */}
-          {/* Approval Workflow */}
-          <Card>
-          <CardHeader className="font-bold text-xl">Approval Workflow</CardHeader>
-            <CardContent>
-              <div className="relative">
-                <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
-                {approvals.map((approval, index) => (
-                  <div key={index} className="relative pl-10 pb-6">
-                    <div 
-                      className={`absolute left-0 rounded-full border-2 w-6 h-6 transition-all duration-300
-                        ${approval.status === 'Approved' ? 'bg-green-500 border-green-500' : 
-                          approval.status === 'Rejected' ? 'bg-red-500 border-red-500' :
-                          'bg-gray-200 border-gray-300'}`}
-                    />
-                    <div className="border rounded-md p-4">
-                      <div className="mb-4">
-                        <h4 className="font-medium text-lg mb-2">{approval.title}</h4>
-                        {getStatusBadge(approval.status)}
-                      </div>
-
-                      <div className="text-sm">
-                        <p className="text-gray-600">
-                          Approver: {approval.approverName || 'Not yet approved'}
-                        </p>
-                        {approval.approvedDate && (
-                          <p className="text-gray-600">
-                            Date: {formatDate(approval.approvedDate)}
-                          </p>
-                        )}
+                          
+                        {/* Comments section below both columns */}
                         {approval.comments && (
                           <div className="mt-2">
-                            <p className="text-gray-600">Comments:</p>
-                            <p className="bg-gray-50 p-2 rounded mt-1">{approval.comments}</p>
+                            <p className="text-sm text-gray-600 mb-1">
+                              <span className="font-medium">Comments:</span>
+                            </p>
+                            <p className="bg-gray-50 p-2 rounded text-sm">{approval.comments}</p>
                           </div>
                         )}
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
-          {/* Print Button */}
-          <div className="flex justify-end mt-6">
-            <Button 
-              onClick={handlePrint}
-              variant="secondary"
-              className="bg-gray-600 text-white hover:bg-gray-700"
-            >
-              Print
-            </Button>
+            {/* Print Button */}
+            <div className="flex justify-end mt-6">
+              <Button 
+                onClick={handlePrint}
+                variant="secondary"
+                className="bg-gray-600 text-white hover:bg-gray-700"
+              >
+                Print
+              </Button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </>  
+    </>
   );
 };
 

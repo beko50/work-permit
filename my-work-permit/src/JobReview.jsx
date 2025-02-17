@@ -40,7 +40,17 @@ const JobReview = () => {
   };
 
   const getStatusBadge = (status, completionStatus) => {
-    // First check completion status
+    // Check for Revoked status first
+    if (status === 'Revoked') {
+      return (
+        <div className="inline-flex items-center px-3 py-1 bg-gray-600 text-white rounded-full text-sm">
+          <X size={16} className="mr-1" />
+          Revoked
+        </div>
+      );
+    }
+    
+    // Then check completion status
     if (completionStatus === 'Job Completed') {
       return (
         <div className="inline-flex items-center px-3 py-1 bg-green-600 text-white rounded-full text-sm">
@@ -58,8 +68,8 @@ const JobReview = () => {
         </div>
       );
     }
-
-    // Fallback to approval status badges if needed
+  
+    // Fallback to approval status badges
     switch (status?.toLowerCase()) {
       case 'approved':
         return (
@@ -214,7 +224,7 @@ const JobReview = () => {
                     <span className="font-bold">PTW ID:</span> PTW-{String(ptw.PermitToWorkID).padStart(4, '0')}
                   </p>
                   <p className="text-sm text-gray-500">
-                    <span className="font-bold">Job Permit ID:</span> 
+                    <span className="font-bold">Job Permit Document ID:</span> 
                     <Button 
                       variant="link" 
                       className="pl-1 text-blue-600 hover:underline"

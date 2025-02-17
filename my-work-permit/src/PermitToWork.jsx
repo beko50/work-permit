@@ -2,12 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent, CardFooter } from './components/ui/card';
 import { Button } from './components/ui/button';
-import { Input, Select } from './components/ui/form';
+import { Input } from './components/ui/form';
+import { Select } from './components/ui/form';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
-import { RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
-import Tabs from './components/ui/tabs';
-import { api } from './services/api';
+import { RefreshCw, ChevronDown } from 'lucide-react';
 import RequestPTW from './RequestPTW';
+import { api } from './services/api';
 
 const TabButton = ({ id, label, active, onClick }) => (
   <button
@@ -30,7 +30,12 @@ const PermitToWork = () => {
   const [showPTWForm, setShowPTWForm] = useState(false);
   const [selectedPermit, setSelectedPermit] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
+
+  const [searchParams, setSearchParams] = useState({
+    page: 1,
+    limit: 15
+  });
 
   useEffect(() => {
     const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
@@ -38,63 +43,168 @@ const PermitToWork = () => {
     setCurrentUser(userData);
   }, []);
 
+  useEffect(() => {
+    if (currentUser) {
+      setCurrentTab('approved-job-permits'); // Ensure it starts on Pending tab
+      fetchPermits();
+    }
+  }, [currentUser]);
+
+  const debounce = (func, wait) => {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  };
+
   const getPermitActions = (permit) => {
     const reviewerRoles = ['ISS', 'HOD', 'QA'];
     
-    if (
-      reviewerRoles.includes(currentUser?.roleId) && 
-      permit.AssignedTo === currentUser?.roleId
-    ) {
+    // If permit is revoked, only allow viewing regardless of role
+    if (permit.Status.toLowerCase() === 'revoked') {
+      return ['View Permit To Work'];
+    }
+    
+    // If status is Revocation Pending and current user is QA, allow review
+    if (permit.Status.toLowerCase() === 'revocation pending' && currentUser?.roleId === 'QA') {
       return ['Review Permit To Work'];
     }
     
-    return ['View Permit To Work'];
+    // Otherwise, use existing logic for other statuses
+    return (reviewerRoles.includes(currentUser?.roleId) && 
+            permit.AssignedTo === currentUser?.roleId)
+      ? ['Review Permit To Work']
+      : ['View Permit To Work'];
   };
 
   const getStatusColor = (status) => {
     status = status.toLowerCase();
     if (status === 'pending') return 'text-yellow-500';
     if (status === 'approved') return 'text-green-500';
-    if (status === 'rejected' || status === 'revoked') return 'text-red-500';
+    if (status === 'rejected') return 'text-red-500';
+    if (status === 'revoked') return 'text-gray-700';
     return 'text-gray-500';
   };
 
-  // Add role display mapping function
-  const getRoleDisplayName = (roleId) => {
+  const getRoleDisplayName = (roleId, status) => {
+    // If status is Revocation Pending, assign to QHSSE APPROVER
+    if (status.toLowerCase() === 'revocation pending') {
+      return 'QHSSE APPROVER';
+    }
+  
+    // If status is Rejected or Revoked, return null
+    if (status.toLowerCase() === 'rejected' || status.toLowerCase() === 'revoked') {
+      return null;
+    }
+  
     const roleDisplayMap = {
       'ISS': 'PERMIT ISSUER',
       'HOD': 'HOD / MANAGER',
       'QA': 'QHSSE APPROVER'
     };
-    
     return roleDisplayMap[roleId] || roleId;
   };
-
-  useEffect(() => {
-    const fetchPermits = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const response = await api.getPermitsToWork();
-        
-        if (response.success) {
-          setPermits(response.data);
-        } else {
-          setError(response.error);
-        }
-      } catch (err) {
-        setError('Error fetching permits. Please try again later.');
-        console.error('Error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
   
-    fetchPermits();
-  }, [currentTab]);
 
-  const Dropdown = ({ children, options, onSelect, className = '' }) => {
+  const handleSearch = async (searchValue) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // If search is empty, fetch all permits
+      if (!searchValue.trim()) {
+        await fetchPermits();
+        return;
+      }
+
+      // Extract numeric part from PTW ID (e.g., "PTW-0004" -> "4")
+      const permitId = searchValue.trim().replace(/^PTW-0*/, '');
+      
+      // Validate permitId is a number
+      if (!/^\d+$/.test(permitId)) {
+        setError('Please enter a valid PTW ID (e.g., PTW-0001)');
+        setPermits([]);
+        return;
+      }
+
+      const response = await api.searchPTW({
+        ...searchParams,
+        permitId: parseInt(permitId)
+      }, currentUser);
+
+      if (response.success && response.data.length > 0) {
+        setPermits(response.data);
+        
+        // Automatically switch to the appropriate tab based on the permit status
+        const permit = response.data[0];
+        const status = permit.Status.toLowerCase();
+        const newTab = 
+          status === 'pending' ? 'approved-job-permits' :
+          status === 'approved' ? 'approved' :
+          status === 'completed' ? 'completed' :
+          status === 'rejected' ? 'rejected' :
+          status === 'revoked' ? 'revoked' :
+          currentTab;
+        
+        setCurrentTab(newTab);
+      } else {
+        setError('No permits found matching your search');
+        setPermits([]);
+      }
+    } catch (err) {
+      console.error('Search error:', err);
+      setError('Error searching permits. Please try again.');
+      setPermits([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const debouncedSearch = debounce((value) => handleSearch(value), 500);
+
+  const handleSearchInputChange = (e) => {
+    const value = e.target.value;
+    setSearchValue(value);
+    
+    // If search is cleared, reset everything to initial state
+    if (!value.trim()) {
+      setError(null);
+      setCurrentTab('approved-job-permits'); // Reset to default tab
+      fetchPermits(); // Fetch all permits
+    } else {
+      // Otherwise, debounce the search
+      debouncedSearch(value);
+    }
+  };
+
+  const fetchPermits = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await api.getPermitsToWork();
+      
+      if (response.success) {
+        setPermits(response.data);
+      } else {
+        setError(response.message || 'Error fetching permits');
+        setPermits([]);
+      }
+    } catch (err) {
+      setError('Error fetching permits. Please try again.');
+      console.error('Error:', err);
+      setPermits([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const Dropdown = ({ options, onSelect, className = '' }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
 
@@ -110,11 +220,6 @@ const PermitToWork = () => {
       };
     }, []);
 
-    const handleSelect = (selectedOption) => {
-      onSelect(selectedOption);
-      setIsOpen(false);
-    };
-    
     return (
       <div ref={dropdownRef} className={`relative ${className}`}>
         <button
@@ -126,11 +231,14 @@ const PermitToWork = () => {
           <ChevronDown className="h-5 w-5 text-blue-500" />
         </button>
         {isOpen && (
-          <ul className="absolute z-10 w-48 border rounded-md mt-2 bg-gray-50 shadow-lg overflow-auto">
+          <ul className="absolute z-10 w-48 border rounded-md mt-2 bg-gray-50 shadow-lg">
             {options.map((option) => (
               <li
                 key={option}
-                onClick={() => handleSelect(option)}
+                onClick={() => {
+                  onSelect(option);
+                  setIsOpen(false);
+                }}
                 className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
               >
                 {option}
@@ -148,7 +256,8 @@ const PermitToWork = () => {
         navigate(`/dashboard/permits/permit-to-work/view/${permitToWorkId}`);
         break;
       case 'Review Permit To Work':
-        navigate(`/dashboard/permits/permit-to-work/review/${permitToWorkId}`); // Use permitToWorkId directly
+        // For both normal review and revocation review, go to review page
+        navigate(`/dashboard/permits/permit-to-work/review/${permitToWorkId}`);
         break;
       default:
         console.log(`Unknown action: ${action}`);
@@ -156,40 +265,49 @@ const PermitToWork = () => {
   };
 
   const getFilteredPermits = () => {
-    switch (currentTab) {
-      case 'approved-job-permits':
-        return permits.filter(permit => {
-          const status = permit.Status.toLowerCase();
-          return status === 'pending';
-        });
+    return permits.filter(permit => {
+      const status = permit.Status.toLowerCase();
+      switch (currentTab) {
+        case 'approved-job-permits':
+          return status === 'pending' || status === 'revocation pending'; // Include Revocation Pending
         case 'approved':
-          return permits.filter(permit => {
-            const status = permit.Status.toLowerCase();
-            return status === 'approved';
-          });
-      case 'ongoing':
-        return permits.filter(permit => 
-          permit.Status.toLowerCase() === 'approved' && 
-          permit.AssignedTo === 'ONGOING'
-        );
-      case 'completed-job':
-        return permits.filter(permit => 
-          permit.Status.toLowerCase() === 'completed'
-        );
-      case 'revoked-rejected':
-        return permits.filter(permit => {
-          const status = permit.Status.toLowerCase();
-          return status === 'revoked' || status === 'rejected';
-        });
-      default:
-        return [];
-    }
+          return status === 'approved';
+        case 'rejected':
+          return status === 'rejected';
+        case 'completed':
+          return status === 'completed';
+        case 'revoked':
+          return status === 'revoked';
+        default:
+          return true;
+      }
+    });
   };
 
   const filteredPermits = getFilteredPermits();
 
   return (
-    <div className="mt-6">
+    <div className="mt-0">
+      <div className="mb-4">
+          <div className="flex items-center gap-4">
+            <div className="w-1/3">
+              <Input 
+                placeholder="Search PTW ID (e.g., PTW-0001)" 
+                value={searchValue}
+                onChange={handleSearchInputChange}
+                className="w-full"
+              />
+            </div>
+            <Button 
+              variant="primary" 
+              onClick={() => handleSearch(searchValue)}
+              className="w-[150px]"
+            >
+              Search
+            </Button>
+          </div>
+      </div>
+
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4">
@@ -208,15 +326,21 @@ const PermitToWork = () => {
                 onClick={setCurrentTab}
               />
               <TabButton
+                id="rejected"
+                label="Rejected"
+                active={currentTab === 'rejected'}
+                onClick={setCurrentTab}
+              />
+              <TabButton
                 id="completed"
                 label="Completed Job"
                 active={currentTab === 'completed'}
                 onClick={setCurrentTab}
               />
               <TabButton
-                id="revoked-rejected"
-                label="Revoked/Rejected"
-                active={currentTab === 'revoked-rejected'}
+                id="revoked"
+                label="Revoked"
+                active={currentTab === 'revoked'}
                 onClick={setCurrentTab}
               />
             </div>
@@ -235,11 +359,7 @@ const PermitToWork = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>
-                    <Button variant="ghost" className="text-sm font-medium">
-                      Actions
-                    </Button>
-                  </TableCell>
+                  <TableCell>Actions</TableCell>
                   <TableCell className="text-base font-medium">Permit to Work ID</TableCell>
                   <TableCell className="text-base font-medium">Permit Receiver</TableCell>
                   <TableCell className="text-base font-medium">Company</TableCell>
@@ -255,10 +375,7 @@ const PermitToWork = () => {
                         <Dropdown
                           options={getPermitActions(permit)}
                           onSelect={(action) => handleDropdownAction(action, permit.PermitToWorkID)}
-                          className="text-sm font-medium"
-                        >
-                          Actions
-                        </Dropdown>
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
@@ -271,7 +388,9 @@ const PermitToWork = () => {
                       <TableCell>{permit.PermitReceiver}</TableCell>
                       <TableCell>{permit.ContractCompanyName}</TableCell>
                       <TableCell>{permit.JobDescription}</TableCell>
-                      <TableCell>{getRoleDisplayName(permit.AssignedTo)}</TableCell>
+                      <TableCell>
+                        {getRoleDisplayName(permit.AssignedTo, permit.Status) || '—'} {/* Display "—" if null */}
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
