@@ -54,6 +54,7 @@ const SubmittedPermit = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [revocationData, setRevocationData] = useState(null);
+  const [documents, setDocuments] = useState([]);
 
   const handlePrint = () => {
     window.print();
@@ -101,14 +102,17 @@ const SubmittedPermit = () => {
 
   useEffect(() => {
     const fetchPermitDetails = async () => {
-      try {
-        setLoading(true);
-        const response = await api.getPermitById(permitId);
-
-        if (response.success) {
-          const { permit, groupedCheckboxes } = response.data;
-          setPermit(permit);
-          setGroupedCheckboxes(groupedCheckboxes);
+          try {
+            setLoading(true);
+            
+            const response = await api.getPermitById(permitId);
+          
+          if (response?.success) {
+            const { permit, documents, groupedCheckboxes } = response.data;
+            
+            setPermit(permit);
+            setDocuments(documents || []); // Ensure documents is always an array
+            setGroupedCheckboxes(groupedCheckboxes || []);
 
           if (permit.RevocationInitiatedBy || permit.Status === 'Revocation Pending' || permit.Status === "Revoked") {
             setRevocationData({
@@ -226,12 +230,10 @@ const SubmittedPermit = () => {
             </Card>
 
             {/* Risk Assessment Document */}
-            {permit.RiskAssessmentDocument && (
-              <div className="mt-6">
+            {documents && documents.length > 0 && (
+              <div className="mt-6 ml-4"> {/* Adjust ml-4 as needed */}
                 <h2 className="text-lg font-medium">Risk Assessment Documents</h2>
-                <RiskAssessmentViewer 
-                  documentData={permit.RiskAssessmentDocument} 
-                />
+                <RiskAssessmentViewer documents={documents} />
               </div>
             )}
 

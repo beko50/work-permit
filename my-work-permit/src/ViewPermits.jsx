@@ -26,8 +26,8 @@ const ViewPermit = () => {
     permitReceiver: '',
     contractCompanyName: '',
     status: '',
-    startDate: '',
-    endDate: '',
+    changedStartDate: '', 
+    changedEndDate: '', 
     department: '',
     page: 1,
     limit: itemsPerPage
@@ -59,17 +59,13 @@ const ViewPermit = () => {
     const fetchDepartments = async () => {
       try {
         const departmentsData = await api.getDepartments();
-        const formattedDepartments = departmentsData.map(dept => ({
-          value: dept.DepartmentID,
-          label: getDepartmentFullName(dept.DepartmentID)
-        }));
-        setDepartments(formattedDepartments || []);
+        setDepartments(departmentsData || []); // Store the raw department codes
       } catch (error) {
         console.error('Error fetching departments:', error);
         setDepartments([]);
       }
     };
-
+  
     fetchDepartments();
   }, []);
 
@@ -151,8 +147,8 @@ const ViewPermit = () => {
       status: '',
       department: '',
       contractCompanyName: '',
-      startDate: '',
-      endDate: '',
+      changedStartDate: '', 
+      changedEndDate: '', 
       page: 1,
       limit: itemsPerPage
     };
@@ -346,19 +342,21 @@ const ViewPermit = () => {
                   </div>
                 )}
                 <div className="col-span-6 flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Filter by Submission date:</span>
+                  <span className="text-sm font-medium text-gray-600 whitespace-nowrap">
+                    Filter by Last Action Date:
+                  </span>
                   <div className="flex-1 flex gap-2">
                     <Input 
                       type="date" 
-                      value={searchParams.startDate} 
-                      onChange={(e) => handleSearchParamChange('startDate', e.target.value)} 
+                      value={searchParams.changedStartDate} 
+                      onChange={(e) => handleSearchParamChange('changedStartDate', e.target.value)} 
                       className="flex-1"
                     />
                     <span className="self-center text-gray-400">→</span>
                     <Input 
                       type="date" 
-                      value={searchParams.endDate} 
-                      onChange={(e) => handleSearchParamChange('endDate', e.target.value)} 
+                      value={searchParams.changedEndDate} 
+                      onChange={(e) => handleSearchParamChange('changedEndDate', e.target.value)} 
                       className="flex-1"
                     />
                   </div>

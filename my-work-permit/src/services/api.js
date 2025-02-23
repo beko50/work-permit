@@ -330,28 +330,33 @@ export const api = {
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
   
-      const data = await response.json();
-      
-      // Ensure RiskAssessmentDocument is properly formatted
-      if (data.permit?.RiskAssessmentDocument) {
-        if (!data.permit.RiskAssessmentDocument.startsWith('data:')) {
-          data.permit.RiskAssessmentDocument = `data:image/png;base64,${data.permit.RiskAssessmentDocument}`;
-        }
-      }
-  
-      return {
-        data,
-        success: true
-      };
-    } catch (error) {
-      console.error('Error fetching permit:', error);
-      return {
-        data: null,
-        success: false,
-        error: error.message || 'Failed to fetch permit'
-      };
+      const responseData = await response.json();
+
+    // Ensure the response data is properly structured
+    if (!responseData.success) {
+      throw new Error(responseData.message || 'Failed to fetch permit');
     }
-  },
+
+    // Make sure documents are properly formatted with base64 data
+    if (responseData.data.documents) {
+      responseData.data.documents = responseData.data.documents.map(doc => ({
+        ...doc,
+        fileData: doc.fileData.startsWith('data:') 
+          ? doc.fileData 
+          : `data:${doc.fileType};base64,${doc.fileData}`
+      }));
+    }
+
+    return responseData;
+  } catch (error) {
+    console.error('Error fetching permit:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to fetch permit',
+      data: null
+    };
+  }
+},
 
   async getPermitsByDepartment(departmentId) {
     try {
@@ -392,10 +397,11 @@ export const api = {
         }
       });
 
+
       // Ensure the department field matches the backend
-    if (searchParams.department) {
-      queryParams.append('department', searchParams.department); // Use 'department' as the key
-    }
+    // if (searchParams.department) {
+    //   queryParams.append('department', searchParams.department); // Use 'department' as the key
+    // }
 
       const response = await fetch(`${API_URL}/permits/search?${queryParams}`, {
         method: 'GET',
@@ -711,19 +717,26 @@ export const api = {
   // Approve revocation (QHSSE/QA only)
   async approveRevocation(permits, status, comments) {
     try {
+      console.log('Sending revocation request:', {
+        permits,
+        status,
+        comments
+      });
+  
       const response = await fetch(`${API_URL}/permits/revoke/approve`, {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json'
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           permits,
-          status, // Include the status parameter
+          status,
           comments
         })
       });
+  
+      // Log response details for debugging
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
   
       if (!response.ok) {
         const errorData = await response.json();

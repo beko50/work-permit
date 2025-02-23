@@ -22,7 +22,7 @@ const PermitRevocation = ({ permitId, revocationData, onRevocationProcessed, isQ
     });
   };
 
-  const actualPermitType = permitType || 'work';
+  const actualPermitType = permitType === 'work' ? 'ptw' : 'job';
 
   const isQHSSEInitiated = useMemo(() => {
     if (!revocationData) return false;
@@ -34,6 +34,7 @@ const PermitRevocation = ({ permitId, revocationData, onRevocationProcessed, isQ
     revocationData?.Status === 'Revocation Pending';
 
     const handleRevocationAction = async (status) => {
+      
       // Check if comments are at least 10 characters long
       if (comments.trim().length < 10) {
         setError('Comments must be at least 10 characters long');
@@ -171,14 +172,14 @@ const PermitRevocation = ({ permitId, revocationData, onRevocationProcessed, isQ
                   </div>
   
                   <div className="flex flex-wrap gap-3 justify-end">
-                    <Button
-                      variant="outline"
-                      className="border-red-200 text-red-800 hover:bg-red-50"
-                      disabled={processing}
-                      onClick={() => handleRevocationAction('Rejected')}
-                    >
-                      Reject Revocation
-                    </Button>
+                  <Button
+                    variant="outline"
+                    className="border-white-300 text-red-800 bg-white-100 hover:bg-gray-200"
+                    disabled={processing}
+                    onClick={() => handleRevocationAction('Rejected')}
+                  >
+                    Reject Revocation
+                  </Button>
                     <Button
                       variant="danger"
                       className="bg-red-600 hover:bg-red-700 text-white"

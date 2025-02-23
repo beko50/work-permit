@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from './components/ui/card';
 import { Button } from './components/ui/button';
-import { X, Check, Clock, AlertTriangle,Eye } from 'lucide-react';
+import { X, Check, Clock, AlertTriangle,Eye,CheckCircle2 } from 'lucide-react';
 import { api } from './services/api';
 import logo from './assets/mps_logo.jpg';
 import PermitRevocation from './components/ui/Revocation';
@@ -15,6 +15,7 @@ const SubmittedPTW = () => {
   const [error, setError] = useState(null);
   const [approvals, setApprovals] = useState([]);
   const [revocationData, setRevocationData] = useState(null);
+  const [completionDetails, setCompletionDetails] = useState(null);
     const [currentUser, setCurrentUser] = useState(null);
 
   const formatDate = (dateString, dateOnly = false) => {
@@ -31,7 +32,28 @@ const SubmittedPTW = () => {
         });
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, completionStatus) => {
+    // First check completion status
+    if (completionStatus === 'Job Completed') {
+      return (
+        <div className="inline-flex items-center px-3 py-1 bg-blue-600 text-white rounded-full text-sm">
+          <CheckCircle2 size={16} className="mr-1" />
+          Job Completed
+        </div>
+      );
+    }
+
+    // Then check revocation
+    if (status === 'Revoked') {
+      return (
+        <div className="inline-flex items-center px-3 py-1 bg-gray-600 text-white rounded-full text-sm">
+          <X size={16} className="mr-1" />
+          Revoked
+        </div>
+      );
+    }
+
+    // Finally, check approval status
     switch (status?.toLowerCase()) {
       case 'approved':
         return (
@@ -73,10 +95,30 @@ const SubmittedPTW = () => {
         const response = await api.getPermitToWorkById(permitToWorkId);
 
         if (response.success && response.data?.permit) {
+          const permitData = response.data.permit;
           setPtw({
             ...response.data.permit,
-            jobPermit: response.data.jobPermit
+            jobPermit: response.data.jobPermit,
+            Status: response.data.permit.Status,
+  CompletionStatus: response.data.permit.CompletionStatus
           });
+
+        // Set completion details if job is completed
+        if (permitData.CompletionStatus === 'Job Completed') {
+          setCompletionDetails({
+            issuerCompletion: {
+              completer: permitData.IssuerCompleterName,
+              completionDate: permitData.IssuerCompletionDate,
+              status: permitData.IssuerCompletionStatus
+            },
+            qhsseCompletion: {
+              completer: permitData.QHSSECompleterName,
+              completionDate: permitData.QHSSECompletionDate,
+              status: permitData.QHSSECompletionStatus,
+              comments: permitData.QHSSECompletionComments
+            }
+          });
+        }  
 
           // Check if revocation data exists
           if (response.data.permit.RevocationInitiatedBy || 
@@ -185,7 +227,7 @@ const SubmittedPTW = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">
-                    <span className="font-bold">Status:</span> {getStatusBadge(ptw.Status)}
+                  <span className="font-bold">Status:</span> {getStatusBadge(ptw.Status, ptw.CompletionStatus)}
                   </p>
                 </div>
               </div>
@@ -297,6 +339,52 @@ const SubmittedPTW = () => {
               All appropriate safety measures and precautions must be followed throughout the duration of work.
             </div>
           )}
+
+          {/* Add completion details section if job is completed */}
+        {completionDetails && (
+          <Card className="shadow-sm mt-4">
+            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Completion Details</div>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-medium mb-2">Permit Issuer Completion</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-600">Completed By:</p>
+                      <p>{completionDetails.issuerCompletion.completer}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Completion Date:</p>
+                      <p>{formatDate(completionDetails.issuerCompletion.completionDate)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-medium mb-2">QHSSE Final Completion</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-600">Completed By:</p>
+                      <p>{completionDetails.qhsseCompletion.completer}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Completion Date:</p>
+                      <p>{formatDate(completionDetails.qhsseCompletion.completionDate)}</p>
+                    </div>
+                    {completionDetails.qhsseCompletion.comments && (
+                      <div className="col-span-2">
+                        <p className="text-gray-600">Comments:</p>
+                        <p className="bg-gray-50 p-2 rounded mt-1">
+                          {completionDetails.qhsseCompletion.comments}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
           <div className="flex justify-end mt-4 gap-4">
             <Button 

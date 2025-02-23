@@ -287,12 +287,6 @@ const SafetyForm = () => {
     navigate('/dashboard/permits/job-permits');
   };
 
-  const handleSaveDraft = () => {
-    // Implement your save draft logic here
-    // For example:
-    // savePermitDraft(formData);
-    setIsSubmitting(true);
-  };
 
   const handleInitiateClose = () => {
     setIsDialogOpen(true);
@@ -383,36 +377,66 @@ const SafetyForm = () => {
         }
       };
   
+      const processFile = async (file) => {
+        // First validate the file before processing
+        const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
+        const validExtensions = ['jpg', 'jpeg', 'png', 'doc', 'docx', 'pdf'];
+        
+        // Validate file size
+        if (file.size > MAX_FILE_SIZE) {
+          throw new Error(`File ${file.name} is too large. Maximum size is 4MB`);
+        }
+        
+        // Validate file type
+        const extension = file.name.split('.').pop().toLowerCase();
+        if (!validExtensions.includes(extension)) {
+          throw new Error(`File ${file.name} has invalid format. Allowed formats are: jpg, jpeg, png, doc, docx, pdf`);
+        }
+        
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          
+          reader.onload = () => {
+            resolve({
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              data: reader.result
+            });
+          };
+          
+          reader.onerror = () => reject(new Error(`Error reading file ${file.name}`));
+          reader.readAsDataURL(file);
+        });
+      };
   
-      const handleFileUpload = (event, setFieldValue) => {
-  const newFiles = Array.from(event.target.files);
+      const handleFileUpload = async (event, setFieldValue, setFieldError) => {
+        const newFiles = Array.from(event.target.files);
+        
+        try {
+          const processedFiles = await Promise.all(newFiles.map(processFile));
+          setFileToUpload(prevFiles => [...prevFiles, ...processedFiles]);
+          setFieldValue('riskAssessment', processedFiles);
+        } catch (error) {
+          console.error('Error processing files:', error);
+          setFieldError('riskAssessment', error.message);
+        }
+      };
   
-  if (newFiles.length > 0) {
-    const filePromises = newFiles.map(file => {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          resolve(reader.result);
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-
-    Promise.all(filePromises).then(dataUrls => {
-      setFileToUpload(prevFiles => [...prevFiles, ...newFiles]);
-      setFieldValue('riskAssessment', dataUrls);
-    });
-  }
-};
-  
-  const handleFileDrop = (event, setFieldValue) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const newFiles = Array.from(event.dataTransfer.files);
-    const updatedFiles = [...fileToUpload, ...newFiles];
-    setFileToUpload(updatedFiles);
-    setFieldValue('riskAssessment', updatedFiles);
-  };
+      const handleFileDrop = async (event, setFieldValue, setFieldError) => {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const newFiles = Array.from(event.dataTransfer.files);
+        try {
+          const processedFiles = await Promise.all(newFiles.map(processFile));
+          setFileToUpload(prevFiles => [...prevFiles, ...processedFiles]);
+          setFieldValue('riskAssessment', processedFiles);
+        } catch (error) {
+          console.error('Error processing dropped files:', error);
+          setFieldError('riskAssessment', error.message);
+        }
+      };
   
   const handleFileRemove = (index, setFieldValue) => {
     const updatedFiles = fileToUpload.filter((_, i) => i !== index);
@@ -782,36 +806,62 @@ const SafetyForm = () => {
                   values.contractCompanyName : null,
                 staffID: values.contractType === 'Internal / MPS' ? 
                   values.staffID : null,
+                documents: values.riskAssessment.map(file => ({
+                  fileName: file.name,
+                  fileType: file.type,
+                  fileData: file.data
+                })),
                 numberOfWorkers: parseInt(values.numberOfWorkers) || 0,
                 workersNames,
                 checkboxSelections // Include the checkbox selections here
               };
 
-              if (fileToUpload.length > 0) {
+              if (values.riskAssessment && values.riskAssessment.length > 0) {
                 try {
-                    // Read the first file (if you want to handle multiple files, you'll need to modify this)
-                    const file = fileToUpload[0];
-                    const reader = new FileReader();
-                    
-                    await new Promise((resolve, reject) => {
-                        reader.onload = () => {
-                            submitData.riskAssessmentDocument = reader.result;
-                            resolve();
-                        };
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                    });
+                  submitData.riskAssessmentDocuments = values.riskAssessment.map(file => ({
+                    fileName: file.name,
+                    fileType: file.type,
+                    data: file.data
+                  }));
                 } catch (error) {
-                    console.error('Error processing file:', error);
-                    throw error;
+                  console.error('Error processing files:', error);
+                  throw error;
                 }
-            }
+              }
           
               console.log('Submit Data:', submitData);
               console.log('Checkbox Selections:', checkboxSelections); // Add this for debugging
           
               const response = await api.createPermit(submitData);
               console.log('API Response:', response);
+
+              const FileList = ({ files, onRemove }) => (
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold mb-2">Uploaded Documents</h4>
+                  <div className="space-y-2">
+                    {files.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between bg-gray-200 p-2 rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                            {file.type.split('/')[1].toUpperCase()}
+                          </span>
+                          <span className="text-sm text-gray-700 truncate">{file.name}</span>
+                          <span className="text-xs text-gray-500">
+                            ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-red-500 hover:text-red-700"
+                          onClick={() => onRemove(index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
           
               navigate('/dashboard/permits/job-permits/success', { 
                 state: { success: true, permitId: response.jobPermitId } 
@@ -1249,17 +1299,13 @@ const SafetyForm = () => {
                           e.preventDefault();
                           e.stopPropagation();
                         }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleFileDrop(e,setFieldValue);
-                        }}
+                        onDrop={(e) => handleFileDrop(e, setFieldValue, setFieldError)}
                       >
                         <input
                           type="file"
                           id="riskAssessmentUpload"
                           multiple
-                          onChange={(e) => handleFileUpload(e, setFieldValue)}
+                          onChange={(e) => handleFileUpload(e, setFieldValue, setFieldError)}
                           className="hidden"
                           accept=".jpg,.jpeg,.png,.doc,.docx,.pdf"
                         />
@@ -1269,6 +1315,9 @@ const SafetyForm = () => {
                         >
                           <CloudUpload className="h-8 w-8 text-blue-500" />
                           <span className="text-blue-500 font-medium">Click To Upload Documents</span>
+                          <span className="text-xs text-gray-500">
+                            Max file size: 4MB. Supported formats: JPG, PNG, PDF, DOC, DOCX
+                          </span>
                         </label>
                       </div>
                       {errors.riskAssessment && touched.riskAssessment && (

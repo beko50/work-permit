@@ -1,6 +1,19 @@
 const { poolPromise, sql } = require('../db');
 
 const permitModel = {
+  async getCreatorEmail(creatorId) {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('creatorId', sql.Int, creatorId)
+      .query(`
+        SELECT Email
+        FROM Users
+        WHERE UserID = @creatorId
+      `);
+    
+    return result.recordset[0]?.Email;
+  },
+
   async getFormSections() {
     const pool = await poolPromise;
     const result = await pool.request()
@@ -43,14 +56,14 @@ const permitModel = {
       .input('staffId', sql.VarChar(50), permitData.staffID)
       .input('numberOfWorkers', sql.Int, permitData.numberOfWorkers)
       .input('workersNames', sql.VarChar(sql.MAX), permitData.workersNames)
-      .input('riskAssessmentDocument', sql.NVarChar(sql.MAX), riskAssessmentDoc)
+      //.input('riskAssessmentDocument', sql.NVarChar(sql.MAX), riskAssessmentDoc)
       .query(`
         INSERT INTO JobPermits (
           StartDate, EndDate, PermitDuration, Department,
           JobLocation, SubLocation, LocationDetail,
           JobDescription, PermitReceiver, ContractType,
           ContractCompanyName, StaffID, NumberOfWorkers,
-          WorkersNames, RiskAssessmentDocument, Creator, Created, Status
+          WorkersNames, Creator, Created, Status
         )
         OUTPUT INSERTED.JobPermitID
         VALUES (
@@ -58,9 +71,30 @@ const permitModel = {
           @jobLocation, @subLocation, @locationDetail,
           @jobDescription, @permitReceiver, @contractType,
           @contractCompanyName, @staffId, @numberOfWorkers,
-          @workersNames, @riskAssessmentDocument, ${userId}, GETDATE(), 'Pending'
+          @workersNames, ${userId}, GETDATE(), 'Pending'
         );
       `);
+
+      const jobPermitId = permitResult.recordset[0].JobPermitID;
+
+    // Then insert all documents if they exist
+    if (permitData.riskAssessmentDocuments && permitData.riskAssessmentDocuments.length > 0) {
+      for (const doc of permitData.riskAssessmentDocuments) {
+        await transaction.request()
+          .input('jobPermitId', sql.Int, jobPermitId)
+          .input('fileName', sql.NVarChar(255), doc.fileName)
+          .input('fileType', sql.NVarChar(100), doc.fileType)
+          .input('fileData', sql.NVarChar(sql.MAX), doc.data)
+          .query(`
+            INSERT INTO JobPermitDocuments (
+              JobPermitID, FileName, FileType, FileData
+            )
+            VALUES (
+              @jobPermitId, @fileName, @fileType, @fileData
+            );
+          `);
+      }
+    }
 
     return permitResult.recordset[0];
   },
@@ -256,26 +290,31 @@ const permitModel = {
         request.input('status', sql.VarChar(50), searchParams.status);
       }
   
-      if (searchParams.startDate) {
+      if (searchParams.changedStartDate) {
+        query += ` AND CAST(p.Changed AS DATE) >= @changedStartDate`;
+        request.input('changedStartDate', sql.Date, new Date(searchParams.changedStartDate));
+      } else if (searchParams.startDate) {
         query += ` AND CAST(p.Created AS DATE) >= @startDate`;
         request.input('startDate', sql.Date, new Date(searchParams.startDate));
       }
   
-      if (searchParams.endDate) {
+      if (searchParams.changedEndDate) {
+        query += ` AND CAST(p.Changed AS DATE) <= @changedEndDate`;
+        request.input('changedEndDate', sql.Date, new Date(searchParams.changedEndDate));
+      } else if (searchParams.endDate) {
         query += ` AND CAST(p.Created AS DATE) <= @endDate`;
         request.input('endDate', sql.Date, new Date(searchParams.endDate));
       }
 
       // Add department filter if provided
       if (searchParams.department) {
-        query += ` AND (
-          p.Department = @filterDepartment 
-          OR p.Department IN (
+        query += ` AND 
+          p.Department IN (
             SELECT DepartmentName 
             FROM Departments 
             WHERE DepartmentID = @filterDepartment
           )
-        )`;
+        `;
         request.input('filterDepartment', sql.VarChar(50), searchParams.department);
       }
   
@@ -336,7 +375,6 @@ async getPermitById(permitId) {
           p.StaffID,
           p.NumberOfWorkers,
           p.WorkersNames,
-          CAST(p.RiskAssessmentDocument AS NVARCHAR(MAX)) as RiskAssessmentDocument,
           p.Created,
           p.Status,
           p.Creator,
@@ -380,6 +418,16 @@ async getPermitById(permitId) {
         LEFT JOIN Users revApprover ON p.RevocationApprovedBy = revApprover.UserID
         WHERE p.JobPermitID = @permitId;
 
+        -- Fetch all documents for this permit
+        SELECT 
+          DocumentID,
+          FileName,
+          FileType,
+          FileData,
+          Created
+        FROM JobPermitDocuments
+        WHERE JobPermitID = @permitId;
+
         -- First, get all unique sections that have selected checkboxes
         SELECT DISTINCT
           fs.SectionID,
@@ -408,23 +456,23 @@ async getPermitById(permitId) {
         ORDER BY fs.SectionID;
       `);
 
-    if (result.recordset.length === 0) {
-      return { permit: null, sections: [], checkboxes: [] };
-    }
-
-     // Handle Risk Assessment Document
-    if (result.recordsets[0][0]?.RiskAssessmentDocument) {
-      const docData = result.recordsets[0][0].RiskAssessmentDocument;
-      if (typeof docData === 'string') {
-        result.recordsets[0][0].RiskAssessmentDocument = docData.startsWith('data:') 
-          ? docData 
-          : `data:image/png;base64,${docData}`;
+      if (result.recordset.length === 0) {
+        return { permit: null, documents: [], groupedCheckboxes: [] };
       }
-    }
+
+     // Process documents
+    const documents = result.recordsets[1].map(doc => ({
+      id: doc.DocumentID,
+      fileName: doc.FileName,
+      fileType: doc.FileType,
+      fileData: doc.FileData,
+      created: doc.Created
+    }));
 
     // Group checkboxes by section
-    const sections = result.recordsets[1];
-    const checkboxes = result.recordsets[2];
+    // recordsets[2] contains sections, recordsets[3] contains checkboxes
+    const sections = result.recordsets[2];
+    const checkboxes = result.recordsets[3];
     
     const groupedCheckboxes = sections.map(section => ({
       sectionId: section.SectionID,
@@ -440,7 +488,8 @@ async getPermitById(permitId) {
     
     return { 
       permit: result.recordset[0], 
-      groupedCheckboxes: groupedCheckboxes
+      documents,
+      groupedCheckboxes
     };
   } catch (error) {
     console.error('Error fetching permit and checkboxes:', error);
@@ -1031,67 +1080,70 @@ async searchPTW(searchParams, user) {
   }
 },
 
-async completePermitToWork(permitToWorkId, completionData, userId, transaction) {
-  const { stage, remarks } = completionData;
+  async completePermitToWork(permitToWorkId, completionData, userId, transaction) {
+    const { stage, remarks } = completionData;
 
-  if (!userId) {
-    throw new Error('User ID is required for completion');
-  }
-
-  const columnMap = {
-    'ISS': {
-      status: 'IssuerCompletionStatus',
-      date: 'IssuerCompletionDate',
-      completedBy: 'IssuerCompletedBy'
-    },
-    'QA': {
-      status: 'QHSSECompletionStatus',
-      date: 'QHSSECompletionDate',
-      completedBy: 'QHSSECompletedBy',
-      comments: 'QHSSECompletionComments'
+    if (!userId) {
+      throw new Error('User ID is required for completion');
     }
-  };
 
-  const currentStageColumns = columnMap[stage];
+    const columnMap = {
+      'ISS': {
+        status: 'IssuerCompletionStatus',
+        date: 'IssuerCompletionDate',
+        completedBy: 'IssuerCompletedBy'
+      },
+      'QA': {
+        status: 'QHSSECompletionStatus',
+        date: 'QHSSECompletionDate',
+        completedBy: 'QHSSECompletedBy',
+        comments: 'QHSSECompletionComments'
+      }
+    };
 
-  // Build the query dynamically based on the stage
-  let query = `
-    UPDATE PermitToWork 
-    SET
-      ${currentStageColumns.status} = 'Completed',
-      ${currentStageColumns.date} = GETDATE(),
-      ${currentStageColumns.completedBy} = @userId,
-  `;
+    const currentStageColumns = columnMap[stage];
 
-  // When Issuer completes, set QHSSE status to 'Pending Completion'
-  if (stage === 'ISS') {
-    query += `
-      QHSSECompletionStatus = 'Pending Completion',
-      CompletionStatus = 'Pending Completion',
+    let query = `
+      UPDATE PermitToWork 
+      SET
+        ${currentStageColumns.status} = 'Completed',
+        ${currentStageColumns.date} = GETDATE(),
+        ${currentStageColumns.completedBy} = @userId,
     `;
-  } else if (stage === 'QA') {
-    // When QHSSE completes, update final completion status
+
+    if (stage === 'ISS') {
+      // When Issuer completes, set overall status to 'Pending Completion'
+      // and prepare for QA review
+      query += `
+        CompletionStatus = 'Pending Completion',
+        QHSSECompletionStatus = 'Pending',
+      `;
+    } else if (stage === 'QA') {
+      // When QA completes, set final completion status
+      query += `
+        CompletionStatus = CASE 
+          WHEN @remarks LIKE '%reject%' OR @remarks LIKE '%revision%' THEN 'In Progress'
+          ELSE 'Job Completed'
+        END,
+        ${currentStageColumns.comments} = @remarks,
+      `;
+    }
+
     query += `
-      CompletionStatus = 'Job Completed',
-      ${currentStageColumns.comments} = @remarks,
+        Changed = GETDATE(),
+        Changer = @userId
+      WHERE PermitToWorkID = @permitToWorkId
     `;
-  }
 
-  query += `
-      Changed = GETDATE(),
-      Changer = @userId
-    WHERE PermitToWorkID = @permitToWorkId
-  `;
+    const result = await transaction.request()
+      .input('permitToWorkId', sql.Int, permitToWorkId)
+      .input('userId', sql.Int, userId)
+      .input('remarks', sql.NVarChar(sql.MAX), remarks || '')
+      .input('stage', sql.VarChar(3), stage)
+      .query(query);
 
-  const result = await transaction.request()
-    .input('permitToWorkId', sql.Int, permitToWorkId)
-    .input('userId', sql.Int, userId)
-    .input('remarks', sql.NVarChar(sql.MAX), remarks || '')
-    .input('stage', sql.VarChar(3), stage)
-    .query(query);
-
-  return result.rowsAffected[0];
-},
+    return result.rowsAffected[0];
+  },
 
   /* async updatePermitStatus(permitId, status, changerId, transaction) {
     const result = await transaction.request()

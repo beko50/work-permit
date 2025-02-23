@@ -177,8 +177,8 @@ const JobsMonitoring = () => {
       switch (currentTab) {
         case 'ongoing':
           return permit.Status === 'Approved' && 
-                 (!permit.CompletionStatus || 
-                  permit.CompletionStatus === 'In Progress');
+                (permit.CompletionStatus === 'In Progress' || 
+                 permit.CompletionStatus === 'Pending Completion');
   
         case 'completed':
           return permit.CompletionStatus === 'Job Completed';
@@ -191,16 +191,18 @@ const JobsMonitoring = () => {
       }
     });
   };
-
+  
   const getStatusColor = (status, completionStatus, currentTab) => {
     if (currentTab === 'revoked') {
       return 'text-gray-500';
     }
     switch (completionStatus?.toLowerCase()) {
       case 'job completed':
-        return 'text-green-500';
+        return 'text-blue-500';
       case 'in progress':
         return 'text-orange-500';
+      case 'pending completion':
+        return 'text-orange-500'; 
       case 'revoked':
       case 'rejected':
         return 'text-red-500';
@@ -208,21 +210,26 @@ const JobsMonitoring = () => {
         return 'text-orange-500';
     }
   };
-
+  
   const getDisplayStatus = (status, completionStatus, currentTab) => {
     if (status === 'Revoked') {
       return 'REVOKED';
     }
-    if (completionStatus === 'In Progress') {
-      return 'ONGOING';
+  
+    // Check IssuerCompletionStatus first
+    if (status === 'Approved') {
+      switch (completionStatus) {
+        case 'Pending Completion':
+          return 'ONGOING';
+        case 'Job Completed':
+          return 'COMPLETED';
+        case 'In Progress':
+          return 'ONGOING';
+        default:
+          return status === 'Rejected' ? 'REJECTED' : 'ONGOING';
+      }
     }
-    if (completionStatus === 'Job Completed') {
-      return 'COMPLETED';
-    }
-    if (status === 'Rejected') {
-      return 'REJECTED';
-    }
-    return 'ONGOING';
+    return status.toUpperCase();
   };
 
   const filteredPermits = getFilteredPermits();
@@ -316,11 +323,13 @@ const JobsMonitoring = () => {
                   <div className="flex flex-col">
                     <span>PTW-{String(permit.PermitToWorkID).padStart(4, '0')}</span>
                     <span className={getStatusColor(permit.Status, permit.CompletionStatus, currentTab)}>
-                      {currentTab === 'completed' 
-                        ? 'Job Completed' 
-                        : currentTab === 'ongoing' 
-                          ? 'In Progress'
-                          : permit.Status}
+                    {currentTab === 'completed' 
+                      ? 'Job Completed' 
+                      : currentTab === 'revoked'
+                        ? 'Revoked'
+                        : permit.CompletionStatus === 'Pending Completion'
+                          ? 'Pending Completion'
+                          : permit.CompletionStatus || 'In Progress'}
                     </span>
                   </div>
                 </TableCell>

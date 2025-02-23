@@ -541,7 +541,7 @@ const resetFilters = () => {
       {/* Main Content Card */}
       <Card>
         <CardHeader>
-          <h1 className="text-2xl font-semibold">Request for Job Permit</h1>
+          <h1 className="text-2xl font-semibold"> Job Permits (Pending Requests)</h1>
         </CardHeader>
         <CardContent className="p-4">
           {/* Action Buttons - show all for ISS/HOD, limited for RCV */}

@@ -1,5 +1,6 @@
 const { poolPromise } = require('../db');
 const permitModel = require('../models/permitModel');
+const notificationService = require('../services/emailService');
 
 const permitController = {
   async getFormSections(req, res) {
@@ -39,7 +40,7 @@ const permitController = {
     const transaction = await pool.transaction();
 
     try {
-      const { checkboxSelections, ...permitData } = req.body;
+      const { checkboxSelections,riskAssessmentDocuments, ...permitData } = req.body;
 
       // Handle contract company name based on contract type
       if (permitData.contractType === 'Internal / MPS') {
@@ -53,7 +54,13 @@ const permitController = {
 
       await transaction.begin();
 
-      const permitResult = await permitModel.createPermit(permitData, checkboxSelections, req.body.user.id, transaction);
+      // Add the documents back to permitData
+      const permitDataWithDocs = {
+        ...permitData,
+        riskAssessmentDocuments
+      };
+
+      const permitResult = await permitModel.createPermit(permitDataWithDocs, checkboxSelections, req.body.user.id, transaction);
       const jobPermitId = permitResult.JobPermitID;
 
       if (Array.isArray(checkboxSelections) && checkboxSelections.length > 0) {
@@ -61,6 +68,25 @@ const permitController = {
       }
 
       await transaction.commit();
+
+       // Send email notification for permit creation after transaction is committed
+    try {
+      await notificationService.handlePermitCreated({
+        permitId: jobPermitId,
+        createdBy: req.body.user.name || 'System User', // Use consistent user reference
+        createdByEmail: req.body.user.email,
+        department: permitData.department,
+        location: permitData.jobLocation,
+        workDescription: permitData.jobDescription,
+        startDate: permitData.startDate,
+        endDate: permitData.endDate,
+        permitType: 'JobPermit'
+      });
+    } catch (notificationError) {
+      // Log notification error but don't fail the entire operation
+      console.error('Failed to send notification, but permit was created:', notificationError);
+    }
+
       res.status(201).json({
         message: 'Work permit created successfully',
         jobPermitId: jobPermitId,
@@ -86,7 +112,7 @@ const permitController = {
       if (!req.user) {
         return res.status(401).json({ message: 'User not authenticated' });
       }
-      console.log('User object:', req.user); // Log full user object
+      // console.log('User object:', req.user); // Log full user object
 
       // Add null check for department
     const user = {
@@ -97,7 +123,7 @@ const permitController = {
 
       const queryResult = await permitModel.getPermitsByRole(req.user);
 
-      console.log(queryResult.recordset)
+      // console.log(queryResult.recordset)
 
       if (!queryResult || !queryResult.recordset) {
         return res.status(500).json({ message: 'Error retrieving permits' });
@@ -179,23 +205,37 @@ const permitController = {
 
   async getPermitById(req, res) {
     const permitId = req.params.permitId;
-
+  
     try {
-      // Call the permitModel method to fetch the permit data
-      const permit = await permitModel.getPermitById(permitId);
-
-      if (!permit) {
-        return res.status(404).json({ message: 'Permit not found' });
+      const result = await permitModel.getPermitById(permitId);
+  
+      if (!result) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Permit not found' 
+        });
       }
-
-      res.json(permit);
+  
+      // Structure the response to match what the frontend expects
+      const response = {
+        success: true,
+        data: {
+          permit: result.permit,
+          documents: result.documents || [],
+          groupedCheckboxes: result.groupedCheckboxes || []
+        }
+      };
+  
+      res.json(response);
     } catch (error) {
       console.error('Error fetching permit:', error);
-      res.status(500).json({ message: 'Error fetching permit', error: error.message });
+      res.status(500).json({ 
+        success: false, 
+        message: 'Error fetching permit', 
+        error: error.message 
+      });
     }
   },
-
-
 
   async approvePermit(req, res) {
     const pool = await poolPromise;
@@ -233,6 +273,14 @@ const permitController = {
           message: 'Permit not found' 
         });
       }
+
+      const creatorEmail = await permitModel.getCreatorEmail(permitResult.Creator);
+      const userDetails = await notificationService.handleStatusUpdate(
+        jobPermitId,
+        status,
+        req.user,
+        comments
+      );
       
       // Extract AssignedTo from permit
       const { AssignedTo } = permitResult.permit;
@@ -270,6 +318,31 @@ const permitController = {
       }
   
       await transaction.commit();
+
+       // Send status update notification after commit
+       try {
+        const usersToNotify = await notificationService.getUsersToNotify({
+          department: req.user.departmentId,
+          permitType: 'JobPermit',
+          createdByEmail: creatorEmail
+        });
+  
+        await notificationService.sendNotification(
+          usersToNotify,
+          'permitStatusUpdate',
+          userDetails,
+          {
+            permitId: jobPermitId,
+            status: status,
+            updatedBy: req.user.name,
+            userRole: req.user.role,
+            departmentName: req.user.departmentName || req.user.departmentId,
+            comments: comments
+          }
+        );
+      } catch (notificationError) {
+        console.error('Failed to send notification:', notificationError);
+      }
 
       // Determine next stage for response message
       const nextStageMap = {
@@ -323,9 +396,12 @@ const permitController = {
         jobPermitId: req.query.jobPermitId,
         permitReceiver: req.query.permitReceiver,
         contractCompanyName: req.query.contractCompanyName,
+        department: req.query.department,
         status: req.query.status,
         startDate: req.query.startDate,
         endDate: req.query.endDate,
+        changedStartDate: req.query.changedStartDate,
+        changedEndDate: req.query.changedEndDate,
         page: parseInt(req.query.page) || 1,
         limit: parseInt(req.query.limit) || 10
       };
@@ -440,6 +516,26 @@ const permitController = {
 
       await transaction.commit();
 
+      try {
+        await notificationService.handlePermitToWorkCreated({
+          permitId: result.PermitToWorkID,
+          jobPermitId: permitData.jobPermitId,
+          createdBy: req.user.name,
+          createdByEmail: req.user.email,
+          department: req.user.departmentName || req.user.departmentId,
+          location: permitData.jobLocation || permitData.location,
+          workDuration: permitData.workDuration,
+          startDate: permitData.entryDate,
+          endDate: permitData.exitDate,
+          permitType: 'PermitToWork'
+        });
+      } catch (notificationError) {
+        console.error('Failed to send PTW creation notification:', {
+          permitId: result.PermitToWorkID,
+          error: notificationError.message
+        });
+      }
+
       res.status(201).json({
         message: 'Permit to Work created successfully',
         permitToWorkId: result.PermitToWorkID
@@ -461,10 +557,10 @@ const permitController = {
 async getPermitToWorkById(req, res) {
   try {
     const { permitToWorkId } = req.params;
-    console.log('Fetching PermitToWork for PermitToWorkID:', permitToWorkId); // Log the ID
+    // console.log('Fetching PermitToWork for PermitToWorkID:', permitToWorkId); // Log the ID
 
     const result = await permitModel.getPermitToWorkById(permitToWorkId);
-    console.log('Fetched Data:', result); // Log the fetched data
+    // console.log('Fetched Data:', result); // Log the fetched data
 
     if (!result) {
       return res.status(404).json({ 
@@ -547,6 +643,17 @@ async approvePermitToWork(req, res) {
     // Get AssignedTo from the nested permit object
     const { AssignedTo } = permitResult.permit;
 
+    // Get user details including department
+    const userDetails = await notificationService.handleStatusUpdate(
+      permitToWorkId,
+      status,
+      {
+        ...req.user,
+        name: `${req.user.firstName} ${req.user.lastName}`.trim() // Ensure we have the full name
+      },
+      comments
+    );
+
     const userRole = req.user.role.trim();
     if (
       (AssignedTo === 'ISS' && userRole !== 'ISS') ||
@@ -576,6 +683,36 @@ async approvePermitToWork(req, res) {
     }
 
     await transaction.commit();
+
+    try {
+      const permitDetails = await permitModel.getPermitToWorkById(permitToWorkId);
+      const usersToNotify = await notificationService.getUsersToNotify({
+        department: permitDetails.permit.Department,
+        permitType: 'PermitToWork',
+        createdByEmail: permitDetails.permit.CreatedByEmail
+      });
+  
+      await notificationService.sendNotification(
+        usersToNotify,
+        'permitToWorkStatusUpdate',
+        {
+          permitId: permitToWorkId,
+          jobPermitId: permitDetails.permit.JobPermitID,
+          status: status,
+          updatedBy: userDetails.updatedBy, // Use the name from userDetails
+          userRole: userDetails.userRole,
+          departmentName: userDetails.departmentName,
+          assignedTo: AssignedTo,
+          comments: comments,
+          permitType: 'PermitToWork'
+        }
+      );
+    } catch (notificationError) {
+      console.error('Failed to send PTW approval notification:', {
+        permitId: permitToWorkId,
+        error: notificationError.message
+      });
+    }
 
     const nextStageMap = {
       'ISS': 'HOD',
@@ -787,6 +924,29 @@ async approvePermitToWork(req, res) {
 
         await transaction.commit();
 
+        try {
+          const permitDetails = await permitModel.getPermitToWorkById(permitToWorkId);
+          await notificationService.sendNotification(
+            await notificationService.getUsersToNotify({
+              department: permitDetails.permit.Department,
+              permitType: 'PermitToWork'
+            }),
+            'permitToWorkCompleted',
+            {
+              permitId: permitToWorkId,
+              completedBy: req.user.name,
+              stage: stage,
+              remarks: remarks || 'No remarks provided',
+              remarksSection: remarks ? `<p><strong>Remarks:</strong> ${remarks}</p>` : ''
+            }
+          );
+        } catch (notificationError) {
+          console.error('Failed to send PTW completion notification:', {
+            permitId: permitToWorkId,
+            error: notificationError.message
+          });
+        }
+
         res.json({
           success: true,
           message: `Permit successfully completed by ${stage === 'ISS' ? 'Issuer' : 'QHSSE'}`
@@ -871,6 +1031,35 @@ async initiateRevocation(req, res) {
     }
 
     await transaction.commit();
+
+    // Send revocation notifications after commit
+    try {
+      for (const permit of permits) {
+        await notificationService.sendNotification(
+          await notificationService.getUsersToNotify({
+            department: req.user.departmentId,
+            permitType: permit.type === 'job' ? 'JobPermit' : 'PermitToWork'
+          }),
+          'permitStatusUpdate',
+          {
+            permitId: permit.id,
+            status: 'Revocation Initiated',
+            updatedBy: req.user.name,
+            comments: reason
+          }
+        );
+      }
+    } catch (notificationError) {
+      console.error('Failed to send revocation notification:', {
+        permits: permits.map(p => ({ id: p.id, type: p.type })),
+        error: notificationError.message,
+        stack: notificationError.stack,
+        userData: {
+          name: req.user.name,
+          department: req.user.departmentId
+        }
+      });
+    }
 
     const isQHSSE = req.user.role === 'QA';
     res.json({
@@ -983,6 +1172,35 @@ async approveRevocation(req, res) {
       }));
 
       await transaction.commit();
+
+      try {
+        await Promise.all(permits.map(async permit => {
+          const permitDetails = permit.type === 'job' 
+            ? await permitModel.getPermitById(permit.id)
+            : await permitModel.getPermitToWorkById(permit.id);
+            
+          await notificationService.sendNotification(
+            await notificationService.getUsersToNotify({
+              department: permitDetails.Department,
+              permitType: permit.type === 'job' ? 'JobPermit' : 'PermitToWork'
+            }),
+            'permitRevoked',
+            {
+              permitId: permit.id,
+              permitType: permit.type === 'job' ? 'Job Permit' : 'Permit to Work',
+              status: status,
+              approvedBy: req.user.name,
+              comments: comments,
+              permitUrlPath: permit.type === 'job' ? 'permits' : 'permits/ptw'
+            }
+          );
+        }));
+      } catch (notificationError) {
+        console.error('Failed to send revocation notification:', {
+          permits: permits.map(p => ({ id: p.id, type: p.type })),
+          error: notificationError.message
+        });
+      }
 
       const statusMessage = status === 'Approved' 
         ? 'Permit has been revoked successfully'

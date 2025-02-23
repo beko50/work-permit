@@ -143,13 +143,15 @@ const PermitToWork = () => {
         // Automatically switch to the appropriate tab based on the permit status
         const permit = response.data[0];
         const status = permit.Status.toLowerCase();
-        const newTab = 
-          status === 'pending' ? 'approved-job-permits' :
-          status === 'approved' ? 'approved' :
-          status === 'completed' ? 'completed' :
-          status === 'rejected' ? 'rejected' :
-          status === 'revoked' ? 'revoked' :
-          currentTab;
+        const isCompleted = permit.CompletionStatus === 'Job Completed';
+
+        // First check if the job is completed
+        const newTab = isCompleted ? 'completed' :
+        status === 'pending' ? 'approved-job-permits' :
+        status === 'approved' ? 'approved' :
+        status === 'rejected' ? 'rejected' :
+        status === 'revoked' ? 'revoked' :
+        currentTab;
         
         setCurrentTab(newTab);
       } else {
@@ -267,15 +269,21 @@ const PermitToWork = () => {
   const getFilteredPermits = () => {
     return permits.filter(permit => {
       const status = permit.Status.toLowerCase();
+      
+      // First check if user has access based on role and department
+      if (!currentUser) return false;
+      
       switch (currentTab) {
         case 'approved-job-permits':
-          return status === 'pending' || status === 'revocation pending'; // Include Revocation Pending
+          return status === 'pending' || status === 'revocation pending';
         case 'approved':
-          return status === 'approved';
+          // Only show in Approved if status is approved AND job is not completed yet
+          return status === 'approved' && permit.CompletionStatus !== 'Job Completed';
         case 'rejected':
           return status === 'rejected';
         case 'completed':
-          return status === 'completed';
+          // Show in Completed if CompletionStatus is Job Completed
+          return permit.CompletionStatus === 'Job Completed';
         case 'revoked':
           return status === 'revoked';
         default:
@@ -364,7 +372,7 @@ const PermitToWork = () => {
                   <TableCell className="text-base font-medium">Permit Receiver</TableCell>
                   <TableCell className="text-base font-medium">Company</TableCell>
                   <TableCell className="text-base font-medium">Job Description</TableCell>
-                  <TableCell className="text-base font-medium">Assigned To</TableCell>
+                  <TableCell className="text-base font-medium">Assigned To / Status</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -380,8 +388,15 @@ const PermitToWork = () => {
                       <TableCell>
                         <div className="flex flex-col">
                           <span>PTW-{String(permit.PermitToWorkID).padStart(4, '0')}</span>
-                          <span className={getStatusColor(permit.Status)}>
-                            {permit.Status}
+                          <span className={
+                            permit.CompletionStatus === 'Job Completed' ? 'text-blue-600' :
+                            permit.Status.toLowerCase() === 'revoked' ? 'text-gray-700' :
+                            permit.Status.toLowerCase() === 'pending' ? 'text-yellow-600' :
+                            permit.Status.toLowerCase() === 'approved' ? 'text-green-600' :
+                            permit.Status.toLowerCase() === 'rejected' ? 'text-red-600' :
+                            'text-grey-600'
+                          }>
+                            {currentTab === 'completed' ? 'Job Completed' : permit.Status}
                           </span>
                         </div>
                       </TableCell>

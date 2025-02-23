@@ -17,7 +17,6 @@ const JobReview = () => {
   const [approvals, setApprovals] = useState([]);
   
   // Job completion states
-  const [showModal, setShowModal] = useState(false);
   const [remarks, setRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -53,13 +52,20 @@ const JobReview = () => {
     // Then check completion status
     if (completionStatus === 'Job Completed') {
       return (
-        <div className="inline-flex items-center px-3 py-1 bg-green-600 text-white rounded-full text-sm">
+        <div className="inline-flex items-center px-3 py-1 bg-blue-600 text-white rounded-full text-sm">
           <Check size={16} className="mr-1" />
           Job Completed
         </div>
       );
     }
-    
+    if (completionStatus === 'Pending Completion') {
+      return (
+        <div className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+          <Clock size={16} className="mr-1" />
+          Pending Completion
+        </div>
+      );
+    }
     if (completionStatus === 'In Progress') {
       return (
         <div className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
@@ -97,13 +103,14 @@ const JobReview = () => {
     }
   };
 
-  useEffect(() => {
+   useEffect(() => {
     try {
       const savedData = localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
       if (savedData) {
         const userData = JSON.parse(savedData)?.user;
         setCurrentUser(userData);
-        const hasPermission = ['ISS', 'QA', 'HOD'].includes(userData?.roleId);
+        // Only ISS and QA can complete permits
+        const hasPermission = ['ISS', 'QA'].includes(userData?.roleId);
         setCanComplete(hasPermission);
       }
     } catch (err) {

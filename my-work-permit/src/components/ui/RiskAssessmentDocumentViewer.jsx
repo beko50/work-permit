@@ -1,122 +1,149 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Maximize2 } from 'lucide-react';
+import { AlertCircle, Download, File, X, Eye } from 'lucide-react';
 import { Alert, AlertDescription } from '../ui/alert';
-import DialogContent from './dialog-content';
+import { Button } from '../ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog-content';
 
-const RiskAssessmentViewer = ({ documentData }) => {
-  const [error, setError] = useState(false);
-  const [validatedUrl, setValidatedUrl] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [isPDF, setIsPDF] = useState(false);
+const RiskAssessmentViewer = ({ documents }) => {
+  const [selectedDoc, setSelectedDoc] = useState(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!documentData) {
-      setError(true);
-      return;
-    }
-
-    try {
-      let cleanedData = documentData.trim();
-      
-      // Check if it's a PDF
-      if (cleanedData.includes('data:application/pdf')) {
-        setIsPDF(true);
-        setValidatedUrl(cleanedData);
-      }
-      // Check if it's already a complete image data URL
-      else if (cleanedData.startsWith('data:image')) {
-        setIsPDF(false);
-        setValidatedUrl(cleanedData);
-      }
-      // Handle raw base64 data
-      else {
-        setIsPDF(false);
-        // Try to detect if it's a PDF from the base64 content
-        if (cleanedData.startsWith('JVBERi0')) {
-          setIsPDF(true);
-          setValidatedUrl(`data:application/pdf;base64,${cleanedData}`);
-        } else {
-          // Assume it's an image
-          const base64Data = cleanedData.replace(/^data:image\/[a-z]+;base64,/, '');
-          setValidatedUrl(`data:image/png;base64,${base64Data}`);
-        }
-      }
-      
-      setError(false);
-    } catch (err) {
-      console.error('Error processing document data:', err);
-      setError(true);
-    }
-  }, [documentData]);
-
-  if (!documentData) {
+  if (!documents?.length) {
     return (
       <Alert>
-        <AlertDescription>
-          No risk assessment document available.
-        </AlertDescription>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>No documents available.</AlertDescription>
       </Alert>
     );
   }
 
-  if (error) {
+  const handleDownload = (document) => {
+    try {
+      // Create blob from base64 data
+      const byteCharacters = atob(document.fileData.split(',')[1]);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: document.fileType });
+
+      // Create download link using window.document
+      const url = window.URL.createObjectURL(blob);
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.download = document.fileName;
+      window.document.body.appendChild(link);
+      link.click();
+      window.document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Failed to download document. Please try again.');
+      console.error('Download error:', err);
+    }
+  };
+
+  const renderDocument = (doc) => {
+    if (doc.fileType.includes('pdf')) {
+      return (
+        <div className="w-full h-[calc(100vh-12rem)] overflow-auto">
+          <iframe
+            src={doc.fileData}
+            className="w-full h-full"
+            title={doc.fileName}
+          />
+        </div>
+      );
+    }
+    if (doc.fileType.includes('image')) {
+      return (
+        <div className="w-full max-h-[calc(100vh-12rem)] overflow-auto flex items-start justify-center">
+          <img
+            src={doc.fileData}
+            alt={doc.fileName}
+            className="max-w-full object-contain"
+            style={{ maxHeight: 'calc(100vh - 12rem)' }}
+          />
+        </div>
+      );
+    }
     return (
-      <Alert variant="destructive">
-        <AlertDescription>
-          Unable to load the risk assessment document. The file may be corrupted or in an unsupported format.
-        </AlertDescription>
-      </Alert>
+      <div className="p-4 text-center">
+        <p>Preview not available for this file type</p>
+        <Button onClick={() => handleDownload(doc)} className="mt-2">
+          Download to View
+        </Button>
+      </div>
     );
-  }
-
-  const DocumentContent = () => (
-    isPDF ? (
-      <iframe
-        src={validatedUrl}
-        type="application/pdf"
-        width="100%"
-        height="600px"
-        className="border-none"
-        title="PDF Viewer"
-      />
-    ) : (
-      <img
-        src={validatedUrl}
-        alt="Risk Assessment Document"
-        className="w-full h-auto object-contain"
-        onError={() => setError(true)}
-      />
-    )
-  );
+  };
 
   return (
-    <>
-      <div 
-        className="border rounded-lg p-4 bg-white max-h-[600px] overflow-auto relative group cursor-pointer"
-        onClick={() => setShowModal(true)}
-      >
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center z-10">
-          <Maximize2 className="text-white opacity-0 group-hover:opacity-100 h-8 w-8" />
-        </div>
-        <DocumentContent />
-      </div>
+    <div className="space-y-4">
+      {error && (
+        <Alert variant="destructive" onClose={() => setError(null)}>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-      {showModal && (
-        <DialogContent 
-          className="max-w-4xl"
-          onOpenChange={setShowModal}
-        >
-          <div className="flex flex-col h-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Risk Assessment Document</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {documents.map((doc) => (
+          <div
+            key={doc.id}
+            className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <File className="h-5 w-5 text-blue-500" />
+                <span className="font-medium truncate max-w-[150px]">
+                  {doc.fileName}
+                </span>
+              </div>
             </div>
-            <div className="flex-1 overflow-auto">
-              <DocumentContent />
+            <div className="flex justify-end space-x-8 mt-4">
+              <button
+                onClick={() => handleDownload(doc)}
+                className="group flex items-center px-2 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-in-out"
+              >
+                <Download className="h-4 w-4 mr-2 text-gray-500 group-hover:text-blue-500 transition-colors" />
+                <span className="group-hover:text-gray-900">Download</span>
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedDoc(doc);
+                  setViewerOpen(true);
+                }}
+                className="group flex items-center px-2 py-2 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 hover:shadow-md transition-all duration-200 ease-in-out"
+              >
+                <Eye className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+                <span>View</span>
+              </button>
             </div>
           </div>
+        ))}
+      </div>
+
+      <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
+        <DialogContent className="max-w-4xl w-full mx-auto my-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span className="truncate">{selectedDoc?.fileName}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewerOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {selectedDoc && renderDocument(selectedDoc)}
+          </div>
         </DialogContent>
-      )}
-    </>
+      </Dialog>
+    </div>
   );
 };
 

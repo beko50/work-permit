@@ -87,28 +87,42 @@ const SafetyFormValidation = Yup.object().shape({
     .min(0, 'Number of Workers cannot be less than 0')
     .max(20, 'Number of Workers cannot exceed 20')
     .required('Number of Workers is required'),
-    riskAssessment: Yup.array()
+  riskAssessment: Yup.array()
     .min(1, 'At least one Risk Assessment document is required')
     .test('file-validation', 'Invalid file format or size', function (value) {
-      if (!value) return false;
+      if (!value || !Array.isArray(value)) return false;
       
       return value.every(file => {
-        // Check if it's a File object
-        if (file instanceof File) {
-          const fileSize = file.size <= 4 * 1024 * 1024;
-          const fileType = ['jpg', 'jpeg', 'png', 'doc', 'docx', 'pdf'].includes(
-            file.name.split('.').pop().toLowerCase()
-          );
-          return fileSize && fileType;
+        // Check file size (4MB in bytes)
+        const MAX_FILE_SIZE = 4 * 1024 * 1024;
+        
+        // Handle processed file objects from our upload handler
+        if (file && file.data && file.name && file.type) {
+          // Calculate base64 size
+          const base64Size = file.data.length * 0.75; // Approximate size from base64
+          const validSize = base64Size <= MAX_FILE_SIZE;
+          
+          // Check file type from the stored type
+          const validTypes = [
+            'image/jpeg',
+            'image/png',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          ];
+          
+          const validType = validTypes.includes(file.type);
+          
+          return validSize && validType;
         }
         
-        // If it's a base64 string
-        if (typeof file === 'string' && file.startsWith('data:')) {
-          // Check file type from data URL
-          const mimeType = file.split(';')[0].split(':')[1];
-          return ['image/jpeg', 'image/png', 'application/pdf', 'application/msword', 
-                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-            .includes(mimeType);
+        // Handle File objects (during upload)
+        if (file instanceof File) {
+          const validSize = file.size <= MAX_FILE_SIZE;
+          const extension = file.name.split('.').pop().toLowerCase();
+          const validType = ['jpg', 'jpeg', 'png', 'doc', 'docx', 'pdf'].includes(extension);
+          
+          return validSize && validType;
         }
         
         return false;

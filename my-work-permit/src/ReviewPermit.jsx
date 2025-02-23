@@ -33,6 +33,8 @@ const PermitReview = () => {
   const [comments, setComments] = useState('');
   const [revocationData, setRevocationData] = useState(null);
   const [currentUserRole, setCurrentUserRole] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [isApproving, setIsApproving] = useState(false);
 
   const handleRevocationProcessed = () => {
     // Refresh permit data or navigate away
@@ -54,11 +56,14 @@ const PermitReview = () => {
       try {
         setLoading(true);
         
-        const permitResponse = await api.getPermitById(permitId);
-        if (permitResponse?.success) {
-          const { permit, groupedCheckboxes } = permitResponse.data;
-          setPermit(permit);
-          setGroupedCheckboxes(groupedCheckboxes);
+        const response = await api.getPermitById(permitId);
+      
+      if (response?.success) {
+        const { permit, documents, groupedCheckboxes } = response.data;
+        
+        setPermit(permit);
+        setDocuments(documents || []); // Ensure documents is always an array
+        setGroupedCheckboxes(groupedCheckboxes || []);
 
           if (permit.RevocationInitiatedBy || permit.Status === 'Revocation Pending' || permit.Status === "Revoked") {
             setRevocationData({
@@ -118,6 +123,7 @@ const PermitReview = () => {
 
   const handleApproval = async (status) => {
     try {
+      setIsApproving(true);
       const currentApproverStage = approvals.find(approval => approval.isCurrentApprover);
       
       if (!currentApproverStage) {
@@ -135,6 +141,8 @@ const PermitReview = () => {
       navigate('/dashboard/permits/job-permits');
     } catch (error) {
       toast.error(error.message || 'Failed to process approval');
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -242,18 +250,16 @@ const PermitReview = () => {
             </Card>
 
           {/* Risk Assessment Document */}
-          {permit.RiskAssessmentDocument && (
+          {documents && documents.length > 0 && (
             <div className="mt-6">
               <h2 className="text-lg font-medium">Risk Assessment Documents</h2>
-              <RiskAssessmentViewer 
-                documentData={permit.RiskAssessmentDocument} 
-              />
+              <RiskAssessmentViewer documents={documents} />
             </div>
           )}
 
           {/* Safety Checklist */}
           {/* Safety Checklist Card */}
-                    <Card>
+                    <Card className="mt-6">
                       <CardHeader className="font-bold text-lg">Safety Checklist</CardHeader>
                       <CardContent>
                         <div className="space-y-6">
@@ -288,6 +294,7 @@ const PermitReview = () => {
                     <div className="mt-4"> {/* Adjust margin-top as needed */}
                     <PermitRevocation
                       permitId={permitId}
+                      permitType= "job"
                       revocationData={revocationData}
                       onRevocationProcessed={() => navigate('/dashboard/permits/job-permits')}
                       isQHSSEUser={currentUserRole === 'QA'}
@@ -359,14 +366,17 @@ const PermitReview = () => {
                 <Button 
                   variant="danger" 
                   onClick={() => handleApproval('Rejected')}
+                  disabled={isApproving}
                 >
-                  Reject
+                  {isApproving ? 'Rejecting...' : 'Reject'}
                 </Button>
                 <Button 
-                  variant="success" 
+                  variant="success"
                   onClick={() => handleApproval('Approved')}
+                  disabled={isApproving}
+                  className="bg-green-600 text-white hover:bg-green-700"
                 >
-                  Approve
+                  {isApproving ? 'Approving...' : 'Approve'}
                 </Button>
               </div>
             </>

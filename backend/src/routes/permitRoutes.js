@@ -7,7 +7,7 @@ const { poolPromise, sql } = require('../db');
 // Debug middleware for POST requests
 router.use((req, res, next) => {
   if (req.method === 'POST') {
-    console.log('Request body received in route:', req.body);
+    // console.log('Request body received in route:', req.body);
   }
   next();
 });
