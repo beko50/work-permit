@@ -123,7 +123,7 @@ const permitModel = {
     }
   },
 
-  async getPermitsByRole(user) {
+  async getPermitsByRole(user, page = 1, limit =10) {
     const pool = await poolPromise;
     const request = pool.request();
   
@@ -133,7 +133,8 @@ const permitModel = {
         u.FirstName + ' ' + u.LastName AS IssuerName,
         u.DepartmentID AS IssuerDepartment,
         u.RoleID,
-        d.DepartmentName
+        d.DepartmentName,
+        COUNT(*) OVER() as TotalCount
       FROM JobPermits jp
       LEFT JOIN Users u ON u.UserID = jp.Creator
       LEFT JOIN Departments d ON RTRIM(u.DepartmentID) = RTRIM(d.DepartmentID)
@@ -180,15 +181,23 @@ const permitModel = {
     }
     // For ASM, OPS, and IT users - see permits for their department
     else if (userDepartmentId && (userDepartmentId === 'ASM' || userDepartmentId === 'OPS' || userDepartmentId === 'IT')) {
-      query += ` AND (
-        jp.Department = @departmentId OR
-        jp.Department IN (
-          SELECT DepartmentName 
-          FROM Departments 
-          WHERE DepartmentID = @departmentId
-        )
-      )`;
-      request.input('departmentId', sql.VarChar(50), userDepartmentId);
+      // Check if the user is a Permit Receiver role
+      if (userRole === 'RCV') {
+        // Internal Permit Receivers should only see permits they created
+        query += ` AND jp.Creator = @userId`;
+        request.input('userId', sql.Int, user.userId);
+      } else {
+        // Other department users see all department permits
+        query += ` AND (
+          jp.Department = @departmentId OR
+          jp.Department IN (
+            SELECT DepartmentName 
+            FROM Departments 
+            WHERE DepartmentID = @departmentId
+          )
+        )`;
+        request.input('departmentId', sql.VarChar(50), userDepartmentId);
+      }
     }
     // For RCV users - only see permits they created (both internal and external)
     else if (userRole === 'RCV') {
@@ -201,7 +210,13 @@ const permitModel = {
       request.input('userId', sql.Int, user.userId);
     }
   
-    query += ` ORDER BY jp.Created DESC`;
+    // Add pagination
+    const offset = (page - 1) * limit;
+    query += ` 
+      ORDER BY jp.Created DESC
+      OFFSET ${offset} ROWS
+      FETCH NEXT ${limit} ROWS ONLY
+    `;
   
     return await request.query(query);
   },
@@ -321,7 +336,10 @@ const permitModel = {
       // Add sorting and pagination
       const offset = (searchParams.page - 1) * searchParams.limit;
       query += `
-        ORDER BY p.Changed DESC
+        ORDER BY 
+          CASE WHEN p.Changed IS NULL THEN 1 ELSE 0 END, -- Put NULL Changed values (new permits) first
+          p.Changed DESC, -- Then sort by Changed date descending
+          p.Created DESC -- For ties or all NULL Changed values, sort by Created date
         OFFSET ${offset} ROWS
         FETCH NEXT ${searchParams.limit} ROWS ONLY
       `;

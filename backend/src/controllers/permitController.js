@@ -121,9 +121,12 @@ const permitController = {
       roleId: req.user.roleId ? req.user.roleId.trim() : null
     };
 
-      const queryResult = await permitModel.getPermitsByRole(req.user);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
 
-      // console.log(queryResult.recordset)
+      const queryResult = await permitModel.getPermitsByRole(req.user,page,limit);
+
+      const totalCount = queryResult.recordset[0]?.TotalCount || 0;
 
       if (!queryResult || !queryResult.recordset) {
         return res.status(500).json({ message: 'Error retrieving permits' });
@@ -172,7 +175,12 @@ const permitController = {
       res.json({ 
         permits: Object.values(formattedPermits),
         userRole: req.user.roleId ? req.user.roleId.trim() : null,
-        userDepartment: req.user.departmentId ? req.user.departmentId.trim() : null
+        userDepartment: req.user.departmentId ? req.user.departmentId.trim() : null,
+        pagination: {
+          totalCount: totalCount, // Use the actual total count
+          totalPages: Math.ceil(totalCount / limit),
+          currentPage: page
+        }
       });
       
     } catch (error) {

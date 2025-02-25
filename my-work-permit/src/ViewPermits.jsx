@@ -82,7 +82,9 @@ const ViewPermit = () => {
       const response = await api.searchPermits(params, currentUser);
 
       if (response.success) {
-        setPermits(Array.isArray(response.data) ? response.data : []);
+        // Sort the permits to show recently submitted permits at the top
+        const sortedPermits = sortPermitsByLatestAction(Array.isArray(response.data) ? response.data : []);
+        setPermits(sortedPermits);
         setTotalPages(response.totalPages || 0);
         setTotalPermits(response.total || 0);
       } else {
@@ -100,6 +102,30 @@ const ViewPermit = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // New function to sort permits with recently submitted ones on top
+  const sortPermitsByLatestAction = (permits) => {
+    return permits.sort((a, b) => {
+      // First check: Put newly created permits (null Changed) at the top
+      if (!a.Changed && b.Changed) {
+        return -1; // a comes before b
+      }
+      
+      if (a.Changed && !b.Changed) {
+        return 1; // b comes before a
+      }
+      
+      // If both have Changed dates or both don't have Changed dates
+      // For Changed dates, sort by most recent
+      if (a.Changed && b.Changed) {
+        return new Date(b.Changed) - new Date(a.Changed);
+      }
+      
+      // For permits with no actions yet (both null Changed),
+      // sort by Created date (most recent first)
+      return new Date(b.Created) - new Date(a.Created);
+    });
   };
 
   useEffect(() => {
@@ -186,6 +212,21 @@ const ViewPermit = () => {
     };
 
     return roleDisplayMap[roleId] || roleId;
+  };
+
+  // Function to get the most relevant date (Changed or Created)
+  const getRelevantDate = (permit) => {
+    return permit.Changed || permit.Created;
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return '—';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
   };
 
   const Dropdown = ({ options, onSelect, className = '' }) => {
@@ -415,7 +456,7 @@ const ViewPermit = () => {
                   )}
                   <TableCell className="text-base font-medium">Permit Receiver</TableCell>
                   <TableCell className="text-base font-medium">Company</TableCell>
-                  <TableCell className="text-base font-medium">Last Action Date</TableCell>
+                  <TableCell className="text-base font-medium">Last Activity Date</TableCell>
                   <TableCell className="text-base font-medium">Assigned To</TableCell>   
                 </TableRow>
               </TableHead>
@@ -442,11 +483,12 @@ const ViewPermit = () => {
                       <TableCell>{permit.PermitReceiver}</TableCell>
                       <TableCell>{permit.ContractCompanyName}</TableCell>
                       <TableCell>
-                        {new Date(permit.Changed).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
+                      {permit.Changed 
+    ? formatDate(permit.Changed)
+    : <span className="text-blue-500 font-medium">
+        New Permit • {formatDate(permit.Created)}
+      </span>
+  }
                       </TableCell>
                       <TableCell>
                         {getRoleDisplayName(permit.AssignedTo, permit.Status) || '—'} {/* Display "—" if null */}

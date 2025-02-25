@@ -717,7 +717,6 @@ const SafetyForm = () => {
           <Dialog
             isOpen={isDialogOpen}
             onClose={() => setIsDialogOpen(false)} // Handles dialog closing
-            onSaveDraft={handleSaveDraft}
             title="Confirm Close"
           >
             <div className="text-center">

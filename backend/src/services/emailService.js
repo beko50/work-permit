@@ -10,15 +10,15 @@ class NotificationService {
     }
 
     // Log configuration with redaction of sensitive values
-    // console.log('Email Config:', {
-    //   NODE_ENV: process.env.NODE_ENV,
-    //   EMAIL_SERVICE: process.env.EMAIL_SERVICE,
-    //   EMAIL_HOST: process.env.EMAIL_HOST,
-    //   EMAIL_PORT: process.env.EMAIL_PORT,
-    //   EMAIL_USER: process.env.EMAIL_USER,
-    //   EMAIL_SECURE: process.env.EMAIL_SECURE === 'true',
-    //   CREDENTIALS_PRESENT: Boolean(process.env.EMAIL_USER && (process.env.EMAIL_PASS || process.env.EMAIL_APP_PASSWORD))
-    // });
+    console.log('Email Config:', {
+      NODE_ENV: process.env.NODE_ENV,
+      EMAIL_SERVICE: process.env.EMAIL_SERVICE,
+      EMAIL_HOST: process.env.EMAIL_HOST,
+      EMAIL_PORT: process.env.EMAIL_PORT,
+      EMAIL_USER: process.env.EMAIL_USER,
+      EMAIL_SECURE: process.env.EMAIL_SECURE === 'true',
+      CREDENTIALS_PRESENT: Boolean(process.env.EMAIL_USER && (process.env.EMAIL_PASS || process.env.EMAIL_APP_PASSWORD))
+    });
 
     // Configure transporter based on environment
     if (process.env.NODE_ENV === 'development') {

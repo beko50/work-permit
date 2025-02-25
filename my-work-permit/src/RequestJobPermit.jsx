@@ -25,7 +25,6 @@ const RequestJobPermit = () => {
   const [departments, setDepartments] = useState([]); // State to store departments
 
   // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [totalPermits, setTotalPermits] = useState(0);
   const itemsPerPage = 8;
@@ -139,31 +138,37 @@ const RequestJobPermit = () => {
       );
   
       let response;
-      const queryParams = {
-        page: searchParams.page,  // Use from searchParams instead of currentPage
-        limit: itemsPerPage,
-        sortBy: sortConfig.key,
-        sortDirection: sortConfig.direction,
-        ...(isLimitedUser && { createdBy: currentUser.id })
-      };
-  
-      if (isSearching) {
-        response = await api.searchPermits({
-          ...queryParams,
-          ...searchParams,
-          assignedTo: currentUser.id,
-          ...(currentUser.roleId !== 'QA' && currentUser.departmentId !== 'QHSSE' && {
-            department: currentUser.departmentId
-          })
-        }, currentUser);
-      } else {
-        response = await api.getPermits({
-          ...queryParams,
-          ...(currentUser.roleId !== 'QA' && currentUser.departmentId !== 'QHSSE' && {
-            department: currentUser.departmentId
-          })
-        }, currentUser);
-      }
+    const queryParams = {
+      page: searchParams.page,
+      limit: itemsPerPage,
+      sortBy: sortConfig.key,
+      sortDirection: sortConfig.direction,
+    };
+
+    // Always apply user ID filter for RCV users
+    if (currentUser.roleId === 'RCV') {
+      queryParams.createdBy = currentUser.userId;
+    }
+
+    if (isSearching) {
+      response = await api.searchPermits({
+        ...queryParams,
+        ...searchParams,
+        // Make sure RCV users only see what they created regardless of department
+        ...(currentUser.roleId === 'RCV' && { createdBy: currentUser.userId }),
+      }, currentUser);
+    } else {
+      response = await api.getPermits({
+        ...queryParams,
+        // For QA and QHSSE, don't apply department filter
+        ...(currentUser.roleId !== 'QA' && currentUser.departmentId !== 'QHSSE' && 
+            currentUser.roleId !== 'RCV' && {
+          department: currentUser.departmentId
+        }),
+        // Always apply creator filter for RCV users
+        ...(currentUser.roleId === 'RCV' && { createdBy: currentUser.userId }),
+      }, currentUser);
+    }
   
       if (response.success) {
         const sortedPermits = response.data.sort((a, b) => {
@@ -190,39 +195,45 @@ const RequestJobPermit = () => {
     }
   }, [currentUser, searchParams, sortConfig, isLimitedUser]);
   
-  // Update search handler to include user assignment
-  const handleSearch = () => {
+  // Updated search params handler
+  const handleSearchParamChange = (field, value) => {
     setSearchParams(prev => ({
       ...prev,
-      page: 1 // Reset to first page on new search
+      [field]: value,
+      page: 1 // Reset to first page when filters change
     }));
   };
-
+      
   // Pagination handlers
   const handleNextPage = () => {
     if (searchParams.page < totalPages) {
-      setSearchParams(prev => ({
-        ...prev,
-        page: prev.page + 1
-      }));
+      setSearchParams(prevParams => {
+        const newParams = {
+          ...prevParams,
+          page: prevParams.page + 1
+        };
+        return newParams;
+      });
     }
   };
 
   const handlePreviousPage = () => {
     if (searchParams.page > 1) {
-      setSearchParams(prev => ({
-        ...prev,
-        page: prev.page - 1
-      }));
+      setSearchParams(prevParams => {
+        const newParams = {
+          ...prevParams,
+          page: prevParams.page - 1
+        };
+        return newParams;
+      });
     }
   };
 
-  // Modify your useEffect hooks
-  useEffect(() => {
-    if (currentUser) {
-      fetchPermits();
-    }
-  }, [currentUser, currentPage, fetchPermits]);
+useEffect(() => {
+  if (currentUser) {
+    fetchPermits();
+  }
+}, [searchParams, currentUser, fetchPermits]);
 
 
 // Add reset filters function
@@ -245,34 +256,29 @@ const resetFilters = () => {
   const PaginationControls = () => (
     <div className="flex justify-end items-center mt-4 space-x-2 text-sm text-gray-500">
       <span>
-        {`${(searchParams.page - 1) * itemsPerPage + 1}-${Math.min(searchParams.page * itemsPerPage, totalPermits)} of ${totalPermits}`}
+        {`${(searchParams.page - 1) * searchParams.limit + 1}-${Math.min(searchParams.page * searchParams.limit, totalPermits)} of ${totalPermits}`}
       </span>
-      <div className="flex items-center space-x-2">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handlePreviousPage} 
-          disabled={searchParams.page === 1}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <span>{`Page ${searchParams.page} of ${totalPages}`}</span>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleNextPage} 
-          disabled={searchParams.page === totalPages}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
+       <div className="flex items-center space-x-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handlePreviousPage} 
+                disabled={searchParams.page === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span>{`Page ${searchParams.page} of ${totalPages}`}</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleNextPage} 
+                disabled={searchParams.page === totalPages}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
     </div>
   );
-
-  // Trigger fetch when page changes
-  useEffect(() => {
-    fetchPermits();
-  }, [currentPage]);
 
   const handleCreatePermit = () => {
     navigate('/dashboard/permits/job-permits/create');
@@ -484,11 +490,7 @@ const resetFilters = () => {
                 <Select 
                   placeholder="Filter by Permit status" 
                   value={searchParams.status} 
-                  onChange={(e) => {
-                    setSearchParams({ ...searchParams, status: e.target.value });
-                    setCurrentPage(1);
-                    fetchPermits();
-                  }} 
+                  onChange={(e) => handleSearchParamChange('status', e.target.value)}
                   options={['Approved', 'Pending', 'Rejected', 'Revoked']} // Added Revoked
                   className="w-full"
                 />
@@ -500,22 +502,14 @@ const resetFilters = () => {
                 <Input 
                   type="date" 
                   value={searchParams.startDate} 
-                  onChange={(e) => {
-                    setSearchParams({ ...searchParams, startDate: e.target.value });
-                    setCurrentPage(1);
-                    fetchPermits();
-                  }} 
+                  onChange={(e) => handleSearchParamChange('startDate', e.target.value)}
                   className="w-32"
                 />
                 <span className="self-center text-gray-400">→</span>
                 <Input 
                   type="date" 
                   value={searchParams.endDate} 
-                  onChange={(e) => {
-                    setSearchParams({ ...searchParams, endDate: e.target.value });
-                    setCurrentPage(1);
-                    fetchPermits();
-                  }} 
+                  onChange={(e) => handleSearchParamChange('endDate', e.target.value)}
                   className="w-32"
                 />
               </div>

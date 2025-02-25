@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/form';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
-import { Eye, XCircle,RefreshCw } from 'lucide-react';
+import { Eye, XCircle, RefreshCw } from 'lucide-react';
 import { api } from './services/api';
 import Checkbox from './components/ui/checkbox';
 import logo from './assets/mps_logo.jpg';
@@ -23,7 +23,10 @@ const TabButton = ({ id, label, active, onClick }) => (
 
 const ApprovalHistory = () => {
   const navigate = useNavigate();
-  const [currentTab, setCurrentTab] = useState('jobPermits');
+  // Use localStorage to store/retrieve the current tab
+  const [currentTab, setCurrentTab] = useState(() => {
+    return localStorage.getItem('approvalHistoryCurrentTab') || 'jobPermits';
+  });
   const [searchParams, setSearchParams] = useState({
     permitId: '',
     changedStartDate: '',
@@ -51,12 +54,16 @@ const ApprovalHistory = () => {
     setCurrentUser(userData);
   }, []);
 
+  // Save current tab to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('approvalHistoryCurrentTab', currentTab);
+  }, [currentTab]);
+
   const fetchApprovals = async () => {
     try {
       setLoading(true);
       setError(null);
   
-      const validStatuses = ['approved', 'revoked'];
       let searchId = searchParams.permitId.trim();
       
       // Handle prefix for search
@@ -73,23 +80,21 @@ const ApprovalHistory = () => {
       let responses;
       
       if (currentTab === 'jobPermits') {
-        // For Job Permits tab
-        const promises = validStatuses.map(status => {
-          return api.searchPermits({
-            ...searchParams,
-            permitId: searchId,
-            page: currentPage,
-            limit: itemsPerPage,
-            status
-          }, currentUser);
-        });
-        responses = await Promise.all(promises);
+        // For Job Permits tab - only fetch approved permits
+        const response = await api.searchPermits({
+          ...searchParams,
+          permitId: searchId,
+          page: currentPage,
+          limit: itemsPerPage,
+          status: 'approved'  // Only fetch approved permits
+        }, currentUser);
+        responses = [response];
       } else {
-        // For Permit to Work tab - use getPermitsToWork instead of searchPTW
+        // For Permit to Work tab - fetch both approved and revoked
         const response = await api.getPermitsToWork();
-        // Filter for approved and revoked permits only
+        // Filter for both approved and revoked permits
         const filteredPermits = response.data.filter(permit => 
-          validStatuses.includes(permit.Status.toLowerCase())
+          ['approved', 'revoked'].includes(permit.Status.toLowerCase())
         );
         responses = [{ success: true, data: filteredPermits }];
       }
@@ -99,10 +104,13 @@ const ApprovalHistory = () => {
   
       responses.forEach(response => {
         if (response.success) {
-          const filteredData = response.data.filter(permit => 
-            permit.Status.toLowerCase() === 'approved' || 
-            permit.Status.toLowerCase() === 'revoked'
-          );
+          // For Job Permits, we only have approved permits
+          // For PTW, we keep both approved and revoked
+          const filteredData = currentTab === 'jobPermits'
+            ? response.data.filter(permit => permit.Status.toLowerCase() === 'approved')
+            : response.data.filter(permit => 
+                ['approved', 'revoked'].includes(permit.Status.toLowerCase())
+              );
           combinedData = [...combinedData, ...filteredData];
           totalCount += filteredData.length;
         }
@@ -165,8 +173,37 @@ const ApprovalHistory = () => {
   };
 
   const handleView = (routePath) => {
+    // Before navigating, store additional information about the current view
+    // This allows us to restore the context when returning to this page
+    localStorage.setItem('approvalHistoryLastView', JSON.stringify({
+      tab: currentTab,
+      page: currentPage,
+      searchParams: searchParams
+    }));
+    
     navigate(routePath);
   };
+
+  // Restore previous view state when component mounts
+  useEffect(() => {
+    const lastViewJson = localStorage.getItem('approvalHistoryLastView');
+    if (lastViewJson) {
+      try {
+        const lastView = JSON.parse(lastViewJson);
+        if (lastView.tab) {
+          setCurrentTab(lastView.tab);
+        }
+        if (lastView.page) {
+          setCurrentPage(lastView.page);
+        }
+        if (lastView.searchParams) {
+          setSearchParams(lastView.searchParams);
+        }
+      } catch (e) {
+        console.error('Error parsing last view data:', e);
+      }
+    }
+  }, []);
 
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
@@ -177,6 +214,8 @@ const ApprovalHistory = () => {
     }
   };
 
+// JOB PERMITS REVOKE ---- DO NOT ERASE  (FOR FUTURE REFERENCE)
+  /*
   const getSelectedPermitNumbers = () => {
     return approvalHistory
       .filter(permit => selectedPermits.includes(permit.permitId)) 
@@ -184,10 +223,10 @@ const ApprovalHistory = () => {
       .join(', ');
   };
 
-  const canRevokePermits = () => {
+   const canRevokePermits = () => {
     const currentUserRole = currentUser?.roleId;
     return ['ISS', 'QA'].includes(currentUserRole) && currentTab === 'jobPermits';
-  };
+  }; 
 
   const handleCheckboxChange = (permitId) => {
     const permit = approvalHistory.find(p => p.permitId === permitId);
@@ -251,7 +290,7 @@ const ApprovalHistory = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  };   */
 
   return (
     <div className="w-full p-4">
@@ -325,7 +364,7 @@ const ApprovalHistory = () => {
                 onClick={setCurrentTab}
               />
             </div>
-            {currentTab === 'jobPermits' && canRevokePermits() && selectedPermits.length > 0 && (
+            {/* {currentTab === 'jobPermits' && canRevokePermits() && selectedPermits.length > 0 && (
               <Button 
                 variant="danger"
                 onClick={handleRevoke}
@@ -334,7 +373,7 @@ const ApprovalHistory = () => {
                 <XCircle className="w-4 h-4" />
                 REVOKE PERMIT{selectedPermits.length > 1 ? 'S' : ''}
               </Button>
-            )}
+            )} */}
           </div>
         </CardHeader>
         <CardContent className="p-4">
@@ -354,11 +393,11 @@ const ApprovalHistory = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  {currentTab === 'jobPermits' && canRevokePermits() && (
+                  {/* {currentTab === 'jobPermits' && canRevokePermits() && (
                     <TableCell className="w-12">
                       <Checkbox disabled />
                     </TableCell>
-                  )}
+                  )}  */}
                   <TableCell className="text-base font-medium">Actions</TableCell>
                   <TableCell className="text-base font-medium">Permit ID</TableCell>
                   <TableCell className="text-base font-medium">Permit Receiver</TableCell>
@@ -370,7 +409,7 @@ const ApprovalHistory = () => {
               <TableBody>
                 {approvalHistory.map((permit, index) => (
                   <TableRow key={index}>
-                    {currentTab === 'jobPermits' && canRevokePermits() && (
+                    {/* {currentTab === 'jobPermits' && canRevokePermits() && (
                       <TableCell>
                         <Checkbox
                           checked={selectedPermits.includes(permit.permitId)}
@@ -378,7 +417,7 @@ const ApprovalHistory = () => {
                           disabled={permit.status.toLowerCase() !== 'approved'}
                         />
                       </TableCell>
-                    )}
+                    )} */}
                     <TableCell>
                       <Button
                         variant="primary"
@@ -430,8 +469,9 @@ const ApprovalHistory = () => {
           </div>
         </CardContent>
       </Card>
-
-      {/* Revoke Modal */}
+      
+    
+      {/* Revoke Modal 
       {showRevokeModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="w-full max-w-3xl">
@@ -484,9 +524,9 @@ const ApprovalHistory = () => {
             </CardFooter>
           </Card>
         </div>
-      )}
+      )}    */}
 
-      {/* Confirmation Dialog */}
+      {/* Confirmation Dialog 
       {showConfirmation && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="w-full max-w-md p-6">
@@ -495,27 +535,28 @@ const ApprovalHistory = () => {
                 Are you sure you want to initiate the revoking process for {getSelectedPermitNumbers()}?
               </p>
               <div className="flex justify-center space-x-4">
-  <Button 
-    variant="outline"
-    className="border-gray-400 text-gray-700 bg-white hover:bg-gray-200"
-    onClick={() => setShowConfirmation(false)}
-    disabled={isSubmitting}
-  >
-    Cancel
-  </Button>
-  <Button 
-    variant="destructive"
-    className="bg-red-600 text-white hover:bg-red-700"
-    onClick={handleConfirmRevoke}
-    disabled={isSubmitting}
-  >
-    {isSubmitting ? 'Revoking...' : 'Confirm Revoke'}
-  </Button>
-</div>
+                <Button 
+                  variant="outline"
+                  className="border-gray-400 text-gray-700 bg-white hover:bg-gray-200"
+                  onClick={() => setShowConfirmation(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive"
+                  className="bg-red-600 text-white hover:bg-red-700"
+                  onClick={handleConfirmRevoke}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Revoking...' : 'Confirm Revoke'}
+                </Button>
+              </div>
             </div>
           </Card>
         </div>
-      )}
+      )}  
+      */}
     </div>
   );
 };
