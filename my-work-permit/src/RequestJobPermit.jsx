@@ -158,16 +158,25 @@ const RequestJobPermit = () => {
         ...(currentUser.roleId === 'RCV' && { createdBy: currentUser.userId }),
       }, currentUser);
     } else {
-      response = await api.getPermits({
-        ...queryParams,
-        // For QA and QHSSE, don't apply department filter
-        ...(currentUser.roleId !== 'QA' && currentUser.departmentId !== 'QHSSE' && 
-            currentUser.roleId !== 'RCV' && {
-          department: currentUser.departmentId
-        }),
-        // Always apply creator filter for RCV users
-        ...(currentUser.roleId === 'RCV' && { createdBy: currentUser.userId }),
-      }, currentUser);
+      // Special handling for QHSSE department
+      if (currentUser.departmentId === 'QHSSE') {
+        // If they're an Issuer or HOD, we need to fetch permits assigned to their role
+        if (currentUser.roleId === 'ISS' || currentUser.roleId === 'HOD') {
+          queryParams.assignedTo = currentUser.roleId;
+        }
+        // For QA role or other roles in QHSSE, no department filter needed
+      }
+      // For other departments, apply the usual department filter (except QA)
+      else if (currentUser.roleId !== 'QA' && currentUser.roleId !== 'RCV') {
+        queryParams.department = currentUser.departmentId;
+      }
+      
+      // Always apply creator filter for RCV users
+      if (currentUser.roleId === 'RCV') {
+        queryParams.createdBy = currentUser.userId;
+      }
+      
+      response = await api.getPermits(queryParams, currentUser);
     }
   
       if (response.success) {
@@ -254,29 +263,31 @@ const resetFilters = () => {
 
   // Pagination Controls Component
   const PaginationControls = () => (
-    <div className="flex justify-end items-center mt-4 space-x-2 text-sm text-gray-500">
-      <span>
-        {`${(searchParams.page - 1) * searchParams.limit + 1}-${Math.min(searchParams.page * searchParams.limit, totalPermits)} of ${totalPermits}`}
+    <div className="flex justify-end items-center mt-4 space-x-2 text-base text-gray-500">
+      <span className="font-semibold text-gray-700">
+        {`${(searchParams.page - 1) * itemsPerPage + 1}-${Math.min(searchParams.page * itemsPerPage, totalPermits)} of ${totalPermits}`}
       </span>
-       <div className="flex items-center space-x-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handlePreviousPage} 
-                disabled={searchParams.page === 1}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span>{`Page ${searchParams.page} of ${totalPages}`}</span>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleNextPage} 
-                disabled={searchParams.page === totalPages}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+      <div className="flex items-center space-x-3">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handlePreviousPage} 
+          disabled={searchParams.page === 1}
+          className="font-semibold text-gray-700 hover:text-black text-base"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+        <span>{`Page ${searchParams.page} of ${totalPages}`}</span>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleNextPage} 
+          disabled={searchParams.page === totalPages}
+          className="font-semibold text-gray-700 hover:text-black text-base"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </Button>
+      </div>
     </div>
   );
 

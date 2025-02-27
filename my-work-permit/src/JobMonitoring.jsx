@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect,useRef } from 'react';
+import { useNavigate,useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardContent, CardFooter } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
 import { api } from './services/api';
 import Checkbox  from './components/ui/checkbox';
 import logo from './assets/mps_logo.jpg';
-import { Eye,RefreshCw, PlusCircle, XCircle, ChevronDown } from 'lucide-react';
+import { Input } from './components/ui/form';
+import { Eye,RefreshCw, PlusCircle, XCircle, ChevronDown,Filter } from 'lucide-react';
+
 
 
 const TabButton = ({ id, label, active, onClick }) => (
@@ -21,18 +23,73 @@ const TabButton = ({ id, label, active, onClick }) => (
   </button>
 );
 
+// LocalStorage keys for persistent state
+const STORAGE_KEYS = {
+  TAB: 'jobs-monitoring-current-tab',
+  PAGE: 'jobs-monitoring-current-page',
+  SEARCH: 'jobs-monitoring-search-value',
+  LOCATION_FILTER: 'jobs-monitoring-location-filter'
+};
+
 const JobsMonitoring = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [permits, setPermits] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [currentTab, setCurrentTab] = useState('ongoing');
+  
+  // Initialize states from localStorage
+  const [currentTab, setCurrentTab] = useState(() => {
+    const savedTab = localStorage.getItem(STORAGE_KEYS.TAB);
+    return savedTab || 'ongoing';
+  });
+  
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedPermits, setSelectedPermits] = useState([]);
   const [showRevokeModal, setShowRevokeModal] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [revokeReason, setRevokeReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Initialize pagination state from localStorage
+  const [currentPage, setCurrentPage] = useState(() => {
+    const savedPage = localStorage.getItem(STORAGE_KEYS.PAGE);
+    return savedPage ? parseInt(savedPage, 10) : 1;
+  });
+  
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalPermits, setTotalPermits] = useState(0);
+  const itemsPerPage = 10;
+  
+  // Initialize search and filter states from localStorage
+  const [searchValue, setSearchValue] = useState(() => {
+    return localStorage.getItem(STORAGE_KEYS.SEARCH) || '';
+  });
+  
+  const [locationFilter, setLocationFilter] = useState(() => {
+    return localStorage.getItem(STORAGE_KEYS.LOCATION_FILTER) || '';
+  });
+  
+  const [showLocationFilter, setShowLocationFilter] = useState(false);
+  const [uniqueLocations, setUniqueLocations] = useState([]);
+  const locationFilterRef = useRef(null);
+
+  // Persist state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TAB, currentTab);
+  }, [currentTab]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.PAGE, currentPage.toString());
+  }, [currentPage]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SEARCH, searchValue);
+  }, [searchValue]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.LOCATION_FILTER, locationFilter);
+  }, [locationFilter]);
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -55,30 +112,128 @@ const JobsMonitoring = () => {
     }
   }, []);
 
+  // Check if we're returning from a permit view
+  useEffect(() => {
+    // Only run this when the component mounts and we have a state from navigation
+    if (location.state?.from === 'permit-view') {
+      // Restoring previous state happens automatically because we're using localStorage
+      
+      // If returning from a specific tab, ensure we stay on that tab
+      if (location.state?.returnToTab) {
+        setCurrentTab(location.state.returnToTab);
+      }
+    }
+  }, [location.state]);
+
+  // Close location filter dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (locationFilterRef.current && !locationFilterRef.current.contains(event.target)) {
+        setShowLocationFilter(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   const fetchPermits = async () => {
     try {
       setLoading(true);
       setError(null);
       const response = await api.getPermitsToWork();
       if (response.success) {
-        setPermits(response.data);
+        // Sort permits by latest Change date
+        const sortedPermits = response.data.sort((a, b) => 
+          new Date(b.Changed || Date.now()) - new Date(a.Changed || Date.now())
+        );
+        
+        setPermits(sortedPermits);
+        
+        // Extract unique job locations for filter
+        const locations = [...new Set(sortedPermits.map(permit => permit.JobLocation))].filter(Boolean);
+        setUniqueLocations(locations);
+        
+        // Count total permits for the current tab
+        updatePaginationInfo(sortedPermits);
       } else {
         setError(response.error || 'Failed to fetch permits');
+        setPermits([]);
+        setTotalPermits(0);
+        setTotalPages(0);
       }
     } catch (err) {
       setError('Error fetching permits. Please try again later.');
       console.error('Error:', err);
+      setPermits([]);
+      setTotalPermits(0);
+      setTotalPages(0);
     } finally {
       setLoading(false);
     }
   };
 
+  // Update pagination info based on filtered permits
+  const updatePaginationInfo = (permitList = permits) => {
+    const filteredCount = getFilteredPermits(permitList).length;
+    setTotalPermits(filteredCount);
+    setTotalPages(Math.ceil(filteredCount / itemsPerPage));
+  };
+
   useEffect(() => {
-    fetchPermits();
-  }, [currentTab]);
+    if (currentUser) {
+      fetchPermits();
+    }
+  }, [currentTab, currentUser]);
+
+  // Refetch when page changes
+  useEffect(() => {
+    if (currentUser) {
+      updatePaginationInfo();
+    }
+  }, [currentPage]);
+
+  // Update pagination when search or filter changes
+  useEffect(() => {
+    updatePaginationInfo();
+    setCurrentPage(1); // Reset to first page on filter/search changes
+  }, [searchValue, locationFilter]);
+
+  const debounce = (func, wait) => {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  };
 
   const handleView = (permit) => {
-    navigate(`/dashboard/jobs-monitoring/review/${permit.PermitToWorkID}`);
+    // Determine which tab this permit belongs to
+    let tabForPermit = currentTab;
+    
+    if (permit.CompletionStatus === 'Job Completed') {
+      tabForPermit = 'completed';
+    } else if (permit.Status === 'Revoked') {
+      tabForPermit = 'revoked';
+    } else if (permit.Status === 'Approved' || permit.Status.toLowerCase() === 'revocation pending') {
+      tabForPermit = 'ongoing';
+    }
+    
+    // Always navigate to the JobReview component with the current state
+    navigate(`/dashboard/jobs-monitoring/review/${permit.PermitToWorkID}`, {
+      state: { 
+        from: 'jobs-monitoring',
+        returnToTab: tabForPermit, // Store which tab to return to
+        page: currentPage,
+        searchValue: searchValue,
+        locationFilter: locationFilter
+      }
+    });
   };
 
   const handleCheckboxChange = (permitId) => {
@@ -162,7 +317,99 @@ const JobsMonitoring = () => {
     return ['ISS', 'QA', 'HOD'].includes(currentUserRole);
   };
 
-  const getFilteredPermits = () => {
+  const handleSearch = async (value) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // If search is empty, update with current filters
+      if (!value.trim()) {
+        updatePaginationInfo();
+        setLoading(false);
+        return;
+      }
+
+      // Extract numeric part from PTW ID (e.g., "PTW-0004" -> "4")
+      const permitId = value.trim().replace(/^PTW-0*/, '');
+      
+      // Validate permitId is a number
+      if (!/^\d+$/.test(permitId)) {
+        setError('Please enter a valid PTW ID (e.g., PTW-0001)');
+        setLoading(false);
+        return;
+      }
+
+      // Search permit by ID
+      const response = await api.searchPTW({
+        permitId: parseInt(permitId)
+      }, currentUser);
+
+      if (response.success && response.data.length > 0) {
+        // Sort permits by Changed date (most recent first)
+        const sortedPermits = response.data.sort((a, b) => 
+          new Date(b.Changed || Date.now()) - new Date(a.Changed || Date.now())
+        );
+        
+        // Find the right tab for this permit
+        const permit = sortedPermits[0];
+        const status = permit.Status.toLowerCase();
+        const isCompleted = permit.CompletionStatus === 'Job Completed';
+        const isRevoked = status === 'revoked';
+        const isRevocationPending = status === 'revocation pending';
+        
+        // Automatically switch to the appropriate tab
+        let newTab = currentTab;
+        
+        if (isCompleted) {
+          newTab = 'completed';
+        } else if (isRevoked) {
+          newTab = 'revoked';
+        } else if (isRevocationPending || status === 'approved' || status === 'pending') {
+          // For revocation pending, approved, or pending, show in ongoing tab
+          newTab = 'ongoing';
+        }
+        
+        // Set the new tab and update permit list
+        if (newTab !== currentTab) {
+          setCurrentTab(newTab);
+        }
+        
+        // Replace permits with search results
+        setPermits(sortedPermits);
+        updatePaginationInfo(sortedPermits);
+      } else {
+        setError('No permits found matching your search');
+      }
+    } catch (err) {
+      console.error('Search error:', err);
+      setError('Error searching permits. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const debouncedSearch = debounce((value) => handleSearch(value), 500);
+
+  const handleSearchInputChange = (e) => {
+    const value = e.target.value;
+    setSearchValue(value);
+    
+    // If search is cleared, reset everything to initial state
+    if (!value.trim()) {
+      setError(null);
+      fetchPermits(); // Fetch all permits
+    } else {
+      // Otherwise, debounce the search
+      debouncedSearch(value);
+    }
+  };
+
+  const handleLocationFilterSelect = (location) => {
+    setLocationFilter(location === locationFilter ? '' : location);
+    setShowLocationFilter(false);
+  };
+
+  const getFilteredPermits = (permitList = permits) => {
     if (!currentUser) return [];
   
     const currentUserRole = currentUser.roleId;
@@ -170,15 +417,20 @@ const JobsMonitoring = () => {
     const isIssuer = currentUserRole === 'ISS';
     const isHOD = currentUserRole === 'HOD';
   
-    return permits.filter(permit => {
+    return permitList.filter(permit => {
       if (!hasViewAccess()) return false;
       if (isHOD && !isInUserDepartment(permit)) return false;
+      
+      // Apply location filter if set
+      if (locationFilter && permit.JobLocation !== locationFilter) return false;
   
       switch (currentTab) {
         case 'ongoing':
-          return permit.Status === 'Approved' && 
+          return (permit.Status === 'Approved' && 
                 (permit.CompletionStatus === 'In Progress' || 
-                 permit.CompletionStatus === 'Pending Completion');
+                 permit.CompletionStatus === 'Pending Completion')) ||
+                 // Include revocation pending permits in the ongoing tab
+                 permit.Status.toLowerCase() === 'revocation pending';
   
         case 'completed':
           return permit.CompletionStatus === 'Job Completed';
@@ -193,9 +445,14 @@ const JobsMonitoring = () => {
   };
   
   const getStatusColor = (status, completionStatus, currentTab) => {
+    if (status.toLowerCase() === 'revocation pending') {
+      return 'text-gray-500';
+    }
+    
     if (currentTab === 'revoked') {
       return 'text-gray-500';
     }
+    
     switch (completionStatus?.toLowerCase()) {
       case 'job completed':
         return 'text-blue-500';
@@ -212,6 +469,10 @@ const JobsMonitoring = () => {
   };
   
   const getDisplayStatus = (status, completionStatus, currentTab) => {
+    if (status.toLowerCase() === 'revocation pending') {
+      return 'REVOCATION PENDING';
+    }
+    
     if (status === 'Revoked') {
       return 'REVOKED';
     }
@@ -232,10 +493,85 @@ const JobsMonitoring = () => {
     return status.toUpperCase();
   };
 
-  const filteredPermits = getFilteredPermits();
+  // Get all filtered permits first
+  const allFilteredPermits = getFilteredPermits();
+  
+  // Then paginate the filtered permits
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPermits = allFilteredPermits.slice(startIndex, startIndex + itemsPerPage);
+
+  // Don't allow selection of Revocation Pending permits
+  const canBeSelected = (permit) => {
+    return permit.Status.toLowerCase() !== 'revocation pending';
+  };
 
   return (
     <div className="mt-2">
+      <div className="mb-4">
+        <div className="flex items-center gap-4">
+          <div className="w-1/3">
+            <Input 
+              placeholder="Search PTW ID (e.g., PTW-0001)" 
+              value={searchValue}
+              onChange={handleSearchInputChange}
+              className="w-full"
+            />
+          </div>
+          <Button 
+            variant="primary" 
+            onClick={() => handleSearch(searchValue)}
+            className="w-[150px]"
+          >
+            Search
+          </Button>
+          <Button 
+            variant="secondary" 
+            onClick={() => {
+              setSearchValue('');
+              setLocationFilter('');
+              setCurrentPage(1);
+              fetchPermits();
+            }}
+            className="flex items-center gap-2 bg-gray-200 text-gray-700 hover:bg-gray-300"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Reset
+          </Button>
+          <div className="relative" ref={locationFilterRef}>
+            <Button 
+              variant={locationFilter ? "primary" : "secondary"}
+              onClick={() => setShowLocationFilter(!showLocationFilter)}
+              className={`flex items-center gap-2 ${locationFilter ? "bg-blue-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+            >
+              <Filter className="w-4 h-4" />
+              {locationFilter ? `Location: ${locationFilter}` : "Filter by Location"}
+              <ChevronDown className="w-4 h-4" />
+            </Button>
+            {showLocationFilter && (
+              <div className="absolute z-10 mt-2 w-64 bg-white rounded-md shadow-lg border overflow-hidden">
+                <div className="max-h-60 overflow-y-auto">
+                  <div 
+                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b"
+                    onClick={() => handleLocationFilterSelect('')}
+                  >
+                    Show All Locations
+                  </div>
+                  {uniqueLocations.map(location => (
+                    <div 
+                      key={location}
+                      className={`px-4 py-2 hover:bg-gray-100 cursor-pointer ${locationFilter === location ? 'bg-blue-50' : ''}`}
+                      onClick={() => handleLocationFilterSelect(location)}
+                    >
+                      {location}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4">
@@ -263,115 +599,143 @@ const JobsMonitoring = () => {
               />
             </div>
             {canRevokePermits() && selectedPermits.length > 0 && (
-          <Button 
-            variant="danger"
-            onClick={handleRevoke}
-            className="w-fit flex items-center gap-2"
-          >
-            <XCircle className="w-4 h-4" />
-            REVOKE PERMIT{selectedPermits.length > 1 ? 'S' : ''}
-          </Button>
-        )}
+              <Button 
+                variant="danger"
+                onClick={handleRevoke}
+                className="w-fit flex items-center gap-2"
+              >
+                <XCircle className="w-4 h-4" />
+                REVOKE PERMIT{selectedPermits.length > 1 ? 'S' : ''}
+              </Button>
+            )}
           </div>
         </CardHeader>
         
         <CardContent>
-  {loading && <div className="text-center py-4">Loading jobs...</div>}
-  {error && <div className="text-red-500 text-center py-4">{error}</div>}
-  
-  {!loading && !error && (
-    <Table>
-      <TableHead>
-        <TableRow>
-          {canRevokePermits() && currentTab === 'ongoing' && (
-            <TableCell className="w-12">
-              <Checkbox disabled />
-            </TableCell>
-          )}
-          <TableCell className="text-base font-medium">Actions</TableCell>
-          <TableCell className="text-base font-medium">Permit ID</TableCell>
-          <TableCell className="text-base font-medium">Permit Receiver</TableCell>
-          <TableCell className="text-base font-medium">Job Location</TableCell>
-          <TableCell className="text-base font-medium">Start Date</TableCell>
-          <TableCell className="text-base font-medium">End Date</TableCell>
-          <TableCell className="text-base font-medium">Status</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-          {filteredPermits.length > 0 ? (
-            filteredPermits.map((permit) => (
-              <TableRow key={permit.PermitToWorkID}>
-                {canRevokePermits() && currentTab === 'ongoing' && (
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedPermits.includes(permit.PermitToWorkID)}
-                      onCheckedChange={() => handleCheckboxChange(permit.PermitToWorkID)}
-                    />
-                  </TableCell>
+          {loading && <div className="text-center py-4">Loading jobs...</div>}
+          {error && <div className="text-red-500 text-center py-4">{error}</div>}
+          
+          {!loading && !error && (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  {canRevokePermits() && currentTab === 'ongoing' && (
+                    <TableCell className="w-12">
+                      <Checkbox disabled />
+                    </TableCell>
+                  )}
+                  <TableCell className="text-base font-medium">Actions</TableCell>
+                  <TableCell className="text-base font-medium">Permit ID</TableCell>
+                  <TableCell className="text-base font-medium">Permit Receiver</TableCell>
+                  <TableCell className="text-base font-medium">Job Location</TableCell>
+                  <TableCell className="text-base font-medium">Start Date</TableCell>
+                  <TableCell className="text-base font-medium">End Date</TableCell>
+                  <TableCell className="text-base font-medium">Status</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {paginatedPermits.length > 0 ? (
+                  paginatedPermits.map((permit) => (
+                    <TableRow key={permit.PermitToWorkID}>
+                      {canRevokePermits() && currentTab === 'ongoing' && (
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedPermits.includes(permit.PermitToWorkID)}
+                            onCheckedChange={() => handleCheckboxChange(permit.PermitToWorkID)}
+                            disabled={!canBeSelected(permit)}
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleView(permit)}
+                          className="inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-medium w-24"
+                        >
+                          <Eye size={14} className="mr-1" /> {permit.Status.toLowerCase() === 'revocation pending' && currentUser?.roleId === 'QA' ? 'Review' : 'View'}
+                        </Button>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span>PTW-{String(permit.PermitToWorkID).padStart(4, '0')}</span>
+                          <span className={getStatusColor(permit.Status, permit.CompletionStatus, currentTab)}>
+                          {permit.Status.toLowerCase() === 'revocation pending' 
+                            ? 'Revocation Pending' 
+                            : currentTab === 'completed' 
+                              ? 'Job Completed' 
+                              : currentTab === 'revoked'
+                                ? 'Revoked'
+                                : permit.CompletionStatus === 'Pending Completion'
+                                  ? 'Pending Completion'
+                                  : permit.CompletionStatus || 'In Progress'}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{permit.PermitReceiver}</TableCell>
+                      <TableCell>{permit.JobLocation}</TableCell>
+                      <TableCell>{formatDate(permit.EntryDate)}</TableCell>
+                      <TableCell>{formatDate(permit.ExitDate)}</TableCell>
+                      <TableCell>{getDisplayStatus(permit.Status, permit.CompletionStatus, currentTab)}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    {canRevokePermits() && currentTab === 'ongoing' && <TableCell />}
+                    <TableCell colSpan={7} className="text-center py-4">
+                      No jobs found for this tab
+                    </TableCell>
+                  </TableRow>
                 )}
-                <TableCell>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => handleView(permit)}
-                    className="inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-medium"
-                  >
-                    <Eye size={14} className="mr-1" /> View
-                  </Button>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <span>PTW-{String(permit.PermitToWorkID).padStart(4, '0')}</span>
-                    <span className={getStatusColor(permit.Status, permit.CompletionStatus, currentTab)}>
-                    {currentTab === 'completed' 
-                      ? 'Job Completed' 
-                      : currentTab === 'revoked'
-                        ? 'Revoked'
-                        : permit.CompletionStatus === 'Pending Completion'
-                          ? 'Pending Completion'
-                          : permit.CompletionStatus || 'In Progress'}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell>{permit.PermitReceiver}</TableCell>
-                <TableCell>{permit.JobLocation}</TableCell>
-                <TableCell>{formatDate(permit.EntryDate)}</TableCell>
-                <TableCell>{formatDate(permit.ExitDate)}</TableCell>
-                <TableCell>{getDisplayStatus(permit.Status, permit.CompletionStatus, currentTab)}</TableCell>
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              {canRevokePermits() && currentTab === 'ongoing' && <TableCell />}
-              <TableCell colSpan={7} className="text-center py-4">
-                No jobs found for this tab
-              </TableCell>
-            </TableRow>
+              </TableBody>
+            </Table>
           )}
-        </TableBody>
-    </Table>
-  )}
-  
-  <div className="flex justify-end mt-4 text-sm text-gray-500">
-    Showing {filteredPermits.length} Job(s)
-  </div>
-</CardContent>
+          
+          {/* Pagination Controls */}
+          <div className="flex justify-between mt-4 text-sm text-gray-500">
+            <div>
+              {totalPermits > 0 ? 
+                `Showing ${Math.min(totalPermits, (currentPage - 1) * itemsPerPage + 1)} to ${Math.min(currentPage * itemsPerPage, totalPermits)} of ${totalPermits} jobs` : 
+                'No jobs to display'}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1 || totalPermits === 0}
+                className="font-semibold text-gray-500 hover:text-black"
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages || totalPermits === 0}
+                className="font-semibold text-gray-500 hover:text-black"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </CardContent>
       </Card>
 
       {/* Revoke Modal */}
       {showRevokeModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="w-full max-w-3xl">
-           <CardHeader className="pb-2">
-                     <div className="flex items-center justify-between">
-                       <div className="w-[80px]">
-                         <img src={logo} alt="Company Logo" className="h-[80px] w-[80px]" />
-                       </div>
-                       <div className="flex-grow ml-40">
-                         <h1 className="text-xl font-semibold">REVOKE PERMIT TO WORK</h1>
-                       </div>
-                     </div>
-                   </CardHeader>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <div className="w-[80px]">
+                  <img src={logo} alt="Company Logo" className="h-[80px] w-[80px]" />
+                </div>
+                <div className="flex-grow ml-40">
+                  <h1 className="text-xl font-semibold">REVOKE PERMIT TO WORK</h1>
+                </div>
+              </div>
+            </CardHeader>
 
             <div className="px-6 py-2 border-b">
               <p className="text-sm text-gray-600">
@@ -398,17 +762,22 @@ const JobsMonitoring = () => {
             </CardContent>
 
             <CardFooter className="flex justify-end gap-4">
-              <Button variant="outline" onClick={handleModalClose}>
-                Cancel
-              </Button>
-              <Button 
-                variant="danger"
-                onClick={handleRevokeSubmit}
-                disabled={isSubmitting}
-              >
-                Revoke Permit{selectedPermits.length > 1 ? 's' : ''}
-              </Button>
-            </CardFooter>
+            <Button 
+              variant="outline" 
+              onClick={handleModalClose} 
+              className="border-gray-400 text-gray-700 bg-white hover:bg-gray-200"
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="danger"
+              onClick={handleRevokeSubmit}
+              disabled={isSubmitting}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Revoke Permit{selectedPermits.length > 1 ? 's' : ''}
+            </Button>
+          </CardFooter>
           </Card>
         </div>
       )}
@@ -422,21 +791,23 @@ const JobsMonitoring = () => {
                 Are you sure you want to revoke the following permits: {getSelectedPermitNumbers()}?
               </p>
               <div className="flex justify-center space-x-4">
-                <Button 
-                  variant="outline"
-                  onClick={() => setShowConfirmation(false)}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  variant="destructive"
-                  onClick={handleConfirmRevoke}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? 'Revoking...' : 'Confirm Revoke'}
-                </Button>
-              </div>
+              <Button 
+                variant="outline"
+                className="border-gray-400 text-gray-700 bg-white hover:bg-gray-200"
+                onClick={() => setShowConfirmation(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive"
+                className="bg-red-600 text-white hover:bg-red-700"
+                onClick={handleConfirmRevoke}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Revoking...' : 'Confirm Revoke'}
+              </Button>
+            </div>
             </div>
           </Card>
         </div>

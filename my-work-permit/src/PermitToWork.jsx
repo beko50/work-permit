@@ -26,15 +26,27 @@ const PermitToWork = () => {
   const [permits, setPermits] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [currentTab, setCurrentTab] = useState('approved-job-permits');
+  // Use localStorage to store/retrieve the current tab
+  const [currentTab, setCurrentTab] = useState(() => {
+    return localStorage.getItem('permitToWorkCurrentTab') || 'approved-job-permits';
+  });
   const [showPTWForm, setShowPTWForm] = useState(false);
   const [selectedPermit, setSelectedPermit] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [searchValue, setSearchValue] = useState('');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(() => {
+    const lastView = localStorage.getItem('permitToWorkLastView');
+    return lastView ? JSON.parse(lastView).page || 1 : 1;
+  });
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalPermits, setTotalPermits] = useState(0);
+  const itemsPerPage = 10; // Changed from 15 to 10 to match ApprovalHistory
 
   const [searchParams, setSearchParams] = useState({
     page: 1,
-    limit: 15
+    limit: itemsPerPage
   });
 
   useEffect(() => {
@@ -45,10 +57,39 @@ const PermitToWork = () => {
 
   useEffect(() => {
     if (currentUser) {
-      setCurrentTab('approved-job-permits'); // Ensure it starts on Pending tab
+      // Check for last view data
+      const lastViewJson = localStorage.getItem('permitToWorkLastView');
+      if (lastViewJson) {
+        try {
+          const lastView = JSON.parse(lastViewJson);
+          if (lastView.tab) {
+            setCurrentTab(lastView.tab);
+          }
+          if (lastView.page) {
+            setCurrentPage(lastView.page);
+          }
+          if (lastView.searchValue) {
+            setSearchValue(lastView.searchValue);
+          }
+        } catch (e) {
+          console.error('Error parsing last view data:', e);
+        }
+      }
       fetchPermits();
     }
   }, [currentUser]);
+  
+  // Save current tab to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('permitToWorkCurrentTab', currentTab);
+  }, [currentTab]);
+  
+  // Refetch when page changes
+  useEffect(() => {
+    if (currentUser) {
+      fetchPermits();
+    }
+  }, [currentPage, currentTab]);
 
   const debounce = (func, wait) => {
     let timeout;
@@ -70,12 +111,7 @@ const PermitToWork = () => {
       return ['View Permit To Work'];
     }
     
-    // If status is Revocation Pending and current user is QA, allow review
-    if (permit.Status.toLowerCase() === 'revocation pending' && currentUser?.roleId === 'QA') {
-      return ['Review Permit To Work'];
-    }
-    
-    // Otherwise, use existing logic for other statuses
+    // If status is Pending and current user is the assigned reviewer, allow review
     return (reviewerRoles.includes(currentUser?.roleId) && 
             permit.AssignedTo === currentUser?.roleId)
       ? ['Review Permit To Work']
@@ -92,11 +128,6 @@ const PermitToWork = () => {
   };
 
   const getRoleDisplayName = (roleId, status) => {
-    // If status is Revocation Pending, assign to QHSSE APPROVER
-    if (status.toLowerCase() === 'revocation pending') {
-      return 'QHSSE APPROVER';
-    }
-  
     // If status is Rejected or Revoked, return null
     if (status.toLowerCase() === 'rejected' || status.toLowerCase() === 'revoked') {
       return null;
@@ -110,11 +141,11 @@ const PermitToWork = () => {
     return roleDisplayMap[roleId] || roleId;
   };
   
-
   const handleSearch = async (searchValue) => {
     try {
       setLoading(true);
       setError(null);
+      setCurrentPage(1); // Reset to first page when searching
 
       // If search is empty, fetch all permits
       if (!searchValue.trim()) {
@@ -129,6 +160,8 @@ const PermitToWork = () => {
       if (!/^\d+$/.test(permitId)) {
         setError('Please enter a valid PTW ID (e.g., PTW-0001)');
         setPermits([]);
+        setTotalPermits(0);
+        setTotalPages(0);
         return;
       }
 
@@ -138,10 +171,17 @@ const PermitToWork = () => {
       }, currentUser);
 
       if (response.success && response.data.length > 0) {
-        setPermits(response.data);
+        // Sort permits by Changed date (most recent first)
+        const sortedPermits = response.data.sort((a, b) => 
+          new Date(b.Changed || Date.now()) - new Date(a.Changed || Date.now())
+        );
+        
+        setPermits(sortedPermits);
+        setTotalPermits(sortedPermits.length);
+        setTotalPages(Math.ceil(sortedPermits.length / itemsPerPage));
         
         // Automatically switch to the appropriate tab based on the permit status
-        const permit = response.data[0];
+        const permit = sortedPermits[0];
         const status = permit.Status.toLowerCase();
         const isCompleted = permit.CompletionStatus === 'Job Completed';
 
@@ -157,11 +197,15 @@ const PermitToWork = () => {
       } else {
         setError('No permits found matching your search');
         setPermits([]);
+        setTotalPermits(0);
+        setTotalPages(0);
       }
     } catch (err) {
       console.error('Search error:', err);
       setError('Error searching permits. Please try again.');
       setPermits([]);
+      setTotalPermits(0);
+      setTotalPages(0);
     } finally {
       setLoading(false);
     }
@@ -177,6 +221,7 @@ const PermitToWork = () => {
     if (!value.trim()) {
       setError(null);
       setCurrentTab('approved-job-permits'); // Reset to default tab
+      setCurrentPage(1); // Reset to first page
       fetchPermits(); // Fetch all permits
     } else {
       // Otherwise, debounce the search
@@ -192,15 +237,29 @@ const PermitToWork = () => {
       const response = await api.getPermitsToWork();
       
       if (response.success) {
-        setPermits(response.data);
+        // Sort permits by Changed date (most recent first)
+        const sortedPermits = response.data.sort((a, b) => 
+          new Date(b.Changed || Date.now()) - new Date(a.Changed || Date.now())
+        );
+        
+        setPermits(sortedPermits);
+        
+        // Count total permits for the current tab
+        const filteredCount = getFilteredPermits(sortedPermits).length;
+        setTotalPermits(filteredCount);
+        setTotalPages(Math.ceil(filteredCount / itemsPerPage));
       } else {
         setError(response.message || 'Error fetching permits');
         setPermits([]);
+        setTotalPermits(0);
+        setTotalPages(0);
       }
     } catch (err) {
       setError('Error fetching permits. Please try again.');
       console.error('Error:', err);
       setPermits([]);
+      setTotalPermits(0);
+      setTotalPages(0);
     } finally {
       setLoading(false);
     }
@@ -253,12 +312,18 @@ const PermitToWork = () => {
   };
 
   const handleDropdownAction = (action, permitToWorkId) => {
+    // Store current view state before navigating
+    localStorage.setItem('permitToWorkLastView', JSON.stringify({
+      tab: currentTab,
+      page: currentPage,
+      searchValue: searchValue
+    }));
+    
     switch (action) {
       case 'View Permit To Work':
         navigate(`/dashboard/permits/permit-to-work/view/${permitToWorkId}`);
         break;
       case 'Review Permit To Work':
-        // For both normal review and revocation review, go to review page
         navigate(`/dashboard/permits/permit-to-work/review/${permitToWorkId}`);
         break;
       default:
@@ -266,8 +331,8 @@ const PermitToWork = () => {
     }
   };
 
-  const getFilteredPermits = () => {
-    return permits.filter(permit => {
+  const getFilteredPermits = (permitList = permits) => {
+    return permitList.filter(permit => {
       const status = permit.Status.toLowerCase();
       
       // First check if user has access based on role and department
@@ -275,7 +340,8 @@ const PermitToWork = () => {
       
       switch (currentTab) {
         case 'approved-job-permits':
-          return status === 'pending' || status === 'revocation pending';
+          // Only show regular pending, NOT revocation pending
+          return status === 'pending';
         case 'approved':
           // Only show in Approved if status is approved AND job is not completed yet
           return status === 'approved' && permit.CompletionStatus !== 'Job Completed';
@@ -292,7 +358,12 @@ const PermitToWork = () => {
     });
   };
 
-  const filteredPermits = getFilteredPermits();
+  // Get all filtered permits first
+  const allFilteredPermits = getFilteredPermits();
+  
+  // Then paginate the filtered permits
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPermits = allFilteredPermits.slice(startIndex, startIndex + itemsPerPage);
 
   return (
     <div className="mt-0">
@@ -312,6 +383,18 @@ const PermitToWork = () => {
               className="w-[150px]"
             >
               Search
+            </Button>
+            <Button 
+              variant="secondary" 
+              onClick={() => {
+                setSearchValue('');
+                setCurrentPage(1);
+                fetchPermits();
+              }}
+              className="flex items-center gap-2 bg-gray-200 text-gray-700 hover:bg-gray-300"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Reset
             </Button>
           </div>
       </div>
@@ -372,12 +455,13 @@ const PermitToWork = () => {
                   <TableCell className="text-base font-medium">Permit Receiver</TableCell>
                   <TableCell className="text-base font-medium">Company</TableCell>
                   <TableCell className="text-base font-medium">Job Description</TableCell>
+                  <TableCell className="text-base font-medium">Last Action Date</TableCell>
                   <TableCell className="text-base font-medium">Assigned To / Status</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredPermits.length > 0 ? (
-                  filteredPermits.map((permit) => (
+                {paginatedPermits.length > 0 ? (
+                  paginatedPermits.map((permit) => (
                     <TableRow key={permit.PermitToWorkID}>
                       <TableCell>
                         <Dropdown
@@ -404,13 +488,20 @@ const PermitToWork = () => {
                       <TableCell>{permit.ContractCompanyName}</TableCell>
                       <TableCell>{permit.JobDescription}</TableCell>
                       <TableCell>
+                        {new Date(permit.Changed || Date.now()).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </TableCell>
+                      <TableCell>
                         {getRoleDisplayName(permit.AssignedTo, permit.Status) || '—'} {/* Display "—" if null */}
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-4">
+                    <TableCell colSpan={7} className="text-center py-4">
                       No permits found for this tab
                     </TableCell>
                   </TableRow>
@@ -418,8 +509,34 @@ const PermitToWork = () => {
               </TableBody>
             </Table>
           )}
-          <div className="flex justify-end mt-4 text-sm text-gray-500">
-            Rows per page: 15 | {filteredPermits.length > 0 ? `1-${filteredPermits.length} of ${filteredPermits.length}` : '0-0 of 0'}
+          
+          {/* Pagination Controls */}
+          <div className="flex justify-between mt-4 text-sm text-gray-500">
+            <div>
+              {totalPermits > 0 ? 
+                `Showing ${(currentPage - 1) * itemsPerPage + 1} to ${Math.min(currentPage * itemsPerPage, totalPermits)} of ${totalPermits} permits` : 
+                'No permits to display'}
+            </div>
+            <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1 || totalPermits === 0}
+              className="font-semibold text-gray-500 hover:text-black"
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || totalPermits === 0}
+              className="font-semibold text-gray-500 hover:text-black"
+            >
+              Next
+            </Button>
+            </div>
           </div>
         </CardContent>
         <CardFooter>

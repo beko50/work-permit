@@ -86,7 +86,7 @@ const SignInPage = () => {
         </div>
 
         {/* Sign In heading */}
-        <h2 className="text-3xl font-bold text-blue-900 mb-6 text-left">
+        <h2 className="text-3xl font-medium text-blue-900 mb-6 text-left">
           Sign In
         </h2>
 
@@ -192,9 +192,11 @@ const SignInPage = () => {
             </div>
 
             <div className="text-sm">
-              <a href="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500 transition-colors">
-                Forgot password?
-              </a>
+            <a  href="/forgot-password" 
+              className="font-medium text-blue-600 hover:text-blue-500 hover:underline transition-colors"
+            >
+              Forgot password?
+            </a>
             </div>
           </div>
 

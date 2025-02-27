@@ -27,14 +27,16 @@ const printStyles = `
     body * {
       visibility: hidden;
     }
-    .print-section, .print-section * {
+    .print-modal, .print-modal * {
       visibility: visible;
     }
-    .print-section {
+    .print-modal {
       position: absolute;
       left: 0;
       top: 0;
       width: 100%;
+      height: auto;
+      overflow: visible;
     }
     .no-print {
       display: none !important;
@@ -102,17 +104,15 @@ const SubmittedPermit = () => {
 
   useEffect(() => {
     const fetchPermitDetails = async () => {
-          try {
-            setLoading(true);
-            
-            const response = await api.getPermitById(permitId);
-          
-          if (response?.success) {
-            const { permit, documents, groupedCheckboxes } = response.data;
-            
-            setPermit(permit);
-            setDocuments(documents || []); // Ensure documents is always an array
-            setGroupedCheckboxes(groupedCheckboxes || []);
+      try {
+        setLoading(true);
+        const response = await api.getPermitById(permitId);
+
+        if (response?.success) {
+          const { permit, documents, groupedCheckboxes } = response.data;
+          setPermit(permit);
+          setDocuments(documents || []);
+          setGroupedCheckboxes(groupedCheckboxes || []);
 
           if (permit.RevocationInitiatedBy || permit.Status === 'Revocation Pending' || permit.Status === "Revoked") {
             setRevocationData({
@@ -171,7 +171,7 @@ const SubmittedPermit = () => {
   return (
     <>
       <style>{printStyles}</style>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print-modal">
         <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
           <div className="sticky top-0 bg-white z-10 border-b pb-2 pt-2 flex items-center">
             <div className="ml-8">
@@ -182,7 +182,7 @@ const SubmittedPermit = () => {
               />
             </div>
             <h2 className="text-xl font-semibold text-center flex-grow -ml-16">REQUEST FOR JOB PERMIT</h2>
-            <Button variant="ghost" onClick={() => navigate(-1)} className="absolute top-2 right-2 hover:bg-gray-100">
+            <Button variant="ghost" onClick={() => navigate(-1)} className="absolute top-2 right-2 hover:bg-gray-100 no-print">
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -231,44 +231,46 @@ const SubmittedPermit = () => {
 
             {/* Risk Assessment Document */}
             {documents && documents.length > 0 && (
-              <div className="mt-6 ml-4"> {/* Adjust ml-4 as needed */}
+              <div className="mt-6 ml-4 no-print"> {/* Exclude from printing */}
                 <h2 className="text-lg font-medium">Risk Assessment Documents</h2>
                 <RiskAssessmentViewer documents={documents} />
               </div>
             )}
 
             {/* Safety Checklist Card */}
-            <Card>
-              <CardHeader className="font-bold text-lg">Safety Checklist</CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  {groupedCheckboxes.map((section) => (
-                    <div key={section.sectionId} className="space-y-2">
-                      <h3 className="font-medium text-base border-b pb-2">
-                        {sectionNameMapping[section.sectionName] || section.sectionName}
-                      </h3>
-                      <div className="space-y-2 pl-4">
-                        {section.items.map((item) => (
-                          <div key={item.sectionItemId} className="flex items-start gap-2">
-                            <div className="mt-1">
-                              <CheckSquare className="h-4 w-4 text-green-600" />
+            <div className="page-break"> {/* Add page break here */}
+              <Card>
+                <CardHeader className="font-bold text-lg">Safety Checklist</CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    {groupedCheckboxes.map((section) => (
+                      <div key={section.sectionId} className="space-y-2">
+                        <h3 className="font-medium text-base border-b pb-2">
+                          {sectionNameMapping[section.sectionName] || section.sectionName}
+                        </h3>
+                        <div className="space-y-2 pl-4">
+                          {section.items.map((item) => (
+                            <div key={item.sectionItemId} className="flex items-start gap-2">
+                              <div className="mt-1">
+                                <CheckSquare className="h-4 w-4 text-green-600" />
+                              </div>
+                              <div>
+                                <p>{item.itemLabel}</p>
+                                {item.textInput && (
+                                  <p className="text-sm text-gray-600 mt-1">
+                                    Additional Info: {item.textInput}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <p>{item.itemLabel}</p>
-                              {item.textInput && (
-                                <p className="text-sm text-gray-600 mt-1">
-                                  Additional Info: {item.textInput}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Revocation Section */}
             {revocationData && (
@@ -327,7 +329,7 @@ const SubmittedPermit = () => {
             </Card>
 
             {/* Print Button */}
-            <div className="flex justify-end mt-6">
+            <div className="flex justify-end mt-6 no-print">
               <Button 
                 onClick={handlePrint}
                 variant="secondary"

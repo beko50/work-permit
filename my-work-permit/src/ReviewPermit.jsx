@@ -303,89 +303,90 @@ const PermitReview = () => {
 
           {/* Approval Workflow */}
           <div className="mt-6">
-  <h3 className="text-lg font-semibold mb-4">Permit Documentation Approvals</h3>
-  <div className="relative">
-    <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
-    {approvals.map((approval, index) => (
-      <div key={index} className="relative pl-10 pb-6">
-        <div 
-          className={`absolute left-0 rounded-full border-2 w-5 h-5 transition-all duration-300
-            ${approval.status === 'Approved' ? 'bg-green-500 border-green-500' : 
-              approval.status === 'Rejected' ? 'bg-red-500 border-red-500' :
-              approval.isCurrentApprover ? 'bg-blue-500 border-blue-500' : 
-              'bg-gray-200 border-gray-300'}`}
-        />
-        <div className="border rounded-md p-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
-            {/* Left column: Title and Status */}
-            <div>
-              <h4 className="font-medium text-base mb-1">{approval.title}</h4>
-              {getStatusBadge(approval.status)}
-            </div>
-            
-            {/* Right column: Approver and Date */}
-            <div className="text-sm text-gray-600">
-              <p>
-                <span className="font-medium">Approver:</span> {approval.approverName || 'Not yet approved'}
-              </p>
-              {approval.approvedDate && (
-                <p>
-                  <span className="font-medium">Date:</span> {formatDate(approval.approvedDate)}
-                </p>
-              )}
+            <h3 className="text-lg font-semibold mb-4">Permit Documentation Approvals</h3>
+            <div className="relative">
+              <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
+              {approvals.map((approval, index) => (
+                <div key={index} className="relative pl-10 pb-6">
+                  <div 
+                    className={`absolute left-0 rounded-full border-2 w-5 h-5 transition-all duration-300
+                      ${approval.status === 'Approved' ? 'bg-green-500 border-green-500' : 
+                        approval.status === 'Rejected' ? 'bg-red-500 border-red-500' :
+                        approval.isCurrentApprover ? 'bg-blue-500 border-blue-500' : 
+                        'bg-gray-200 border-gray-300'}`}
+                  />
+                  <div className="border rounded-md p-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                      {/* Left column: Title and Status */}
+                      <div>
+                        <h4 className="font-medium text-base mb-1">{approval.title}</h4>
+                        {getStatusBadge(approval.status)}
+                      </div>
+                      
+                      {/* Right column: Approver and Date */}
+                      <div className="text-sm text-gray-600">
+                        <p>
+                          <span className="font-medium">Approver:</span> {approval.approverName || 'Not yet approved'}
+                        </p>
+                        {approval.approvedDate && (
+                          <p>
+                            <span className="font-medium">Date:</span> {formatDate(approval.approvedDate)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                      
+                    {/* Comments section below both columns */}
+                    {approval.comments && (
+                      <div className="mt-2">
+                        <p className="text-sm text-gray-600 mb-1">
+                          <span className="font-medium">Comments:</span>
+                        </p>
+                        <p className="bg-gray-50 p-2 rounded text-sm">{approval.comments}</p>
+                      </div>
+                    )}
+
+                    {/* Approval actions for current approver */}
+                    {approval.isCurrentApprover && (
+                      <>
+                        <div className="mt-4">
+                          <label className="block text-sm text-gray-600 mb-2">
+                            Approval Comments
+                          </label>
+                          <textarea 
+                            className="w-full border rounded-md p-2"
+                            rows="3"
+                            value={comments}
+                            onChange={(e) => setComments(e.target.value)}
+                            placeholder="Enter your comments here..."
+                            disabled={isApproving}
+                          />
+                        </div>
+                    
+                        <div className="flex justify-end gap-3 mt-4">
+                          <Button 
+                            variant="danger" 
+                            onClick={() => handleApproval('Rejected')}
+                            disabled={isApproving}
+                          >
+                            {isApproving ? 'Rejecting...' : 'Reject'}
+                          </Button>
+                          <Button 
+                            variant="success"
+                            onClick={() => handleApproval('Approved')}
+                            disabled={isApproving}
+                            className="bg-green-600 text-white hover:bg-green-700"
+                          >
+                            {isApproving ? 'Approving...' : 'Approve'}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-          
-          {/* Comments section below both columns */}
-          {approval.comments && (
-            <div className="mt-2">
-              <p className="text-sm text-gray-600 mb-1">
-                <span className="font-medium">Comments:</span>
-              </p>
-              <p className="bg-gray-50 p-2 rounded text-sm">{approval.comments}</p>
-            </div>
-          )}
-
-          {/* Approval actions for current approver */}
-          {approval.isCurrentApprover && (
-            <>
-              <div className="mt-4">
-                <label className="block text-sm text-gray-600 mb-2">
-                  Approval Comments
-                </label>
-                <textarea 
-                  className="w-full border rounded-md p-2"
-                  rows="3"
-                  value={comments}
-                  onChange={(e) => setComments(e.target.value)}
-                  placeholder="Enter your comments here..."
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 mt-4">
-                <Button 
-                  variant="danger" 
-                  onClick={() => handleApproval('Rejected')}
-                  disabled={isApproving}
-                >
-                  {isApproving ? 'Rejecting...' : 'Reject'}
-                </Button>
-                <Button 
-                  variant="success"
-                  onClick={() => handleApproval('Approved')}
-                  disabled={isApproving}
-                  className="bg-green-600 text-white hover:bg-green-700"
-                >
-                  {isApproving ? 'Approving...' : 'Approve'}
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    ))}
-  </div>
-</div>
         </CardContent>
       </Card>
     </div>

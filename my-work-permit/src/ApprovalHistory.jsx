@@ -77,10 +77,8 @@ const ApprovalHistory = () => {
         }
       }
   
-      let responses;
-      
       if (currentTab === 'jobPermits') {
-        // For Job Permits tab - only fetch approved permits
+        // For Job Permits tab - fetch paginated approved permits
         const response = await api.searchPermits({
           ...searchParams,
           permitId: searchId,
@@ -88,70 +86,120 @@ const ApprovalHistory = () => {
           limit: itemsPerPage,
           status: 'approved'  // Only fetch approved permits
         }, currentUser);
-        responses = [response];
-      } else {
-        // For Permit to Work tab - fetch both approved and revoked
-        const response = await api.getPermitsToWork();
-        // Filter for both approved and revoked permits
-        const filteredPermits = response.data.filter(permit => 
-          ['approved', 'revoked'].includes(permit.Status.toLowerCase())
-        );
-        responses = [{ success: true, data: filteredPermits }];
-      }
-      
-      let combinedData = [];
-      let totalCount = 0;
-  
-      responses.forEach(response => {
-        if (response.success) {
-          // For Job Permits, we only have approved permits
-          // For PTW, we keep both approved and revoked
-          const filteredData = currentTab === 'jobPermits'
-            ? response.data.filter(permit => permit.Status.toLowerCase() === 'approved')
-            : response.data.filter(permit => 
-                ['approved', 'revoked'].includes(permit.Status.toLowerCase())
-              );
-          combinedData = [...combinedData, ...filteredData];
-          totalCount += filteredData.length;
-        }
-      });
-  
-      const formattedData = combinedData.map(permit => {
-        const isPTW = currentTab === 'permitToWork';
-        const permitIdField = isPTW ? 'PermitToWorkID' : 'JobPermitID';
-        const id = isPTW 
-          ? `PTW-${String(permit[permitIdField] || '').padStart(4, '0')}`
-          : `JP-${String(permit.JobPermitID || '').padStart(4, '0')}`;
         
-        return {
-          type: isPTW ? 'Permit to Work' : 'Job Permit',
-          id: id,
-          permitId: isPTW ? (permit[permitIdField] || '') : (permit.JobPermitID || ''),
-          status: permit.Status || '',
-          permitReceiver: isPTW ? permit.PermitReceiver : permit.PermitReceiver,
-          companyName: permit.ContractCompanyName || 'N/A',
-          jobDescription: permit.JobDescription || 'N/A',
-          lastActionDate: new Date(permit.Changed || Date.now()).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          }),
-          routePath: isPTW
-            ? `/dashboard/permits/permit-to-work/view/${permit[permitIdField] || ''}`
-            : `/dashboard/permits/view/${permit.JobPermitID || ''}`
-        };
-      });
-  
-      formattedData.sort((a, b) => 
-        new Date(b.lastActionDate) - new Date(a.lastActionDate)
-      );
-  
-      setApprovalHistory(formattedData);
-      setTotalPages(Math.ceil(totalCount / itemsPerPage));
-      setTotalPermits(totalCount);
+        if (response.success) {
+          const formattedData = response.data.map(permit => ({
+            type: 'Job Permit',
+            id: `JP-${String(permit.JobPermitID || '').padStart(4, '0')}`,
+            permitId: permit.JobPermitID || '',
+            status: permit.Status || '',
+            permitReceiver: permit.PermitReceiver,
+            companyName: permit.ContractCompanyName || 'N/A',
+            jobDescription: permit.JobDescription || 'N/A',
+            lastActionDate: new Date(permit.Changed || Date.now()).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            }),
+            routePath: `/dashboard/permits/view/${permit.JobPermitID || ''}`
+          }));
+          
+          setApprovalHistory(formattedData);
+          setTotalPages(Math.ceil(response.total / itemsPerPage));
+          setTotalPermits(response.total);
+        } else {
+          setError('Failed to fetch job permits');
+          setApprovalHistory([]);
+          setTotalPages(0);
+          setTotalPermits(0);
+        }
+      } else {
+        // For Permit to Work tab - fetch all permits and then paginate client-side
+        const response = await api.getPermitsToWork();
+        
+        if (response.success) {
+          // Filter for both approved and revoked permits
+          const filteredPermits = response.data.filter(permit => 
+            ['approved', 'revoked'].includes(permit.Status.toLowerCase())
+          );
+          
+          // Apply date filtering if needed
+          let filteredByDate = filteredPermits;
+          if (searchParams.changedStartDate || searchParams.changedEndDate) {
+            filteredByDate = filteredPermits.filter(permit => {
+              const permitDate = new Date(permit.Changed || Date.now());
+              
+              if (searchParams.changedStartDate && searchParams.changedEndDate) {
+                const startDate = new Date(searchParams.changedStartDate);
+                const endDate = new Date(searchParams.changedEndDate);
+                endDate.setHours(23, 59, 59, 999); // Set to end of day
+                return permitDate >= startDate && permitDate <= endDate;
+              } else if (searchParams.changedStartDate) {
+                const startDate = new Date(searchParams.changedStartDate);
+                return permitDate >= startDate;
+              } else if (searchParams.changedEndDate) {
+                const endDate = new Date(searchParams.changedEndDate);
+                endDate.setHours(23, 59, 59, 999); // Set to end of day
+                return permitDate <= endDate;
+              }
+              
+              return true;
+            });
+          }
+          
+          // Apply ID filtering if needed
+          let filteredByID = filteredByDate;
+          if (searchId) {
+            filteredByID = filteredByDate.filter(permit => 
+              `PTW-${String(permit.PermitToWorkID || '').padStart(4, '0')}`.includes(searchId)
+            );
+          }
+          
+          // Sort by date
+          filteredByID.sort((a, b) => 
+            new Date(b.Changed || Date.now()) - new Date(a.Changed || Date.now())
+          );
+          
+          // Calculate total before pagination
+          const totalItemCount = filteredByID.length;
+          
+          // Apply pagination
+          const startIndex = (currentPage - 1) * itemsPerPage;
+          const paginatedData = filteredByID.slice(startIndex, startIndex + itemsPerPage);
+          
+          // Format data
+          const formattedData = paginatedData.map(permit => ({
+            type: 'Permit to Work',
+            id: `PTW-${String(permit.PermitToWorkID || '').padStart(4, '0')}`,
+            permitId: permit.PermitToWorkID || '',
+            status: permit.Status || '',
+            permitReceiver: permit.PermitReceiver,
+            companyName: permit.ContractCompanyName || 'N/A',
+            jobDescription: permit.JobDescription || 'N/A',
+            lastActionDate: new Date(permit.Changed || Date.now()).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            }),
+            routePath: `/dashboard/permits/permit-to-work/view/${permit.PermitToWorkID || ''}`
+          }));
+          
+          setApprovalHistory(formattedData);
+          setTotalPages(Math.ceil(totalItemCount / itemsPerPage));
+          setTotalPermits(totalItemCount);
+        } else {
+          setError('Failed to fetch permits to work');
+          setApprovalHistory([]);
+          setTotalPages(0);
+          setTotalPermits(0);
+        }
+      }
     } catch (error) {
       console.error('Error fetching approvals:', error);
       setError('Failed to fetch approvals. Please try again later.');
+      setApprovalHistory([]);
+      setTotalPages(0);
+      setTotalPermits(0);
     } finally {
       setLoading(false);
     }
@@ -449,22 +497,24 @@ const ApprovalHistory = () => {
               Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalPermits)} of {totalPermits} permits
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="font-semibold text-gray-500 hover:text-black"
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="font-semibold text-gray-500 hover:text-black"
+            >
+              Next
+            </Button>
             </div>
           </div>
         </CardContent>

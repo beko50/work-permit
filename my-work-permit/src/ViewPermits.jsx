@@ -293,18 +293,19 @@ const ViewPermit = () => {
   };
 
   const PaginationControls = () => (
-    <div className="flex justify-end items-center mt-4 space-x-2 text-sm text-gray-500">
-      <span>
+    <div className="flex justify-end items-center mt-4 space-x-2 text-base text-gray-500">
+      <span className="font-semibold text-gray-700">
         {`${(searchParams.page - 1) * itemsPerPage + 1}-${Math.min(searchParams.page * itemsPerPage, totalPermits)} of ${totalPermits}`}
       </span>
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-3">
         <Button 
           variant="outline" 
           size="sm" 
           onClick={handlePreviousPage} 
           disabled={searchParams.page === 1}
+          className="font-semibold text-gray-700 hover:text-black text-base"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-5 w-5" />
         </Button>
         <span>{`Page ${searchParams.page} of ${totalPages}`}</span>
         <Button 
@@ -312,8 +313,9 @@ const ViewPermit = () => {
           size="sm" 
           onClick={handleNextPage} 
           disabled={searchParams.page === totalPages}
+          className="font-semibold text-gray-700 hover:text-black text-base"
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-5 w-5" />
         </Button>
       </div>
     </div>

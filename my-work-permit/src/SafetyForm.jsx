@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState,useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader } from "./components/ui/card";
 import { Button } from "./components/ui/button";
@@ -16,6 +16,7 @@ import { api } from './services/api'
 
 const SafetyForm = () => {
   const navigate = useNavigate();
+  const cardRef = useRef(null);
   const [formData, setFormData] = useState({
     // Section 1 fields
     startDate: null,
@@ -48,6 +49,7 @@ const SafetyForm = () => {
     acVoltageDe:[],
     dcVoltageDe:[],
     breakPreparation:[],
+    disclaimerAccepted: false,
      // Add text field initializations
     otherHazardText: '',
     otherGasesText: '',
@@ -296,7 +298,12 @@ const SafetyForm = () => {
     e.preventDefault(); // Prevent form submission
     if (currentSection > 1) {
       setCurrentSection(currentSection - 1);
-    }
+
+    // Scroll to top after a small delay
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 5);
+  }
   };
 
   const handleNext = async (e, validateForm, setTouched) => {
@@ -370,6 +377,11 @@ const SafetyForm = () => {
           }
       
           setCurrentSection(currentSection + 1);
+
+          // Scroll to top after a small delay
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 5);
           return true;
         } catch (error) {
           console.error('Unexpected error during validation:', error);
@@ -698,7 +710,7 @@ const SafetyForm = () => {
 
   return (
     <div className="p-4">
-      <Card className="w-full max-w-4xl mx-auto bg-white relative">
+      <Card className="w-full max-w-4xl mx-auto bg-white relative" ref={cardRef}>
         <CardHeader className="relative border-b pb-2 pt-2 flex items-center">
           <img src={logo} alt="Company Logo" className="h-[80px] w-[80px]" />
           <h1 className="text-xl font-semibold flex-grow text-center"> SAFETY FORM</h1>
@@ -919,7 +931,7 @@ const SafetyForm = () => {
                                  : 'border-gray-300'
                              }`}
                       
-                             dateFormat="yyyy-MM-dd"                         
+                             dateFormat="dd-MM-yyyy"                         
                            />
                            {errors.startDate && touched.startDate && (
                           <div className="text-red-600 text-sm mt-1">{errors.startDate}</div>
@@ -969,7 +981,7 @@ const SafetyForm = () => {
                                     ? 'border-red-500 bg-red-50' 
                                     : 'border-gray-300'
                                 }`}
-                                dateFormat="yyyy-MM-dd"
+                                dateFormat="dd-MM-yyyy"
                               />
                             </div>
                     
@@ -1000,9 +1012,9 @@ const SafetyForm = () => {
     
                     <div className="grid grid-cols-2 gap-6">
                     <div>
-                        <label className="block text-sm font-medium mb-1">
-                          Permit Duration
-                        </label>
+                    <label className="block text-sm font-medium mb-1">
+                      Estimated Work Duration <span className="text-gray-500 font-normal">(Days)</span>
+                    </label>
                         <Input
                           type="text"
                           name="permitDuration"
@@ -1438,42 +1450,45 @@ const SafetyForm = () => {
 
                 {/* Disclaimer Section */}
                 <div>
-                  <div className="mt-8 p-4 border border-red-500 bg-red-100">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="terms-checkbox"
-                        className="form-checkbox h-4 w-4 text-green-600 cursor-pointer border-gray-300 rounded mr-2"
-                        checked={values.disclaimerAccepted} // Ensure this is bound to the form state
-                        onChange={(e) => {
-                          const isChecked = e.target.checked;
-                          setFieldValue('disclaimerAccepted', isChecked);
-                          
-                          // Clear the error immediately when checked
-                          if (isChecked) {
-                            // This ensures the error disappears right away
-                            setFieldTouched('disclaimerAccepted', false);
-                          }
-                        }}
-                      />
-                      <span className="text-sm font-medium">
-                        I agree to the safety precautions stated above
-                      </span>
-                    </label>
-                    <p className="text-sm mt-2 text-red-600">
-                      By checking this box, I confirm that I have thoroughly reviewed the hazard identifications and job requirements,
-                      possess the necessary personal protective equipment (PPE), and have taken all appropriate precautionary measures. 
-                      I also acknowledge that the organization is not liable for any consequences resulting from my negligence.
-                    </p>
-                    {errors.disclaimerAccepted && touched.disclaimerAccepted && (
-                      <div className="mt-2 flex items-center text-red-700">
-                        <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm font-semibold">{errors.disclaimerAccepted}</span>
-                      </div>
-                    )}
-                  </div>
+                <div className="mt-8 p-4 border border-red-500 bg-red-100">
+                  {errors.disclaimerAccepted && touched.disclaimerAccepted && (
+                    <div className="mb-4 flex items-center text-red-700">
+                      <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <span className="text-sm font-semibold">{errors.disclaimerAccepted}</span>
+                    </div>
+                  )}
+                  
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="terms-checkbox"
+                      className="form-checkbox h-4 w-4 text-green-600 cursor-pointer border-gray-300 rounded mr-2"
+                      checked={values.disclaimerAccepted}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        setFieldValue('disclaimerAccepted', isChecked);
+                        // Clear the error immediately when checked
+                        if (isChecked) {
+                          // This ensures the error disappears right away
+                          setFieldTouched('disclaimerAccepted', false);
+                        }
+                      }}
+                    />
+                    <span className="text-sm font-medium">
+                      I agree to the safety precautions stated above
+                    </span>
+                  </label>
+                    
+                  <p className="text-sm mt-2 text-red-600">
+                    By checking this box, I confirm that I have thoroughly reviewed the hazard identifications and job requirements, possess the necessary personal protective equipment (PPE), and have taken all appropriate precautionary measures. I also acknowledge that the organization is not liable for any consequences resulting from my negligence.
+                  </p>
+                </div>
                </div>
               </div>
               </div>
@@ -1503,15 +1518,19 @@ const SafetyForm = () => {
             )}
             {currentSection === 4 && (
               <Button
-              type="submit"
-              variant="success"
-              className="bg-green-600 text-white hover:bg-green-700 flex items-center gap-2"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit'}
-            </Button>
+                type="submit"
+                variant="success"
+                className="bg-green-600 text-white hover:bg-green-700 flex items-center gap-2"
+                disabled={isSubmitting}
+                onClick={() => {
+                  // Force the disclaimer to be marked as touched when submitting
+                  setTouched({ ...touched, disclaimerAccepted: true }, true);
+                }}
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit'}
+              </Button>
             )}
-            </div>
+          </div>
             </Form>
             )}
           </Formik>

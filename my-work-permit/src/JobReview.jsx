@@ -7,6 +7,7 @@ import { Dialog } from './components/ui/dialog';
 import { api } from './services/api';
 import CompletionWorkflow from './CompleteWorkflow';
 import logo from './assets/mps_logo.jpg';
+import PermitRevocation from './components/ui/Revocation';
 
 const JobReview = () => {
   const { permitToWorkId } = useParams();
@@ -22,6 +23,7 @@ const JobReview = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [canComplete, setCanComplete] = useState(false);
   const [completionError, setCompletionError] = useState(null);
+  const [revocationData, setRevocationData] = useState(null);
   
 
   const formatDate = (dateString, dateOnly = false) => {
@@ -130,6 +132,22 @@ const JobReview = () => {
             ...response.data.permit,
             jobPermit: response.data.jobPermit
           });
+
+           // Add this section to set revocation data if available
+           const permit = response.data.permit;
+           if (permit.RevocationInitiatedBy || permit.Status === 'Revocation Pending' || permit.Status === 'Revoked') {
+             setRevocationData({
+               RevocationInitiatedBy: permit.RevocationInitiatedByName || `User ID: ${permit.RevocationInitiatedBy}`,
+               RevocationInitiatedDate: permit.RevocationInitiatedDate,
+               RevocationReason: permit.RevocationReason,
+               RevocationApprovedBy: permit.RevocationApprovedByName,
+               RevocationApprovedDate: permit.RevocationApprovedDate,
+               RevocationComments: permit.RevocationComments,
+               Status: permit.Status,
+               InitiatorRole: permit.RevocationInitiatorRole,
+               QHSSERevocationStatus: permit.QHSSERevocationStatus
+             });
+           }
         
           const workflowStages = [
             {
@@ -282,6 +300,19 @@ const JobReview = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Add the Revocation component here */}
+        {revocationData && (
+          <div className="mt-4">
+            <PermitRevocation
+              permitId={permitToWorkId}
+              revocationData={revocationData}
+              onRevocationProcessed={() => navigate(-1)}
+              isQHSSEUser={currentUser?.roleId === 'QA'}
+              permitType="work"
+            />
+          </div>
+        )}
 
           <Card className="shadow-sm">
             <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Work Duration</div>

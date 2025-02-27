@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate,useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { X, ArrowLeft, Check, Clock, AlertTriangle } from 'lucide-react';
@@ -11,6 +11,7 @@ import PermitRevocation from './components/ui/Revocation';
 const ReviewPTW = () => {
   const { permitToWorkId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [ptw, setPtw] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -18,6 +19,12 @@ const ReviewPTW = () => {
   const [comments, setComments] = useState('');
   const [revocationData, setRevocationData] = useState(null);
   const [currentUserRole, setCurrentUserRole] = useState(null);
+  const [isApproving, setIsApproving] = useState(false);
+
+  // Determine the return path - if coming from jobs monitoring, return there
+  const returnPath = location.state?.from === 'jobs-monitoring' 
+    ? '/dashboard/jobs-monitoring' 
+    : '/dashboard/permits/permit-to-work';
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -69,6 +76,7 @@ const ReviewPTW = () => {
 
   const handleApproval = async (status) => {
     try {
+      setIsApproving(true);
       const currentApproverStage = approvals.find(approval => approval.isCurrentApprover);
       
       if (!currentApproverStage) {
@@ -85,13 +93,14 @@ const ReviewPTW = () => {
   
       await api.approvePermitToWork(ptw.PermitToWorkID, approvalData);
       
-      // Remove the conditional navigation and always navigate after successful API call
       toast.success(`Permit to Work ${status.toLowerCase()}d successfully`);
-      navigate('/dashboard/permits/permit-to-work');
+      navigate(returnPath);
       
     } catch (error) {
       console.error('Error in handleApproval:', error);
       toast.error(error.message || 'Failed to process approval');
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -192,7 +201,7 @@ const ReviewPTW = () => {
             <h2 className="text-xl font-semibold text-center flex-grow -ml-16">REVIEW PERMIT TO WORK</h2>
             <Button 
               variant="ghost" 
-              onClick={() => navigate('/dashboard/permits/permit-to-work')} 
+              onClick={() => navigate(returnPath)} 
               className="absolute top-2 right-2 hover:bg-gray-100"
             >
               <X className="h-5 w-5" />
@@ -291,9 +300,9 @@ const ReviewPTW = () => {
               <PermitRevocation
                 permitId={permitToWorkId}
                 revocationData={revocationData}
-                onRevocationProcessed={() => navigate('/dashboard/permits/permit-to-work')}
+                onRevocationProcessed={() => navigate(returnPath)}
                 isQHSSEUser={currentUserRole === 'QA'}
-                permitType="work"  // Add this line to specify it's a Permit to Work
+                permitType="work"
               />
             </div>
           )}
@@ -349,6 +358,7 @@ const ReviewPTW = () => {
                             value={comments}
                             onChange={(e) => setComments(e.target.value)}
                             placeholder="Enter your comments here..."
+                            disabled={isApproving}
                           />
                         </div>
 
@@ -356,15 +366,17 @@ const ReviewPTW = () => {
                           <Button 
                             variant="danger"
                             onClick={() => handleApproval('Rejected')}
+                            disabled={isApproving}
                           >
-                            Reject
+                            {isApproving ? 'Rejecting...' : 'Reject'}
                           </Button>
                           <Button 
                             variant="success"
                             className="bg-green-600 hover:bg-green-700"
                             onClick={() => handleApproval('Approved')}
+                            disabled={isApproving}
                           >
-                            Approve
+                            {isApproving ? 'Approving...' : 'Approve'}
                           </Button>
                         </div>
                       </div>

@@ -255,9 +255,9 @@ const Sidebar = () => {
             <div className="text-lg font-semibold">MPS Work Permit System</div>
           </div>
           <div className="flex items-center space-x-4">
-            <button className="p-2">
+            {/*<button className="p-2">
               <Icons.Bell />
-            </button>
+            </button> */}
             
             <UserProfileDropdown />
           </div>

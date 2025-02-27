@@ -146,12 +146,20 @@ const permitModel = {
     const userDepartmentId = user.departmentId ? user.departmentId.trim() : null;
   
     // For QA role - see permits assigned to QA and all Revocation Pending permits
-    if (userRole === 'QA' || userDepartmentId === 'QHSSE') {
+    if (userRole === 'QA') {
       query += ` AND (jp.AssignedTo = 'QA' OR jp.Status = 'Revocation Pending')`;
     }
-    // For QHSSE department - see ALL permits without any department filter
+    // For QHSSE department with ISS role - see permits assigned to ISS
+    else if (userDepartmentId === 'QHSSE' && userRole === 'ISS') {
+      query += ` AND jp.AssignedTo = 'ISS' AND jp.Department = 'QHSSE'`;
+    }
+    // For QHSSE department with HOD role - see permits assigned to HOD
+    else if (userDepartmentId === 'QHSSE' && userRole === 'HOD') {
+      query += ` AND jp.AssignedTo = 'HOD' AND jp.Department = 'QHSSE'`;
+    }
+    // For QHSSE department with other roles - see all permits
     else if (userDepartmentId === 'QHSSE') {
-      // No additional filtering needed
+      // No additional filtering needed for QHSSE with other roles
     }
     // For ISS role - see permits assigned to ISS and matching the user's department
     else if (userRole === 'ISS' && userDepartmentId) {
@@ -265,9 +273,19 @@ const permitModel = {
       `;
   
       // Department-based filtering logic
-      if (user.roleId === 'QA' || user.departmentId === 'QHSSE') {
-        // QA and QHSSE see all permits
-      } else if (user.departmentId === 'ASM' || user.departmentId === 'OPS' || user.departmentId === 'IT') {
+    if (user.roleId === 'QA') {
+      // QA sees all permits assigned to QA
+      query += ` AND (p.AssignedTo = 'QA' OR p.Status = 'Revocation Pending')`;
+    } else if (user.departmentId === 'QHSSE') {
+      if (user.roleId === 'ISS') {
+        // QHSSE Issuers see permits assigned to ISS and from QHSSE department
+        query += ` AND p.AssignedTo = 'ISS' AND p.Department = 'QHSSE'`;
+      } else if (user.roleId === 'HOD') {
+        // QHSSE HODs see permits assigned to HOD and from QHSSE department
+        query += ` AND p.AssignedTo = 'HOD' AND p.Department = 'QHSSE'`;
+      }
+      // Other QHSSE roles see all permits (no filter)
+    } else if (user.departmentId === 'ASM' || user.departmentId === 'OPS' || user.departmentId === 'IT') {
         // ASM, OPS, and IT see their department permits
         query += ` AND (
           p.Department = @departmentId 
@@ -1320,7 +1338,7 @@ async approveRevocation(permitId, isJobPermit, status, comments, userId, transac
 
     return result.rowsAffected[0];
   } else {
-    // Modified Permit to Work revocation logic
+    // For Permit to Work - modify the status handling when rejected
     const result = await transaction.request()
       .input('permitId', sql.Int, permitId)
       .input('userId', sql.Int, userId)
@@ -1340,13 +1358,30 @@ async approveRevocation(permitId, isJobPermit, status, comments, userId, transac
         UPDATE PermitToWork
         SET Status = CASE 
               WHEN @status = 'Approved' THEN 'Revoked'
-              WHEN @status = 'Rejected' THEN 'Approved'
+              WHEN @status = 'Rejected' THEN 'Approved' -- Keep the Status as Approved
               ELSE Status
+            END,
+            CompletionStatus = CASE
+              WHEN @status = 'Rejected' THEN 'In Progress' -- Set CompletionStatus to In Progress
+              ELSE CompletionStatus
             END,
             QHSSERevocationStatus = @status,
             RevocationApprovedBy = @userId,
             RevocationApprovedDate = GETDATE(),
             RevocationComments = @comments,
+            -- Reset revocation fields when rejected
+            RevocationInitiatedBy = CASE
+              WHEN @status = 'Rejected' THEN NULL
+              ELSE RevocationInitiatedBy
+            END,
+            RevocationInitiatedDate = CASE
+              WHEN @status = 'Rejected' THEN NULL
+              ELSE RevocationInitiatedDate
+            END,
+            RevocationReason = CASE
+              WHEN @status = 'Rejected' THEN NULL
+              ELSE RevocationReason
+            END,
             Changed = GETDATE(),
             Changer = @userId
         WHERE PermitToWorkID = @permitId

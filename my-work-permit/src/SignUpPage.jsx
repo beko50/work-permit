@@ -210,7 +210,7 @@ const SignUpPage = () => {
         </div>
 
         {/* Sign Up heading */}
-        <h2 className="text-3xl font-bold text-blue-900 mb-6 text-left">
+        <h2 className="text-3xl font-medium text-blue-900 mb-6 text-left">
           Sign Up
         </h2>
 

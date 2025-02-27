@@ -1,8 +1,9 @@
 import './App.css';
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route,Navigate } from 'react-router-dom';
 import SignInPage from './SignInPage';
 import SignUpPage from './SignUpPage';
+import ForgotPasswordPage from './ForgotPassword';
 import Dashboard from './Sidebar';
 import Home from './Home';
 import { AuthProvider } from './context/AuthContext';
@@ -26,9 +27,12 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-        <Route path="/" element={<SignInPage />} />
-        <Route path="/sign-up" element={<SignUpPage />} />
+      <Routes>
+          {/* Redirect root path to /sign-in */}
+          <Route path="/" element={<Navigate to="/sign-in" replace />} />
+          <Route path="/sign-in" element={<SignInPage />} />
+          <Route path="/sign-up" element={<SignUpPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route
             path="/dashboard"
             element={
