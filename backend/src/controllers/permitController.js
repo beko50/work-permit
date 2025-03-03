@@ -73,11 +73,12 @@ const permitController = {
     try {
       await notificationService.handlePermitCreated({
         permitId: jobPermitId,
-        createdBy: req.body.user.name || 'System User', // Use consistent user reference
+        createdBy: permitData.permitReceiver || userName, // Use consistent user reference
         createdByEmail: req.body.user.email,
         department: permitData.department,
         location: permitData.jobLocation,
         workDescription: permitData.jobDescription,
+        contractCompanyName: permitData.contractCompanyName || 'Meridian Port Services Ltd',
         startDate: permitData.startDate,
         endDate: permitData.endDate,
         permitType: 'JobPermit'
@@ -327,13 +328,54 @@ const permitController = {
   
       await transaction.commit();
 
-       // Send status update notification after commit
-       try {
-        const usersToNotify = await notificationService.getUsersToNotify({
-          department: req.user.departmentId,
-          permitType: 'JobPermit',
-          createdByEmail: creatorEmail
-        });
+      // Send status update notification after commit
+      try {
+        let usersToNotify;
+        
+        if (AssignedTo === 'QA' && status === 'Approved') {
+          // Get all the approval users
+          const approvalUsers = await notificationService.getPermitApprovalUsers(jobPermitId);
+          
+          // Also get the users via the regular method to ensure we don't miss anyone
+          const regularUsers = await notificationService.getUsersToNotify({
+            department: req.user.departmentId,
+            permitType: 'JobPermit',
+            createdByEmail: creatorEmail,
+            stage: AssignedTo
+          });
+          
+          // Combine both lists and remove duplicates by email
+          const emailMap = new Map();
+          [...approvalUsers, ...regularUsers].forEach(user => {
+            if (user.Email) {
+              emailMap.set(user.Email, user);
+            }
+          });
+          
+          // Make sure the creator is explicitly included
+          if (creatorEmail) {
+            // If we already have the creator's details, keep them
+            if (!emailMap.has(creatorEmail)) {
+              // Otherwise add a basic entry
+              emailMap.set(creatorEmail, { 
+                Email: creatorEmail,
+                RoleID: 'RCV',
+                FullName: 'Permit Creator',
+                UserType: 'Creator'
+              });
+            }
+          }
+          
+          usersToNotify = Array.from(emailMap.values());
+        } else {
+          // Use the existing method for other approval stages
+          usersToNotify = await notificationService.getUsersToNotify({
+            department: req.user.departmentId,
+            permitType: 'JobPermit',
+            createdByEmail: creatorEmail,
+            stage: AssignedTo // Pass the current stage for proper notification routing
+          });
+        }
   
         await notificationService.sendNotification(
           usersToNotify,
@@ -345,7 +387,8 @@ const permitController = {
             updatedBy: req.user.name,
             userRole: req.user.role,
             departmentName: req.user.departmentName || req.user.departmentId,
-            comments: comments
+            comments: comments,
+            currentApproverRole: AssignedTo
           }
         );
       } catch (notificationError) {
@@ -525,12 +568,13 @@ const permitController = {
       await transaction.commit();
 
       try {
+        // Important: Pass the department from the JobPermit
         await notificationService.handlePermitToWorkCreated({
           permitId: result.PermitToWorkID,
-          jobPermitId: permitData.jobPermitId,
+          jobPermitId: jobPermitId,
           createdBy: req.user.name,
           createdByEmail: req.user.email,
-          department: req.user.departmentName || req.user.departmentId,
+          department: jobPermit.Department, // Use the department from the JobPermit
           location: permitData.jobLocation || permitData.location,
           workDuration: permitData.workDuration,
           startDate: permitData.entryDate,
@@ -543,12 +587,12 @@ const permitController = {
           error: notificationError.message
         });
       }
-
+  
       res.status(201).json({
         message: 'Permit to Work created successfully',
         permitToWorkId: result.PermitToWorkID
       });
-
+  
     } catch (error) {
       // Only rollback if transaction was started
       if (transaction._begun) {
@@ -648,8 +692,11 @@ async approvePermitToWork(req, res) {
       });
     }
 
-    // Get AssignedTo from the nested permit object
-    const { AssignedTo } = permitResult.permit;
+    // Get the associated JobPermitID from permitResult
+    const { JobPermitID } = permitResult.permit;
+
+    // Get creator email - this is the missing part
+    const creatorEmail = await permitModel.getCreatorEmail(permitResult.permit.Creator);
 
     // Get user details including department
     const userDetails = await notificationService.handleStatusUpdate(
@@ -661,6 +708,9 @@ async approvePermitToWork(req, res) {
       },
       comments
     );
+
+    // Get AssignedTo from the nested permit object
+    const { AssignedTo } = permitResult.permit;
 
     const userRole = req.user.role.trim();
     if (
@@ -693,33 +743,90 @@ async approvePermitToWork(req, res) {
     await transaction.commit();
 
     try {
-      const permitDetails = await permitModel.getPermitToWorkById(permitToWorkId);
-      const usersToNotify = await notificationService.getUsersToNotify({
-        department: permitDetails.permit.Department,
-        permitType: 'PermitToWork',
-        createdByEmail: permitDetails.permit.CreatedByEmail
-      });
-  
-      await notificationService.sendNotification(
-        usersToNotify,
-        'permitToWorkStatusUpdate',
-        {
-          permitId: permitToWorkId,
-          jobPermitId: permitDetails.permit.JobPermitID,
-          status: status,
-          updatedBy: userDetails.updatedBy, // Use the name from userDetails
-          userRole: userDetails.userRole,
-          departmentName: userDetails.departmentName,
-          assignedTo: AssignedTo,
-          comments: comments,
-          permitType: 'PermitToWork'
+      let usersToNotify = [];
+      
+      if (AssignedTo === 'QA' && status === 'Approved') {
+        // Get all the approval users
+        const approvalUsers = await notificationService.getPermitApprovalUsers(permitToWorkId);
+        
+        // Also get the users via the regular method to ensure we don't miss anyone
+        const regularUsers = await notificationService.getUsersToNotify({
+          department: req.user.departmentId,
+          permitType: 'PermitToWork',
+          createdByEmail: creatorEmail,
+          stage: AssignedTo
+        });
+        
+        // Combine both lists and remove duplicates by email
+        const emailMap = new Map();
+        [...approvalUsers, ...regularUsers].forEach(user => {
+          if (user && user.Email) {
+            emailMap.set(user.Email, user);
+          }
+        });
+        
+        // Make sure the creator/receiver is explicitly included
+        if (creatorEmail) {
+          if (!emailMap.has(creatorEmail)) {
+            emailMap.set(creatorEmail, { 
+              Email: creatorEmail,
+              RoleID: 'RCV',
+              FullName: 'Permit Receiver',
+              UserType: 'Creator'
+            });
+          }
         }
-      );
+        
+        usersToNotify = Array.from(emailMap.values());
+      } else {
+        // Use the existing method for other approval stages
+        usersToNotify = await notificationService.getUsersToNotify({
+          department: req.user.departmentId,
+          permitType: 'PermitToWork',
+          createdByEmail: creatorEmail,
+          stage: AssignedTo
+        });
+      }
+      
+      // Extract just email addresses
+      let emailAddresses = usersToNotify.map(user => user.Email).filter(email => email);
+      
+      console.log('Email addresses before ensuring creator inclusion:', emailAddresses);
+
+      // IMPORTANT: Always explicitly ensure creator/receiver email is included
+      if (creatorEmail && !emailAddresses.includes(creatorEmail)) {
+        emailAddresses.push(creatorEmail);
+        console.log('Added creator email to notification list:', creatorEmail);
+      }
+
+      console.log('Final email recipient list:', emailAddresses);
+      
+      if (emailAddresses && emailAddresses.length > 0) {
+        // Fix: ensure user name is properly included
+        const updatedBy = userDetails.updatedBy || req.user.name;
+        
+        await notificationService.sendNotification(
+          emailAddresses,
+          'permitToWorkStatusUpdate',
+          {
+            permitId: permitToWorkId,
+            jobPermitId: JobPermitID,
+            status: status,
+            updatedBy: updatedBy,
+            userRole: req.user.role,
+            departmentName: req.user.departmentName || notificationService.getDepartmentFullName(req.user.departmentId),
+            comments: comments,
+            currentApproverRole: AssignedTo,
+            stage: AssignedTo,
+            permitType: 'PermitToWork',
+            creatorEmail: creatorEmail // Include creator email for reference
+          }
+        );
+      } else {
+        console.log('No users to notify for permit to work status update');
+      }
     } catch (notificationError) {
-      console.error('Failed to send PTW approval notification:', {
-        permitId: permitToWorkId,
-        error: notificationError.message
-      });
+      console.error('Failed to send notification:', notificationError);
     }
 
     const nextStageMap = {
@@ -1240,6 +1347,88 @@ async approveRevocation(req, res) {
     console.error('Error processing revocation:', error);
     res.status(500).json({
       message: 'Error processing revocation',
+      error: error.message
+    });
+  }
+},
+
+async updatePermitStatus(req, res) {
+  const pool = await poolPromise;
+  const transaction = await pool.transaction();
+
+  try {
+    const { permitId, status, comments } = req.body;
+    const userId = req.body.user.id;
+    
+    await transaction.begin();
+    
+    // Update the permit status
+    const updateResult = await permitModel.updatePermitStatus(permitId, status, comments, userId, transaction);
+    
+    // Get the updated permit details
+    const permitDetails = await permitModel.getPermitById(permitId, transaction);
+    
+    await transaction.commit();
+    
+    // Send email notification for the status update
+    try {
+      // Get user details for the notification
+      const userQuery = `
+        SELECT 
+          u.FirstName + ' ' + u.LastName as FullName,
+          u.Email,
+          u.RoleID,
+          d.DepartmentID
+        FROM Users u
+        LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
+        WHERE u.UserID = @userId
+      `;
+
+      const userResult = await pool.request()
+        .input('userId', sql.Int, userId)
+        .query(userQuery);
+
+      const userDetails = userResult.recordset[0];
+      
+      // Get the permit creator's email
+      const creatorQuery = `
+        SELECT 
+          u.Email
+        FROM JobPermits jp
+        JOIN Users u ON jp.Creator = u.UserID
+        WHERE jp.JobPermitID = @permitId
+      `;
+
+      const creatorResult = await pool.request()
+        .input('permitId', sql.Int, permitId)
+        .query(creatorQuery);
+
+      const creatorEmail = creatorResult.recordset[0]?.Email;
+      
+      await notificationService.handlePermitStatusUpdate({
+        permitId: permitId,
+        status: status,
+        comments: comments,
+        updatedBy: userDetails.FullName,
+        userRole: userDetails.RoleID,
+        department: permitDetails.Department,
+        currentApproverRole: userDetails.RoleID, // Pass the current approver role to determine next stage
+        createdByEmail: creatorEmail // Pass the creator's email to include them in notifications
+      });
+    } catch (notificationError) {
+      console.error('Failed to send status update notification:', notificationError);
+    }
+
+    res.status(200).json({
+      message: 'Permit status updated successfully',
+      permitId: permitId,
+      newStatus: status
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error updating permit status:', error);
+    res.status(500).json({
+      message: 'Error updating permit status',
       error: error.message
     });
   }

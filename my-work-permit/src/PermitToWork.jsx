@@ -5,9 +5,19 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/form';
 import { Select } from './components/ui/form';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
-import { RefreshCw, ChevronDown } from 'lucide-react';
+import { RefreshCw, ChevronDown,Filter,X } from 'lucide-react';
+import Checkbox  from './components/ui/checkbox';
 import RequestPTW from './RequestPTW';
 import { api } from './services/api';
+
+
+// Storage keys for localStorage
+const STORAGE_KEYS = {
+  TAB: 'permitToWorkCurrentTab',
+  PAGE: 'permitToWorkPage',
+  SEARCH: 'permitToWorkSearch',
+  ASSIGNMENT_FILTERS: 'permitToWorkAssignmentFilters'
+};
 
 const TabButton = ({ id, label, active, onClick }) => (
   <button
@@ -26,28 +36,62 @@ const PermitToWork = () => {
   const [permits, setPermits] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  // Use localStorage to store/retrieve the current tab
+  
+  // Use localStorage to store/retrieve states
   const [currentTab, setCurrentTab] = useState(() => {
-    return localStorage.getItem('permitToWorkCurrentTab') || 'approved-job-permits';
+    return localStorage.getItem(STORAGE_KEYS.TAB) || 'approved-job-permits';
   });
+  
   const [showPTWForm, setShowPTWForm] = useState(false);
   const [selectedPermit, setSelectedPermit] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
-  const [searchValue, setSearchValue] = useState('');
+  
+  const [searchValue, setSearchValue] = useState(() => {
+    return localStorage.getItem(STORAGE_KEYS.SEARCH) || '';
+  });
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(() => {
-    const lastView = localStorage.getItem('permitToWorkLastView');
-    return lastView ? JSON.parse(lastView).page || 1 : 1;
+    const savedPage = localStorage.getItem(STORAGE_KEYS.PAGE);
+    return savedPage ? parseInt(savedPage, 10) : 1;
   });
+  
   const [totalPages, setTotalPages] = useState(0);
   const [totalPermits, setTotalPermits] = useState(0);
-  const itemsPerPage = 10; // Changed from 15 to 10 to match ApprovalHistory
+  const itemsPerPage = 10;
+
+  // Assignment Filter State
+  const [assignmentFilters, setAssignmentFilters] = useState(() => {
+    const savedFilters = localStorage.getItem(STORAGE_KEYS.ASSIGNMENT_FILTERS);
+    return savedFilters ? JSON.parse(savedFilters) : [];
+  });
+  
+  const [showAssignmentFilter, setShowAssignmentFilter] = useState(false);
+  const [uniqueAssignments, setUniqueAssignments] = useState([]);
+  const [searchAssignmentFilter, setSearchAssignmentFilter] = useState('');
+  const assignmentFilterRef = useRef(null);
 
   const [searchParams, setSearchParams] = useState({
     page: 1,
     limit: itemsPerPage
   });
+
+  // Save states to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TAB, currentTab);
+  }, [currentTab]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.PAGE, currentPage.toString());
+  }, [currentPage]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SEARCH, searchValue);
+  }, [searchValue]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.ASSIGNMENT_FILTERS, JSON.stringify(assignmentFilters));
+  }, [assignmentFilters]);
 
   useEffect(() => {
     const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
@@ -57,39 +101,29 @@ const PermitToWork = () => {
 
   useEffect(() => {
     if (currentUser) {
-      // Check for last view data
-      const lastViewJson = localStorage.getItem('permitToWorkLastView');
-      if (lastViewJson) {
-        try {
-          const lastView = JSON.parse(lastViewJson);
-          if (lastView.tab) {
-            setCurrentTab(lastView.tab);
-          }
-          if (lastView.page) {
-            setCurrentPage(lastView.page);
-          }
-          if (lastView.searchValue) {
-            setSearchValue(lastView.searchValue);
-          }
-        } catch (e) {
-          console.error('Error parsing last view data:', e);
-        }
-      }
       fetchPermits();
     }
   }, [currentUser]);
   
-  // Save current tab to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('permitToWorkCurrentTab', currentTab);
-  }, [currentTab]);
-  
-  // Refetch when page changes
+  // Refetch when page, tab or filters change
   useEffect(() => {
     if (currentUser) {
       fetchPermits();
     }
-  }, [currentPage, currentTab]);
+  }, [currentPage, currentTab, assignmentFilters]);
+
+  // Close assignment filter dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (assignmentFilterRef.current && !assignmentFilterRef.current.contains(event.target)) {
+        setShowAssignmentFilter(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const debounce = (func, wait) => {
     let timeout;
@@ -136,7 +170,7 @@ const PermitToWork = () => {
     const roleDisplayMap = {
       'ISS': 'PERMIT ISSUER',
       'HOD': 'HOD / MANAGER',
-      'QA': 'QHSSE APPROVER'
+      'QA': 'QHSSE APPROVER',
     };
     return roleDisplayMap[roleId] || roleId;
   };
@@ -244,10 +278,22 @@ const PermitToWork = () => {
         
         setPermits(sortedPermits);
         
-        // Count total permits for the current tab
-        const filteredCount = getFilteredPermits(sortedPermits).length;
-        setTotalPermits(filteredCount);
-        setTotalPages(Math.ceil(filteredCount / itemsPerPage));
+        // Extract unique assignments for filtering
+        // Only include PERMIT ISSUER, HOD / MANAGER, and QHSSE APPROVER
+        const validRoles = ['PERMIT ISSUER', 'HOD / MANAGER', 'QHSSE APPROVER'];
+        const assignments = [];
+        
+        sortedPermits.forEach(permit => {
+          const assignedTo = getRoleDisplayName(permit.AssignedTo, permit.Status);
+          if (assignedTo && validRoles.includes(assignedTo) && !assignments.includes(assignedTo)) {
+            assignments.push(assignedTo);
+          }
+        });
+        
+        setUniqueAssignments(assignments);
+        
+        // Update pagination info
+        updatePaginationInfo(sortedPermits);
       } else {
         setError(response.message || 'Error fetching permits');
         setPermits([]);
@@ -263,6 +309,45 @@ const PermitToWork = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Update pagination info based on filtered permits
+  const updatePaginationInfo = (permitList = permits) => {
+    const filteredCount = getFilteredPermits(permitList).length;
+    setTotalPermits(filteredCount);
+    setTotalPages(Math.ceil(filteredCount / itemsPerPage));
+  };
+
+  // Handle assignment filter check/uncheck
+  const handleAssignmentFilterChange = (assignment) => {
+    setAssignmentFilters(prev => {
+      if (prev.includes(assignment)) {
+        return prev.filter(item => item !== assignment);
+      } else {
+        return [...prev, assignment];
+      }
+    });
+  };
+
+  // Handle removing a filter tag
+  const handleRemoveFilter = (assignment) => {
+    setAssignmentFilters(prev => prev.filter(item => item !== assignment));
+  };
+
+  // Handle search within filters
+  const handleFilterSearch = (e) => {
+    setSearchAssignmentFilter(e.target.value);
+  };
+
+  // Clear all assignment filters
+  const handleClearAllFilters = () => {
+    setAssignmentFilters([]);
+    setShowAssignmentFilter(false);
+  };
+
+  // Select all assignments
+  const handleSelectAll = () => {
+    setAssignmentFilters([...uniqueAssignments]);
   };
 
   const Dropdown = ({ options, onSelect, className = '' }) => {
@@ -316,7 +401,8 @@ const PermitToWork = () => {
     localStorage.setItem('permitToWorkLastView', JSON.stringify({
       tab: currentTab,
       page: currentPage,
-      searchValue: searchValue
+      searchValue: searchValue,
+      assignmentFilters: assignmentFilters
     }));
     
     switch (action) {
@@ -334,29 +420,32 @@ const PermitToWork = () => {
   const getFilteredPermits = (permitList = permits) => {
     return permitList.filter(permit => {
       const status = permit.Status.toLowerCase();
+      const assignedToDisplay = getRoleDisplayName(permit.AssignedTo, permit.Status);
       
       // First check if user has access based on role and department
       if (!currentUser) return false;
       
-      switch (currentTab) {
-        case 'approved-job-permits':
-          // Only show regular pending, NOT revocation pending
-          return status === 'pending';
-        case 'approved':
-          // Only show in Approved if status is approved AND job is not completed yet
-          return status === 'approved' && permit.CompletionStatus !== 'Job Completed';
-        case 'rejected':
-          return status === 'rejected';
-        case 'completed':
-          // Show in Completed if CompletionStatus is Job Completed
-          return permit.CompletionStatus === 'Job Completed';
-        case 'revoked':
-          return status === 'revoked';
-        default:
-          return true;
-      }
+      // Filter by tab
+      const tabMatch = 
+        (currentTab === 'approved-job-permits' && status === 'pending') ||
+        (currentTab === 'approved' && status === 'approved' && permit.CompletionStatus !== 'Job Completed') ||
+        (currentTab === 'rejected' && status === 'rejected') ||
+        (currentTab === 'completed' && permit.CompletionStatus === 'Job Completed') ||
+        (currentTab === 'revoked' && status === 'revoked');
+      
+      // Apply assignment filter if any are selected
+      const assignmentMatch = 
+        assignmentFilters.length === 0 || // If no filters selected, show all
+        (assignedToDisplay && assignmentFilters.includes(assignedToDisplay));
+      
+      return tabMatch && assignmentMatch;
     });
   };
+
+  // Filter the assignments based on search
+  const filteredAssignments = uniqueAssignments.filter(assignment => 
+    assignment.toLowerCase().includes(searchAssignmentFilter.toLowerCase())
+  );
 
   // Get all filtered permits first
   const allFilteredPermits = getFilteredPermits();
@@ -388,6 +477,7 @@ const PermitToWork = () => {
               variant="secondary" 
               onClick={() => {
                 setSearchValue('');
+                setAssignmentFilters([]);
                 setCurrentPage(1);
                 fetchPermits();
               }}
@@ -396,7 +486,111 @@ const PermitToWork = () => {
               <RefreshCw className="w-4 h-4" />
               Reset
             </Button>
+            <div className="relative" ref={assignmentFilterRef}>
+              <Button 
+                variant={assignmentFilters.length > 0 ? "primary" : "secondary"}
+                onClick={() => setShowAssignmentFilter(!showAssignmentFilter)}
+                className={`flex items-center gap-2 ${assignmentFilters.length > 0 ? "bg-blue-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+              >
+                <Filter className="w-4 h-4" />
+                {assignmentFilters.length > 0 ? `Assigned To (${assignmentFilters.length})` : "Filter by Assignment"}
+                <ChevronDown className="w-4 h-4" />
+              </Button>
+              {showAssignmentFilter && (
+                <div className="absolute z-10 mt-2 w-72 bg-white rounded-md shadow-lg border overflow-hidden">
+                  <div className="p-2 border-b">
+                    <Input 
+                      placeholder="Search assignments..." 
+                      value={searchAssignmentFilter}
+                      onChange={handleFilterSearch}
+                      className="w-full text-sm"
+                    />
+                  </div>
+                  <div className="p-2 border-b flex justify-between">
+                    <Button 
+                      variant="ghost" 
+                      onClick={handleSelectAll}
+                      className="text-blue-500 text-xs hover:bg-blue-50"
+                      size="sm"
+                    >
+                      Select All
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      onClick={handleClearAllFilters}
+                      className="text-gray-500 text-xs hover:bg-gray-50"
+                      size="sm"
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    {filteredAssignments.length > 0 ? (
+                      filteredAssignments.map(assignment => (
+                        <div 
+                          key={assignment}
+                          className="px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
+                        >
+                          <Checkbox
+                            checked={assignmentFilters.includes(assignment)}
+                            onCheckedChange={() => handleAssignmentFilterChange(assignment)}
+                            id={`assignment-${assignment}`}
+                          />
+                          <label 
+                            htmlFor={`assignment-${assignment}`}
+                            className="flex-grow cursor-pointer"
+                          >
+                            {assignment}
+                          </label>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-4 py-2 text-gray-500 text-center">
+                        No assignments match your search
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-2 border-t flex justify-end">
+                    <Button 
+                      variant="primary" 
+                      onClick={() => setShowAssignmentFilter(false)}
+                      size="sm"
+                    >
+                      Apply Filters
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+          
+          {/* Active filter tags */}
+          {assignmentFilters.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {assignmentFilters.map(filter => (
+                <div 
+                  key={filter}
+                  className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm flex items-center gap-1"
+                >
+                  <span>{filter}</span>
+                  <button 
+                    onClick={() => handleRemoveFilter(filter)}
+                    className="text-blue-800 hover:text-blue-900"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {assignmentFilters.length > 1 && (
+                <button
+                  onClick={handleClearAllFilters}
+                  className="text-blue-600 text-sm hover:underline"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+          )}
       </div>
 
       <Card>

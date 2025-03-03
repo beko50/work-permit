@@ -559,17 +559,18 @@ const resetFilters = () => {
               <RefreshCw className="w-4 h-4" />
               REFRESH
             </Button>
-
-            <Button
-              variant='secondary' 
-              className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
-              onClick={handleCreatePermit}
+              
+            {/* Only show CREATE PERMIT button for RCV users */}
+            {currentUser?.roleId === 'RCV' && (
+              <Button
+                variant='secondary' 
+                className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
+                onClick={handleCreatePermit}
               >
-              <PlusCircle className="w-4 h-4" />
-              CREATE PERMIT
-            </Button>
-            
-
+                <PlusCircle className="w-4 h-4" />
+                CREATE PERMIT
+              </Button>
+            )}
           </div>
 
           {/* Show loading state */}

@@ -16,14 +16,9 @@ const SignInPage = () => {
     rememberMe: false,
   });
 
-  // Update document title when component mounts
   useEffect(() => {
     document.title = "Work Permit System";
-    
-    // Clean up function to reset title if needed
-    return () => {
-      // Optional: Reset title when component unmounts
-    };
+    return () => {};
   }, []);
 
   const handleSubmit = async (e) => {
@@ -33,9 +28,7 @@ const SignInPage = () => {
 
     try {
       const result = await login(formData.email, formData.password);
-      
       if (result.success) {
-        // The token is already handled by the AuthContext
         if (formData.rememberMe) {
           localStorage.setItem('rememberMe', 'true');
         }
@@ -66,17 +59,11 @@ const SignInPage = () => {
       }}
     >
       <div className="bg-white/90 backdrop-blur-sm p-8 rounded-xl shadow-lg w-full max-w-md transition-all duration-300 hover:shadow-xl">
-  {/* Redesigned header with centered logo and title */}
-  <div className="flex flex-col items-center mb-4">
-    {/* Centered logo at the top with no bottom margin */}
-    <img src={logo} alt="MPS Logo" className="h-24 w-32 object-contain" />
-    
-    {/* Title directly under the logo with reduced spacing */}
-    <h1 className="text-2xl font-bold text-blue-900 text-center -mt-1">
-      Work Permit System
-    </h1>
-          
-          {/* Improved motto with a divider for visual distinction */}
+        <div className="flex flex-col items-center mb-4">
+          <img src={logo} alt="MPS Logo" className="h-24 w-32 object-contain" />
+          <h1 className="text-2xl font-bold text-blue-900 text-center -mt-1">
+            Work Permit System
+          </h1>
           <div className="relative w-full flex items-center justify-center mt-3 mb-2">
             <div className="absolute border-t border-blue-300 w-full"></div>
             <span className="relative px-4 bg-white/80 text-blue-700 font-medium text-sm">
@@ -85,8 +72,7 @@ const SignInPage = () => {
           </div>
         </div>
 
-        {/* Sign In heading */}
-        <h2 className="text-3xl font-medium text-blue-900 mb-6 text-left">
+        <h2 className="text-2xl font-medium text-blue-900 mb-6 text-left">
           Sign In
         </h2>
 
@@ -118,7 +104,7 @@ const SignInPage = () => {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                className="pl-10 mt-1 block w-full px-3 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="your.email@example.com"
                 required
               />
@@ -141,7 +127,7 @@ const SignInPage = () => {
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                className="pl-10 mt-1 block w-full px-3 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="••••••••"
                 required
               />
@@ -192,18 +178,16 @@ const SignInPage = () => {
             </div>
 
             <div className="text-sm">
-            <a  href="/forgot-password" 
-              className="font-medium text-blue-600 hover:text-blue-500 hover:underline transition-colors"
-            >
-              Forgot password?
-            </a>
+              <a href="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500 hover:underline transition-colors">
+                Forgot password?
+              </a>
             </div>
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-900 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all duration-200 transform hover:-translate-y-1"
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-900 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all duration-200 transform hover:-translate-y-1"
           >
             {isLoading ? (
               <>

@@ -4,7 +4,7 @@ import { Card, CardHeader, CardContent } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Input, Select } from './components/ui/form';
 import { Table, TableHead, TableBody, TableRow, TableCell } from './components/ui/table';
-import { RefreshCw, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronLeft, ChevronRight,Eye } from 'lucide-react';
 import PermitToWorkForm from './PTWForm';
 import { api } from './services/api';
 
@@ -252,7 +252,7 @@ const ViewPermit = () => {
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-2 px-3 py-2 rounded-md bg-white border shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
         >
-          <span className="text-sm font-medium">Actions</span>
+          <span className="text-sm font-medium">Select</span>
           <ChevronDown className="h-5 w-5 text-blue-500" />
         </button>
         {isOpen && (
@@ -467,12 +467,15 @@ const ViewPermit = () => {
                   permits.map((permit) => (
                     <TableRow key={permit.JobPermitID}>
                       <TableCell>
-                      <Dropdown
-                          options={getDropdownOptions(permit)}
-                          onSelect={(action) => handleDropdownAction(action, permit.JobPermitID)}
-                          className="text-sm font-medium"
-                        />
-                      </TableCell>
+  <Button
+    variant="primary"
+    size="sm"
+    onClick={() => navigate(`/dashboard/permits/view/${permit.JobPermitID}`)}
+    className="inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-medium"
+  >
+    <Eye size={14} className="mr-1" /> View
+  </Button>
+</TableCell>
                       <TableCell>
                         <div className="flex flex-col">
                           <span>JP-{String(permit.JobPermitID).padStart(4, '0')}</span>
@@ -486,11 +489,11 @@ const ViewPermit = () => {
                       <TableCell>{permit.ContractCompanyName}</TableCell>
                       <TableCell>
                       {permit.Changed 
-    ? formatDate(permit.Changed)
-    : <span className="text-blue-500 font-medium">
-        New Permit • {formatDate(permit.Created)}
-      </span>
-  }
+                        ? formatDate(permit.Changed)
+                        : <span className="text-blue-500 font-medium">
+                            New Permit • {formatDate(permit.Created)}
+                          </span>
+                      }
                       </TableCell>
                       <TableCell>
                         {getRoleDisplayName(permit.AssignedTo, permit.Status) || '—'} {/* Display "—" if null */}

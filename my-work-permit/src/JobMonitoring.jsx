@@ -7,8 +7,7 @@ import { api } from './services/api';
 import Checkbox  from './components/ui/checkbox';
 import logo from './assets/mps_logo.jpg';
 import { Input } from './components/ui/form';
-import { Eye,RefreshCw, PlusCircle, XCircle, ChevronDown,Filter } from 'lucide-react';
-
+import { Eye,RefreshCw, PlusCircle, XCircle, ChevronDown,Filter,X } from 'lucide-react';
 
 
 const TabButton = ({ id, label, active, onClick }) => (
@@ -28,7 +27,7 @@ const STORAGE_KEYS = {
   TAB: 'jobs-monitoring-current-tab',
   PAGE: 'jobs-monitoring-current-page',
   SEARCH: 'jobs-monitoring-search-value',
-  LOCATION_FILTER: 'jobs-monitoring-location-filter'
+  LOCATION_FILTERS: 'jobs-monitoring-location-filters' // Changed to plural
 };
 
 const JobsMonitoring = () => {
@@ -61,18 +60,21 @@ const JobsMonitoring = () => {
   const [totalPermits, setTotalPermits] = useState(0);
   const itemsPerPage = 10;
   
-  // Initialize search and filter states from localStorage
+  // Initialize search from localStorage
   const [searchValue, setSearchValue] = useState(() => {
     return localStorage.getItem(STORAGE_KEYS.SEARCH) || '';
   });
   
-  const [locationFilter, setLocationFilter] = useState(() => {
-    return localStorage.getItem(STORAGE_KEYS.LOCATION_FILTER) || '';
+  // Initialize location filters as array from localStorage
+  const [locationFilters, setLocationFilters] = useState(() => {
+    const savedFilters = localStorage.getItem(STORAGE_KEYS.LOCATION_FILTERS);
+    return savedFilters ? JSON.parse(savedFilters) : [];
   });
   
   const [showLocationFilter, setShowLocationFilter] = useState(false);
   const [uniqueLocations, setUniqueLocations] = useState([]);
   const locationFilterRef = useRef(null);
+  const [searchLocationFilter, setSearchLocationFilter] = useState('');
 
   // Persist state to localStorage whenever it changes
   useEffect(() => {
@@ -88,8 +90,8 @@ const JobsMonitoring = () => {
   }, [searchValue]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.LOCATION_FILTER, locationFilter);
-  }, [locationFilter]);
+    localStorage.setItem(STORAGE_KEYS.LOCATION_FILTERS, JSON.stringify(locationFilters));
+  }, [locationFilters]);
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -198,7 +200,7 @@ const JobsMonitoring = () => {
   useEffect(() => {
     updatePaginationInfo();
     setCurrentPage(1); // Reset to first page on filter/search changes
-  }, [searchValue, locationFilter]);
+  }, [searchValue, locationFilters]);
 
   const debounce = (func, wait) => {
     let timeout;
@@ -231,7 +233,7 @@ const JobsMonitoring = () => {
         returnToTab: tabForPermit, // Store which tab to return to
         page: currentPage,
         searchValue: searchValue,
-        locationFilter: locationFilter
+        locationFilters: locationFilters
       }
     });
   };
@@ -404,9 +406,36 @@ const JobsMonitoring = () => {
     }
   };
 
-  const handleLocationFilterSelect = (location) => {
-    setLocationFilter(location === locationFilter ? '' : location);
+  // Handle location filter check/uncheck
+  const handleLocationFilterChange = (location) => {
+    setLocationFilters(prev => {
+      if (prev.includes(location)) {
+        return prev.filter(loc => loc !== location);
+      } else {
+        return [...prev, location];
+      }
+    });
+  };
+
+  // Handle removing a filter tag
+  const handleRemoveFilter = (location) => {
+    setLocationFilters(prev => prev.filter(loc => loc !== location));
+  };
+
+  // Handle search within filters
+  const handleFilterSearch = (e) => {
+    setSearchLocationFilter(e.target.value);
+  };
+
+  // Clear all location filters
+  const handleClearAllFilters = () => {
+    setLocationFilters([]);
     setShowLocationFilter(false);
+  };
+
+  // Select all locations
+  const handleSelectAll = () => {
+    setLocationFilters([...uniqueLocations]);
   };
 
   const getFilteredPermits = (permitList = permits) => {
@@ -421,8 +450,8 @@ const JobsMonitoring = () => {
       if (!hasViewAccess()) return false;
       if (isHOD && !isInUserDepartment(permit)) return false;
       
-      // Apply location filter if set
-      if (locationFilter && permit.JobLocation !== locationFilter) return false;
+      // Apply location filters if any are set
+      if (locationFilters.length > 0 && !locationFilters.includes(permit.JobLocation)) return false;
   
       switch (currentTab) {
         case 'ongoing':
@@ -505,6 +534,11 @@ const JobsMonitoring = () => {
     return permit.Status.toLowerCase() !== 'revocation pending';
   };
 
+  // Filter locations based on search
+  const filteredLocations = uniqueLocations.filter(location => 
+    location.toLowerCase().includes(searchLocationFilter.toLowerCase())
+  );
+
   return (
     <div className="mt-2">
       <div className="mb-4">
@@ -528,7 +562,7 @@ const JobsMonitoring = () => {
             variant="secondary" 
             onClick={() => {
               setSearchValue('');
-              setLocationFilter('');
+              setLocationFilters([]);
               setCurrentPage(1);
               fetchPermits();
             }}
@@ -539,37 +573,109 @@ const JobsMonitoring = () => {
           </Button>
           <div className="relative" ref={locationFilterRef}>
             <Button 
-              variant={locationFilter ? "primary" : "secondary"}
+              variant={locationFilters.length > 0 ? "primary" : "secondary"}
               onClick={() => setShowLocationFilter(!showLocationFilter)}
-              className={`flex items-center gap-2 ${locationFilter ? "bg-blue-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+              className={`flex items-center gap-2 ${locationFilters.length > 0 ? "bg-blue-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
             >
               <Filter className="w-4 h-4" />
-              {locationFilter ? `Location: ${locationFilter}` : "Filter by Location"}
+              {locationFilters.length > 0 ? `Locations (${locationFilters.length})` : "Filter by Location"}
               <ChevronDown className="w-4 h-4" />
             </Button>
             {showLocationFilter && (
-              <div className="absolute z-10 mt-2 w-64 bg-white rounded-md shadow-lg border overflow-hidden">
-                <div className="max-h-60 overflow-y-auto">
-                  <div 
-                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b"
-                    onClick={() => handleLocationFilterSelect('')}
+              <div className="absolute z-10 mt-2 w-72 bg-white rounded-md shadow-lg border overflow-hidden">
+                <div className="p-2 border-b">
+                  <Input 
+                    placeholder="Search locations..." 
+                    value={searchLocationFilter}
+                    onChange={handleFilterSearch}
+                    className="w-full text-sm"
+                  />
+                </div>
+                <div className="p-2 border-b flex justify-between">
+                  <Button 
+                    variant="ghost" 
+                    onClick={handleSelectAll}
+                    className="text-blue-500 text-xs hover:bg-blue-50"
+                    size="sm"
                   >
-                    Show All Locations
-                  </div>
-                  {uniqueLocations.map(location => (
-                    <div 
-                      key={location}
-                      className={`px-4 py-2 hover:bg-gray-100 cursor-pointer ${locationFilter === location ? 'bg-blue-50' : ''}`}
-                      onClick={() => handleLocationFilterSelect(location)}
-                    >
-                      {location}
+                    Select All
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    onClick={handleClearAllFilters}
+                    className="text-gray-500 text-xs hover:bg-gray-50"
+                    size="sm"
+                  >
+                    Clear All
+                  </Button>
+                </div>
+                <div className="max-h-60 overflow-y-auto">
+                  {filteredLocations.length > 0 ? (
+                    filteredLocations.map(location => (
+                      <div 
+                        key={location}
+                        className="px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
+                      >
+                        <Checkbox
+                          checked={locationFilters.includes(location)}
+                          onCheckedChange={() => handleLocationFilterChange(location)}
+                          id={`location-${location}`}
+                        />
+                        <label 
+                          htmlFor={`location-${location}`}
+                          className="flex-grow cursor-pointer"
+                        >
+                          {location}
+                        </label>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-4 py-2 text-gray-500 text-center">
+                      No locations match your search
                     </div>
-                  ))}
+                  )}
+                </div>
+                <div className="p-2 border-t flex justify-end">
+                  <Button 
+                    variant="primary" 
+                    onClick={() => setShowLocationFilter(false)}
+                    size="sm"
+                  >
+                    Apply Filters
+                  </Button>
                 </div>
               </div>
             )}
           </div>
         </div>
+        
+        {/* Active filter tags */}
+        {locationFilters.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {locationFilters.map(filter => (
+              <div 
+                key={filter}
+                className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm flex items-center gap-1"
+              >
+                <span>{filter}</span>
+                <button 
+                  onClick={() => handleRemoveFilter(filter)}
+                  className="text-blue-800 hover:text-blue-900"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            {locationFilters.length > 1 && (
+              <button
+                onClick={handleClearAllFilters}
+                className="text-blue-600 text-sm hover:underline"
+              >
+                Clear All
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <Card>

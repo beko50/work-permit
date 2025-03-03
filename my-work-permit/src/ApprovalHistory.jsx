@@ -341,56 +341,7 @@ const ApprovalHistory = () => {
   };   */
 
   return (
-    <div className="w-full p-4">
-      {/* Search Section */}
-      <div className="mb-4 flex justify-between items-start gap-2">
-        <Card className="flex-1 p-4">
-          <div className="flex flex-col gap-4">
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Input 
-                  placeholder={`Search ${currentTab === 'jobPermits' ? 'JP' : 'PTW'} ID number`}
-                  value={searchParams.permitId}
-                  onChange={(e) => {
-                    setSearchParams({ ...searchParams, permitId: e.target.value });
-                    if (!e.target.value.trim()) {
-                      fetchApprovals();
-                    }
-                  }}
-                  className="w-full"
-                />
-              </div>
-              <div className="flex-1 flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-600 whitespace-nowrap">
-                  Filter by Last Action Date:
-                </span>
-                <Input 
-                  type="date"
-                  value={searchParams.changedStartDate}
-                  onChange={(e) => setSearchParams({ ...searchParams, changedStartDate: e.target.value })}
-                  className="flex-1"
-                />
-                <span className="self-center text-gray-400">→</span>
-                <Input 
-                  type="date"
-                  value={searchParams.changedEndDate}
-                  onChange={(e) => setSearchParams({ ...searchParams, changedEndDate: e.target.value })}
-                  className="flex-1"
-                />
-              </div>
-              <Button 
-                variant="secondary" 
-                onClick={resetFilters}
-                className="flex items-center gap-2 bg-gray-200 text-gray-700 hover:bg-gray-300"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Reset Filters
-              </Button>
-            </div>
-          </div>
-        </Card>
-      </div>
-
+    <div className="w-full p-4">   
       {/* Main Content Card */}
       <Card>
         <CardHeader>

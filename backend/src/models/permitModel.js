@@ -925,46 +925,103 @@ async approvePermitToWork(permitToWorkId, assignedTo, status, comments, userId, 
 async getPermitToWorkByRole(user) {
   const pool = await poolPromise;
   const request = pool.request();
-
+  
   let query = `
-    SELECT 
-      ptw.*,
-      jp.JobDescription,
-      jp.JobLocation,
-      jp.Department,
-      jp.PermitReceiver,
-      jp.ContractCompanyName,
-      u.FirstName + ' ' + u.LastName AS IssuerName,
-      u.DepartmentID AS IssuerDepartment
+    SELECT ptw.*, jp.JobDescription, jp.JobLocation, jp.Department, jp.PermitReceiver, jp.ContractCompanyName,
+    u.FirstName + ' ' + u.LastName AS IssuerName, u.DepartmentID AS IssuerDepartment
     FROM PermitToWork ptw
     INNER JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
     LEFT JOIN Users u ON u.UserID = ptw.Creator
     WHERE 1=1
   `;
 
-  const userRole = user.role ? user.role.trim() : null;
+  // Get user role info and trim whitespace
+  const userRoleInfo = await this.getUserRole(user.userId);
+  const userRoleId = userRoleInfo ? userRoleInfo.RoleID.trim() : null;
+  
   const userDepartmentId = user.departmentId ? user.departmentId.trim() : null;
-
-  if (userRole === 'QA' || userDepartmentId === 'QHSSE') {
-    // QHSSE can see all permits
-    // No additional WHERE clause needed
+  
+  console.log(`Determined role for user ${user.userId}: '${userRoleId}', Department: ${userDepartmentId}`);
+  
+  // For QA role (QHS Approver) - can see ALL permits to work regardless of department
+  // QA roles only exist in QHSSE department
+  if (userRoleId === 'QA' && userDepartmentId === 'QHSSE') {
+    // No additional filtering needed - QA sees all permits
+    console.log(`QA role detected for user ${user.userId}. No department filtering applied.`);
   }
-  else if (userRole === 'ISS' || userRole === 'HOD') {
-    query += ` AND jp.Department IN (
-      SELECT DepartmentName 
-      FROM Departments 
-      WHERE DepartmentID = '${userDepartmentId}'
-      OR DepartmentName = '${userDepartmentId}'
-    )`;
+  // For ISS and HOD roles in QHSSE - they only see QHSSE department permits
+  else if ((userRoleId === 'ISS' || userRoleId === 'HOD') && userDepartmentId === 'QHSSE') {
+    request.input('departmentId', sql.VarChar(50), userDepartmentId);
+    query += `
+      AND (
+        jp.Department = @departmentId 
+        OR jp.Department IN (
+          SELECT DepartmentName FROM Departments WHERE DepartmentID = @departmentId
+        )
+      )
+    `;
+    console.log(`Filtering for ${userRoleId} role in QHSSE department`);
   }
+  // For all other departments and roles - see permits for their department only
+  else if (userDepartmentId) {
+    request.input('departmentId', sql.VarChar(50), userDepartmentId);
+    query += `
+      AND (
+        jp.Department = @departmentId 
+        OR jp.Department IN (
+          SELECT DepartmentName FROM Departments WHERE DepartmentID = @departmentId
+        )
+      )
+    `;
+    console.log(`Filtering for role in department ${userDepartmentId}`);
+  }
+  // Regular users/receivers only see their own submissions
   else {
-    // Regular users/receivers only see their own submissions
-    query += ` AND ptw.Creator = ${user.userId}`;
+    request.input('userId', sql.Int, user.userId);
+    query += ` AND ptw.Creator = @userId`;
+    console.log(`Filtering for regular user ${user.userId}`);
   }
 
-  query += ` ORDER BY ptw.Created DESC`;
-  const result = await request.query(query);
-  return result;
+  // Log the full query and user info for debugging
+  console.log(`User Role: '${userRoleId}', Department: ${userDepartmentId}`);
+  console.log(`Generated SQL: ${query}`);
+  
+  query += ` ORDER BY ptw.Changed DESC, ptw.Created DESC`;
+  
+  return await request.query(query);
+},
+
+// Helper method to get the user's role from the database
+async getUserRole(userId) {
+  try {
+    const pool = await poolPromise;
+    const request = pool.request();
+    request.input('userId', sql.Int, userId);
+    
+    // Use RTRIM to remove trailing spaces in the query itself
+    const query = `
+      SELECT RTRIM(r.RoleID) AS RoleID, r.RoleName
+      FROM Users u
+      JOIN Roles r ON RTRIM(u.RoleID) = RTRIM(r.RoleID)
+      WHERE u.UserID = @userId
+    `;
+    
+    const result = await request.query(query);
+    
+    if (result.recordset && result.recordset.length > 0) {
+      // Also trim here for double protection
+      const role = result.recordset[0];
+      if (role.RoleID) {
+        role.RoleID = role.RoleID.trim();
+      }
+      return role;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`Error getting user role for user ${userId}:`, error);
+    return null;
+  }
 },
 
 async verifyPermitStatus(permitToWorkId, transaction) {
