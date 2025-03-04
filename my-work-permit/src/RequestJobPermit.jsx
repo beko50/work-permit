@@ -394,8 +394,8 @@ const resetFilters = () => {
 
   return (
     <div className="w-full p-4">
-    {/* Search Section - Only visible for ISS and HOD */}
-    {!isLimitedUser ? (
+      {/* Search Section - Only visible for ISS and HOD, and not for RCV */}
+      {!isLimitedUser && currentUser?.roleId !== 'RCV' ? (
         // Full search section for ISS and HOD
         <div className="mb-4 flex justify-between items-start gap-2">
           <Card className="flex-1 p-4">
@@ -490,57 +490,59 @@ const resetFilters = () => {
           </Button>
         </div>
       ) : (
-        // Limited search section for Permit Receivers
-        <div className="mb-4">
-        <Card className="p-4">
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-12 gap-4 items-center">
-              
-              {/* Permit Status Dropdown */}
-              <div className="col-span-4">
-                <Select 
-                  placeholder="Filter by Permit status" 
-                  value={searchParams.status} 
-                  onChange={(e) => handleSearchParamChange('status', e.target.value)}
-                  options={['Approved', 'Pending', 'Rejected', 'Revoked']} // Added Revoked
-                  className="w-full"
-                />
+        // Limited search section for Permit Receivers (excluding RCV)
+        !isLimitedUser && currentUser?.roleId !== 'RCV' && (
+          <div className="mb-4">
+            <Card className="p-4">
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-12 gap-4 items-center">
+                  
+                  {/* Permit Status Dropdown */}
+                  <div className="col-span-4">
+                    <Select 
+                      placeholder="Filter by Permit status" 
+                      value={searchParams.status} 
+                      onChange={(e) => handleSearchParamChange('status', e.target.value)}
+                      options={['Approved', 'Pending', 'Rejected', 'Revoked']} // Added Revoked
+                      className="w-full"
+                    />
+                  </div>
+          
+                  {/* Submission Date Filters */}
+                  <div className="col-span-4 flex items-center justify-center gap-2">
+                    <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Filter by Submission date:</span>
+                    <Input 
+                      type="date" 
+                      value={searchParams.startDate} 
+                      onChange={(e) => handleSearchParamChange('startDate', e.target.value)}
+                      className="w-32"
+                    />
+                    <span className="self-center text-gray-400">→</span>
+                    <Input 
+                      type="date" 
+                      value={searchParams.endDate} 
+                      onChange={(e) => handleSearchParamChange('endDate', e.target.value)}
+                      className="w-32"
+                    />
+                  </div>
+          
+                  {/* Reset Button - Evenly Spaced */}
+                  <div className="col-span-4 flex justify-end">
+                  <Button 
+                      variant="secondary" 
+                      onClick={resetFilters}
+                      className="flex items-center gap-2 bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Reset Filters
+                    </Button>
+                  </div>
+          
+                </div>
               </div>
-      
-              {/* Submission Date Filters */}
-              <div className="col-span-4 flex items-center justify-center gap-2">
-                <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Filter by Submission date:</span>
-                <Input 
-                  type="date" 
-                  value={searchParams.startDate} 
-                  onChange={(e) => handleSearchParamChange('startDate', e.target.value)}
-                  className="w-32"
-                />
-                <span className="self-center text-gray-400">→</span>
-                <Input 
-                  type="date" 
-                  value={searchParams.endDate} 
-                  onChange={(e) => handleSearchParamChange('endDate', e.target.value)}
-                  className="w-32"
-                />
-              </div>
-      
-              {/* Reset Button - Evenly Spaced */}
-              <div className="col-span-4 flex justify-end">
-              <Button 
-                  variant="secondary" 
-                  onClick={resetFilters}
-                  className="flex items-center gap-2 bg-gray-200 text-gray-700 hover:bg-gray-300"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Reset Filters
-                </Button>
-              </div>
-      
-            </div>
+            </Card>
           </div>
-        </Card>
-      </div>
+        )
       )}
 
       {/* Main Content Card */}

@@ -272,20 +272,25 @@ const permitModel = {
         WHERE 1=1
       `;
   
-      // Department-based filtering logic
-    if (user.roleId === 'QA') {
-      // QA sees all permits assigned to QA
-      query += ` AND (p.AssignedTo = 'QA' OR p.Status = 'Revocation Pending')`;
-    } else if (user.departmentId === 'QHSSE') {
-      if (user.roleId === 'ISS') {
-        // QHSSE Issuers see permits assigned to ISS and from QHSSE department
-        query += ` AND p.AssignedTo = 'ISS' AND p.Department = 'QHSSE'`;
-      } else if (user.roleId === 'HOD') {
-        // QHSSE HODs see permits assigned to HOD and from QHSSE department
-        query += ` AND p.AssignedTo = 'HOD' AND p.Department = 'QHSSE'`;
+      // Always filter by creator if user is RCV role - this is the key fix
+      if (user.roleId === 'RCV') {
+        query += ` AND p.Creator = @userId`;
+        request.input('userId', sql.Int, user.userId);
       }
-      // Other QHSSE roles see all permits (no filter)
-    } else if (user.departmentId === 'ASM' || user.departmentId === 'OPS' || user.departmentId === 'IT') {
+      // Department-based filtering logic for other roles
+      else if (user.roleId === 'QA') {
+        // QA sees all permits assigned to QA
+        query += ` AND (p.AssignedTo = 'QA' OR p.Status = 'Revocation Pending')`;
+      } else if (user.departmentId === 'QHSSE') {
+        if (user.roleId === 'ISS') {
+          // QHSSE Issuers see permits assigned to ISS and from QHSSE department
+          query += ` AND p.AssignedTo = 'ISS' AND p.Department = 'QHSSE'`;
+        } else if (user.roleId === 'HOD') {
+          // QHSSE HODs see permits assigned to HOD and from QHSSE department
+          query += ` AND p.AssignedTo = 'HOD' AND p.Department = 'QHSSE'`;
+        }
+        // Other QHSSE roles see all permits (no filter)
+      } else if (user.departmentId === 'ASM' || user.departmentId === 'OPS' || user.departmentId === 'IT') {
         // ASM, OPS, and IT see their department permits
         query += ` AND (
           p.Department = @departmentId 
@@ -944,13 +949,12 @@ async getPermitToWorkByRole(user) {
   console.log(`Determined role for user ${user.userId}: '${userRoleId}', Department: ${userDepartmentId}`);
   
   // For QA role (QHS Approver) - can see ALL permits to work regardless of department
-  // QA roles only exist in QHSSE department
-  if (userRoleId === 'QA' && userDepartmentId === 'QHSSE') {
+  if (userRoleId === 'QA') {
     // No additional filtering needed - QA sees all permits
     console.log(`QA role detected for user ${user.userId}. No department filtering applied.`);
   }
-  // For ISS and HOD roles in QHSSE - they only see QHSSE department permits
-  else if ((userRoleId === 'ISS' || userRoleId === 'HOD') && userDepartmentId === 'QHSSE') {
+  // For ISS and HOD roles - they only see permits for their department
+  else if (userRoleId === 'ISS' || userRoleId === 'HOD') {
     request.input('departmentId', sql.VarChar(50), userDepartmentId);
     query += `
       AND (
@@ -960,26 +964,13 @@ async getPermitToWorkByRole(user) {
         )
       )
     `;
-    console.log(`Filtering for ${userRoleId} role in QHSSE department`);
+    console.log(`Filtering for ${userRoleId} role in department ${userDepartmentId}`);
   }
-  // For all other departments and roles - see permits for their department only
-  else if (userDepartmentId) {
-    request.input('departmentId', sql.VarChar(50), userDepartmentId);
-    query += `
-      AND (
-        jp.Department = @departmentId 
-        OR jp.Department IN (
-          SELECT DepartmentName FROM Departments WHERE DepartmentID = @departmentId
-        )
-      )
-    `;
-    console.log(`Filtering for role in department ${userDepartmentId}`);
-  }
-  // Regular users/receivers only see their own submissions
+  // For regular users (permit receivers) - only see permits they created
   else {
     request.input('userId', sql.Int, user.userId);
     query += ` AND ptw.Creator = @userId`;
-    console.log(`Filtering for regular user ${user.userId}`);
+    console.log(`Filtering for regular user ${user.userId}. Only showing permits they created.`);
   }
 
   // Log the full query and user info for debugging

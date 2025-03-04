@@ -108,9 +108,11 @@ const PermitToWork = () => {
   // Refetch when page, tab or filters change
   useEffect(() => {
     if (currentUser) {
+      // Reset to first page whenever the tab or filters change
+      setCurrentPage(1);
       fetchPermits();
     }
-  }, [currentPage, currentTab, assignmentFilters]);
+  }, [currentTab, assignmentFilters]);
 
   // Close assignment filter dropdown when clicking outside
   useEffect(() => {
@@ -473,19 +475,6 @@ const PermitToWork = () => {
             >
               Search
             </Button>
-            <Button 
-              variant="secondary" 
-              onClick={() => {
-                setSearchValue('');
-                setAssignmentFilters([]);
-                setCurrentPage(1);
-                fetchPermits();
-              }}
-              className="flex items-center gap-2 bg-gray-200 text-gray-700 hover:bg-gray-300"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Reset
-            </Button>
             <div className="relative" ref={assignmentFilterRef}>
               <Button 
                 variant={assignmentFilters.length > 0 ? "primary" : "secondary"}
@@ -562,6 +551,19 @@ const PermitToWork = () => {
                 </div>
               )}
             </div>
+            <Button 
+              variant="secondary" 
+              onClick={() => {
+                setSearchValue('');
+                setAssignmentFilters([]);
+                setCurrentPage(1);
+                fetchPermits();
+              }}
+              className="flex items-center gap-2 bg-gray-200 text-gray-700 hover:bg-gray-300"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Reset
+            </Button>
           </div>
           
           {/* Active filter tags */}

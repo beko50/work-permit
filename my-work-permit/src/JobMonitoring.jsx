@@ -22,12 +22,13 @@ const TabButton = ({ id, label, active, onClick }) => (
   </button>
 );
 
-// LocalStorage keys for persistent state
+// Update STORAGE_KEYS constant
 const STORAGE_KEYS = {
   TAB: 'jobs-monitoring-current-tab',
   PAGE: 'jobs-monitoring-current-page',
   SEARCH: 'jobs-monitoring-search-value',
-  LOCATION_FILTERS: 'jobs-monitoring-location-filters' // Changed to plural
+  LOCATION_FILTERS: 'jobs-monitoring-location-filters',
+  JOB_STATUS_FILTERS: 'jobs-monitoring-job-status-filters' // New key
 };
 
 const JobsMonitoring = () => {
@@ -76,6 +77,14 @@ const JobsMonitoring = () => {
   const locationFilterRef = useRef(null);
   const [searchLocationFilter, setSearchLocationFilter] = useState('');
 
+
+  const [jobStatusFilters, setJobStatusFilters] = useState(() => {
+    const savedFilters = localStorage.getItem(STORAGE_KEYS.JOB_STATUS_FILTERS);
+    return savedFilters ? JSON.parse(savedFilters) : [];
+  });
+  const [showJobStatusFilter, setShowJobStatusFilter] = useState(false);
+  const jobStatusFilterRef = useRef(null);
+
   // Persist state to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.TAB, currentTab);
@@ -92,6 +101,12 @@ const JobsMonitoring = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.LOCATION_FILTERS, JSON.stringify(locationFilters));
   }, [locationFilters]);
+
+
+  // Add new localStorage effect for job status filters
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.JOB_STATUS_FILTERS, JSON.stringify(jobStatusFilters));
+  }, [jobStatusFilters]);
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -140,6 +155,25 @@ const JobsMonitoring = () => {
     };
   }, []);
 
+  // Close job status filter dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (jobStatusFilterRef.current && !jobStatusFilterRef.current.contains(event.target)) {
+        setShowJobStatusFilter(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Update pagination when job status filters change
+  useEffect(() => {
+    updatePaginationInfo();
+    setCurrentPage(1); // Reset to first page on filter changes
+  }, [jobStatusFilters]);
+
   const fetchPermits = async () => {
     try {
       setLoading(true);
@@ -185,6 +219,10 @@ const JobsMonitoring = () => {
 
   useEffect(() => {
     if (currentUser) {
+      // Always reset to first page when tab changes
+      setCurrentPage(1);
+      
+      // Fetch permits and update pagination
       fetchPermits();
     }
   }, [currentTab, currentUser]);
@@ -396,15 +434,24 @@ const JobsMonitoring = () => {
     const value = e.target.value;
     setSearchValue(value);
     
-    // If search is cleared, reset everything to initial state
+    // If search is empty, reset to original state
     if (!value.trim()) {
-      setError(null);
-      fetchPermits(); // Fetch all permits
+      resetToOriginalState();
     } else {
       // Otherwise, debounce the search
       debouncedSearch(value);
     }
   };
+
+  // New method to reset to original state
+const resetToOriginalState = () => {
+  setError(null);
+  setSearchValue('');
+  setLocationFilters([]);
+  setJobStatusFilters([]);
+  setCurrentPage(1);
+  fetchPermits(); // This will restore all original permits
+};
 
   // Handle location filter check/uncheck
   const handleLocationFilterChange = (location) => {
@@ -452,6 +499,27 @@ const JobsMonitoring = () => {
       
       // Apply location filters if any are set
       if (locationFilters.length > 0 && !locationFilters.includes(permit.JobLocation)) return false;
+
+      // Apply job status filters if any are set
+      const permitStatus = permit.CompletionStatus;
+      const permitRevocationStatus = permit.Status.toLowerCase();
+      
+      if (jobStatusFilters.length > 0) {
+        const statusMatch = jobStatusFilters.some(filter => {
+          switch(filter) {
+            case 'Pending Completion':
+              return permitStatus === 'Pending Completion';
+            case 'In Progress':
+              return permitStatus === 'In Progress';
+            case 'Revocation Pending':
+              return permitRevocationStatus === 'revocation pending';
+            default:
+              return false;
+          }
+        });
+        
+        if (!statusMatch) return false;
+      }
   
       switch (currentTab) {
         case 'ongoing':
@@ -471,6 +539,33 @@ const JobsMonitoring = () => {
           return false;
       }
     });
+  };
+
+  // Handle job status filter check/uncheck
+  const handleJobStatusFilterChange = (status) => {
+    setJobStatusFilters(prev => {
+      if (prev.includes(status)) {
+        return prev.filter(s => s !== status);
+      } else {
+        return [...prev, status];
+      }
+    });
+  };
+
+  // Handle removing a job status filter tag
+  const handleRemoveJobStatusFilter = (status) => {
+    setJobStatusFilters(prev => prev.filter(s => s !== status));
+  };
+
+  // Clear all job status filters
+  const handleClearAllJobStatusFilters = () => {
+    setJobStatusFilters([]);
+    setShowJobStatusFilter(false);
+  };
+
+  // Select all job statuses
+  const handleSelectAllJobStatuses = () => {
+    setJobStatusFilters(['Pending Completion', 'In Progress', 'Revocation Pending']);
   };
   
   const getStatusColor = (status, completionStatus, currentTab) => {
@@ -542,141 +637,238 @@ const JobsMonitoring = () => {
   return (
     <div className="mt-2">
       <div className="mb-4">
-        <div className="flex items-center gap-4">
-          <div className="w-1/3">
-            <Input 
-              placeholder="Search PTW ID (e.g., PTW-0001)" 
-              value={searchValue}
-              onChange={handleSearchInputChange}
-              className="w-full"
-            />
-          </div>
+      <div className="flex items-center gap-4">
+  <div className="w-1/3">
+    <Input 
+      placeholder="Search PTW ID (e.g., PTW-0001)" 
+      value={searchValue}
+      onChange={handleSearchInputChange}
+      className="w-full"
+    />
+  </div>
+  <Button 
+    variant="primary" 
+    onClick={() => handleSearch(searchValue)}
+    className="w-[150px]"
+  >
+    Search
+  </Button>
+  
+  {/* Job Status Filter */}
+  <div className="relative" ref={jobStatusFilterRef}>
+    <Button 
+      variant={jobStatusFilters.length > 0 ? "primary" : "secondary"}
+      onClick={() => setShowJobStatusFilter(!showJobStatusFilter)}
+      className={`flex items-center gap-2 ${jobStatusFilters.length > 0 ? "bg-blue-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+    >
+      <Filter className="w-4 h-4" />
+      {jobStatusFilters.length > 0 ? `Job Status (${jobStatusFilters.length})` : "Filter by Job Status"}
+      <ChevronDown className="w-4 h-4" />
+    </Button>
+    {showJobStatusFilter && (
+      <div className="absolute z-10 mt-2 w-72 bg-white rounded-md shadow-lg border overflow-hidden">
+        <div className="p-2 border-b flex justify-between">
+          <Button 
+            variant="ghost" 
+            onClick={handleSelectAllJobStatuses}
+            className="text-blue-500 text-xs hover:bg-blue-50"
+            size="sm"
+          >
+            Select All
+          </Button>
+          <Button 
+            variant="ghost" 
+            onClick={handleClearAllJobStatusFilters}
+            className="text-gray-500 text-xs hover:bg-gray-50"
+            size="sm"
+          >
+            Clear All
+          </Button>
+        </div>
+        <div className="max-h-60 overflow-y-auto">
+          {['Pending Completion', 'In Progress', 'Revocation Pending'].map(status => (
+            <div 
+              key={status}
+              className="px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
+            >
+              <Checkbox
+                checked={jobStatusFilters.includes(status)}
+                onCheckedChange={() => handleJobStatusFilterChange(status)}
+                id={`job-status-${status}`}
+              />
+              <label 
+                htmlFor={`job-status-${status}`}
+                className="flex-grow cursor-pointer"
+              >
+                {status}
+              </label>
+            </div>
+          ))}
+        </div>
+        <div className="p-2 border-t flex justify-end">
           <Button 
             variant="primary" 
-            onClick={() => handleSearch(searchValue)}
-            className="w-[150px]"
+            onClick={() => setShowJobStatusFilter(false)}
+            size="sm"
           >
-            Search
+            Apply Filters
+          </Button>
+        </div>
+      </div>
+    )}
+  </div>
+
+  {/* Location Filter */}
+  <div className="relative" ref={locationFilterRef}>
+    <Button 
+      variant={locationFilters.length > 0 ? "primary" : "secondary"}
+      onClick={() => setShowLocationFilter(!showLocationFilter)}
+      className={`flex items-center gap-2 ${locationFilters.length > 0 ? "bg-blue-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+    >
+      <Filter className="w-4 h-4" />
+      {locationFilters.length > 0 ? `Locations (${locationFilters.length})` : "Filter by Location"}
+      <ChevronDown className="w-4 h-4" />
+    </Button>
+    {showLocationFilter && (
+      <div className="absolute z-10 mt-2 w-72 bg-white rounded-md shadow-lg border overflow-hidden">
+        <div className="p-2 border-b">
+          <Input 
+            placeholder="Search locations..." 
+            value={searchLocationFilter}
+            onChange={handleFilterSearch}
+            className="w-full text-sm"
+          />
+        </div>
+        <div className="p-2 border-b flex justify-between">
+          <Button 
+            variant="ghost" 
+            onClick={handleSelectAll}
+            className="text-blue-500 text-xs hover:bg-blue-50"
+            size="sm"
+          >
+            Select All
           </Button>
           <Button 
-            variant="secondary" 
-            onClick={() => {
-              setSearchValue('');
-              setLocationFilters([]);
-              setCurrentPage(1);
-              fetchPermits();
-            }}
-            className="flex items-center gap-2 bg-gray-200 text-gray-700 hover:bg-gray-300"
+            variant="ghost" 
+            onClick={handleClearAllFilters}
+            className="text-gray-500 text-xs hover:bg-gray-50"
+            size="sm"
           >
-            <RefreshCw className="w-4 h-4" />
-            Reset
+            Clear All
           </Button>
-          <div className="relative" ref={locationFilterRef}>
-            <Button 
-              variant={locationFilters.length > 0 ? "primary" : "secondary"}
-              onClick={() => setShowLocationFilter(!showLocationFilter)}
-              className={`flex items-center gap-2 ${locationFilters.length > 0 ? "bg-blue-500" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
-            >
-              <Filter className="w-4 h-4" />
-              {locationFilters.length > 0 ? `Locations (${locationFilters.length})` : "Filter by Location"}
-              <ChevronDown className="w-4 h-4" />
-            </Button>
-            {showLocationFilter && (
-              <div className="absolute z-10 mt-2 w-72 bg-white rounded-md shadow-lg border overflow-hidden">
-                <div className="p-2 border-b">
-                  <Input 
-                    placeholder="Search locations..." 
-                    value={searchLocationFilter}
-                    onChange={handleFilterSearch}
-                    className="w-full text-sm"
-                  />
-                </div>
-                <div className="p-2 border-b flex justify-between">
-                  <Button 
-                    variant="ghost" 
-                    onClick={handleSelectAll}
-                    className="text-blue-500 text-xs hover:bg-blue-50"
-                    size="sm"
-                  >
-                    Select All
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    onClick={handleClearAllFilters}
-                    className="text-gray-500 text-xs hover:bg-gray-50"
-                    size="sm"
-                  >
-                    Clear All
-                  </Button>
-                </div>
-                <div className="max-h-60 overflow-y-auto">
-                  {filteredLocations.length > 0 ? (
-                    filteredLocations.map(location => (
-                      <div 
-                        key={location}
-                        className="px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
-                      >
-                        <Checkbox
-                          checked={locationFilters.includes(location)}
-                          onCheckedChange={() => handleLocationFilterChange(location)}
-                          id={`location-${location}`}
-                        />
-                        <label 
-                          htmlFor={`location-${location}`}
-                          className="flex-grow cursor-pointer"
-                        >
-                          {location}
-                        </label>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="px-4 py-2 text-gray-500 text-center">
-                      No locations match your search
-                    </div>
-                  )}
-                </div>
-                <div className="p-2 border-t flex justify-end">
-                  <Button 
-                    variant="primary" 
-                    onClick={() => setShowLocationFilter(false)}
-                    size="sm"
-                  >
-                    Apply Filters
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
-        
-        {/* Active filter tags */}
-        {locationFilters.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3">
-            {locationFilters.map(filter => (
+        <div className="max-h-60 overflow-y-auto">
+          {filteredLocations.length > 0 ? (
+            filteredLocations.map(location => (
               <div 
-                key={filter}
-                className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm flex items-center gap-1"
+                key={location}
+                className="px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
               >
-                <span>{filter}</span>
-                <button 
-                  onClick={() => handleRemoveFilter(filter)}
-                  className="text-blue-800 hover:text-blue-900"
+                <Checkbox
+                  checked={locationFilters.includes(location)}
+                  onCheckedChange={() => handleLocationFilterChange(location)}
+                  id={`location-${location}`}
+                />
+                <label 
+                  htmlFor={`location-${location}`}
+                  className="flex-grow cursor-pointer"
                 >
-                  <X className="w-3 h-3" />
-                </button>
+                  {location}
+                </label>
               </div>
-            ))}
-            {locationFilters.length > 1 && (
-              <button
-                onClick={handleClearAllFilters}
-                className="text-blue-600 text-sm hover:underline"
-              >
-                Clear All
-              </button>
-            )}
-          </div>
-        )}
+            ))
+          ) : (
+            <div className="px-4 py-2 text-gray-500 text-center">
+              No locations match your search
+            </div>
+          )}
+        </div>
+        <div className="p-2 border-t flex justify-end">
+          <Button 
+            variant="primary" 
+            onClick={() => setShowLocationFilter(false)}
+            size="sm"
+          >
+            Apply Filters
+          </Button>
+        </div>
       </div>
+    )}
+  </div>
+
+  {/* Reset Button */}
+  <Button 
+    variant="secondary" 
+    onClick={() => {
+      setSearchValue('');
+      setLocationFilters([]);
+      setJobStatusFilters([]); // Clear job status filters
+      setCurrentPage(1);
+      fetchPermits();
+    }}
+    className="flex items-center gap-2 bg-gray-200 text-gray-700 hover:bg-gray-300"
+  >
+    <RefreshCw className="w-4 h-4" />
+    Reset
+  </Button>
+
+  {/* Active filter tags */}
+  {locationFilters.length > 0 && (
+    <div className="flex flex-wrap gap-2 mt-3">
+      {locationFilters.map(filter => (
+        <div 
+          key={filter}
+          className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm flex items-center gap-1"
+        >
+          <span>{filter}</span>
+          <button 
+            onClick={() => handleRemoveFilter(filter)}
+            className="text-blue-800 hover:text-blue-900"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      ))}
+      {locationFilters.length > 1 && (
+        <button
+          onClick={handleClearAllFilters}
+          className="text-blue-600 text-sm hover:underline"
+        >
+          Clear All
+        </button>
+      )}
+    </div>
+  )}
+
+  {/* Job Status Filters */}
+  {jobStatusFilters.length > 0 && (
+    <div className="flex flex-wrap gap-2 mt-3">
+      {jobStatusFilters.map(filter => (
+        <div 
+          key={filter}
+          className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-sm flex items-center gap-1"
+        >
+          <span>{filter}</span>
+          <button 
+            onClick={() => handleRemoveJobStatusFilter(filter)}
+            className="text-green-800 hover:text-green-900"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      ))}
+      {jobStatusFilters.length > 1 && (
+        <button
+          onClick={handleClearAllJobStatusFilters}
+          className="text-green-600 text-sm hover:underline"
+        >
+          Clear All
+        </button>
+      )}
+    </div>
+  )}
+</div>
+</div>
 
       <Card>
         <CardHeader>
