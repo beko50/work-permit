@@ -2,18 +2,34 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { Icons } from './ui/icons';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext'; // Add this import
 
-const UserProfileDropdown = () => {
+const UserProfileDropdown = ({ isAdmin }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+  const { user } = useAuth(); // Get user from AuthContext
 
   useEffect(() => {
-    const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
-    const parsedData = JSON.parse(savedData);
-    setCurrentUser(parsedData?.user);
-  }, []);
+    // Set current user from either admin storage or regular storage
+    if (isAdmin) {
+      const adminData = window.localStorage.getItem('adminAuth');
+      const parsedData = JSON.parse(adminData);
+      setCurrentUser(parsedData?.user);
+    } else {
+      const savedData = window.localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
+      const parsedData = JSON.parse(savedData);
+      setCurrentUser(parsedData?.user);
+    }
+  }, [isAdmin]);
+
+  // Alternative: Use the user from AuthContext directly
+  useEffect(() => {
+    if (user) {
+      setCurrentUser(user);
+    }
+  }, [user]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -31,6 +47,7 @@ const UserProfileDropdown = () => {
   const getUserRoleDisplay = () => {
     const roleId = currentUser?.roleId?.trim();
     switch(roleId) {
+      case 'ADMIN': return 'Administrator';
       case 'RCV': return 'Permit Receiver';
       case 'ISS': return 'Permit Issuer';
       case 'HOD': return 'Head of Department';
@@ -56,16 +73,23 @@ const UserProfileDropdown = () => {
 
   const handleLogout = async () => {
     try {
-      // Attempt API logout
       await api.logout();
     } catch (error) {
       console.error('API logout failed', error);
     } finally {
-      // Always clear storage and redirect, even if API call fails
-      window.localStorage.removeItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
-      navigate('/login');
+      if (isAdmin) {
+        window.localStorage.removeItem('adminAuth');
+        navigate('/admin/sign-in');
+      } else {
+        window.localStorage.removeItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
+        navigate('/sign-in');
+      }
     }
   };
+
+  // Debug log to check what's happening
+  console.log('Current User:', currentUser);
+  console.log('Is Admin:', isAdmin);
 
   if (!currentUser) return null;
 

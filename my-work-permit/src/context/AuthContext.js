@@ -33,6 +33,45 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  useEffect(() => {
+    const savedData = localStorage.getItem('jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui');
+    const adminData = window.localStorage.getItem('adminAuth');
+    
+    if (adminData) {
+      const adminUser = JSON.parse(adminData)?.user;
+      setUser({ ...adminUser, isAdmin: true });
+    } else if (savedData) {
+      const userData = JSON.parse(savedData)?.user;
+      setUser({ ...userData, isAdmin: false });
+    }
+    setLoading(false);
+  }, []);
+
+  const adminLogin = async (email, password) => {
+    try {
+      const response = await api.adminLogin({ email, password });
+       // Store admin auth separately
+       window.localStorage.setItem('adminAuth', JSON.stringify(response));
+      
+       const userData = {
+         ...response.user,
+         roleId: response.user.roleId || response.user.RoleID,
+         isAdmin: true
+       };
+       setUser(userData);
+      
+      return { 
+        success: true,
+        user: userData
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message || 'Login failed'
+      };
+    }
+  };
+
   const login = async (email, password) => {
     try {
       const response = await api.login({ email, password });
@@ -40,12 +79,19 @@ export const AuthProvider = ({ children }) => {
       /// Abednego 20-01-2025
       window.localStorage.setItem("jkkkkcdvyuscgjkyasfgyudcvkidscvjhcytdjftyad7guilllllaycfui", JSON.stringify(response))
       // Set user with role information
-      setUser({
+      const userData = {
         ...response.user,
         roleId: response.user.roleId || response.user.RoleID,
-        isLimitedUser: response.user.roleId === 'RCV' || response.user.RoleID === 'RCV'
-      });
-      return { success: true };
+        isLimitedUser: response.user.roleId === 'RCV' || response.user.RoleID === 'RCV',
+        isAdmin: false
+      };
+      setUser(userData);
+      
+      // Return both success and user data
+      return { 
+        success: true,
+        user: userData
+      };
     } catch (error) {
       return {
         success: false,
@@ -72,7 +118,8 @@ export const AuthProvider = ({ children }) => {
     const roles = {
       'RCV': 'Permit Receiver',
       'ISS': 'Permit Issuer',
-      'HOD': 'Head of Department'
+      'HOD': 'Head of Department',
+      'ADMIN': 'Administrator'
     };
     return roles[user.roleId] || 'User';
   };
@@ -81,10 +128,12 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{ 
       user, 
       login, 
+      adminLogin,
       // logout, 
       loading,
       getUserRoleDisplay, // Export the helper function
-      isLimitedUser: user?.isLimitedUser 
+      isLimitedUser: user?.isLimitedUser,
+      isAdmin: user?.isAdmin
     }}>
       {children}
     </AuthContext.Provider>

@@ -1,6 +1,8 @@
 import './App.css';
 import React from 'react';
 import { BrowserRouter, Routes, Route,Navigate } from 'react-router-dom';
+import AdminPage from './AdminPage';
+import AdminSignInPage from './AdminSignInPage';
 import SignInPage from './SignInPage';
 import SignUpPage from './SignUpPage';
 import ForgotPasswordPage from './ForgotPassword';
@@ -33,6 +35,18 @@ function App() {
           <Route path="/sign-in" element={<SignInPage />} />
           <Route path="/sign-up" element={<SignUpPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
+          {/* Admin routes */}
+          <Route path="/admin" element={<Navigate to="/admin/sign-in" replace />} />
+          <Route path="/admin/sign-in" element={<AdminSignInPage />} />
+          <Route 
+            path="/admin/user-management" 
+            element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <AdminPage />
+              </ProtectedRoute>
+            } 
+          />
         <Route
             path="/dashboard"
             element={

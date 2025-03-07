@@ -122,6 +122,84 @@ export const api = {
     }
   },
 
+  async addAdmin(adminData) {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+  
+      const response = await fetch(`${API_URL}/users/admin/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          firstName: adminData.firstName,
+          lastName: adminData.lastName,
+          email: adminData.email.toLowerCase(),
+          password: adminData.password,
+          departmentId: adminData.departmentId,
+          roleId: 'ADMIN',
+          userType: 'Internal',
+          isActive: true,
+          contractCompanyName: 'MPS Ghana'
+        })
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to add admin');
+      }
+  
+      return await response.json();
+    } catch (error) {
+      console.error('Error adding admin:', error);
+      throw error;
+    }
+  },
+
+  async adminLogin(credentials) {
+    try {
+      const response = await fetch(`${API_URL}/users/admin/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(credentials),
+      });
+
+      const data = await response.json();
+    
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+      }
+
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
+      
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async updateUserActivation(userId, isActive) {
+    const response = await fetch(`${API_URL}/users/admin/users/${userId}/activate`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ isActive }),
+    });
+    if (!response.ok) throw new Error('Failed to update user activation status');
+    return response.json();
+  },
+
   async logout() {
     try {
       window.localStorage.clear()
@@ -147,6 +225,56 @@ export const api = {
       console.error('Error fetching roles:', error);
       throw error;
     }
+  },
+
+  async getUsers() {
+    try {
+      const token = localStorage.getItem('token'); // or however you store your token
+      console.log('Using token:', token); // Debug log
+      
+      const response = await fetch(`${API_URL}/users/admin/users`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to fetch users');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      throw error;
+    }
+  },
+
+  async updateUserRole(userId, data) {
+    const response = await fetch(`${API_URL}/users/admin/users/${userId}/role`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update user role');
+    return response.json();
+  },
+
+  async deleteUser(userId) {
+    const response = await fetch(`${API_URL}/users/admin/users/${userId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete user');
+    return response.json();
   },
 
   async getDepartments() {

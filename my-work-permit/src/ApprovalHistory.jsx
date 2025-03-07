@@ -108,7 +108,7 @@ const ApprovalHistory = () => {
           setTotalPages(Math.ceil(response.total / itemsPerPage));
           setTotalPermits(response.total);
         } else {
-          setError('Failed to fetch job permits');
+          setError('No permits found matching your search criteria');
           setApprovalHistory([]);
           setTotalPages(0);
           setTotalPermits(0);
@@ -383,7 +383,7 @@ const ApprovalHistory = () => {
           )}
 
           {error && (
-            <div className="text-red-500 text-center py-4">
+            <div className="text-gray-500 text-center py-4">
               {error}
             </div>
           )}

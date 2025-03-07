@@ -13,8 +13,8 @@ const SignUpPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessCard, setShowSuccessCard] = useState(false);
   const [shouldRedirect, setShouldRedirect] = useState(false);
-  const [roles, setRoles] = useState([]);
-  const [departments, setDepartments] = useState([]);
+  //const [roles, setRoles] = useState([]);
+  //const [departments, setDepartments] = useState([]);
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -23,8 +23,8 @@ const SignUpPage = () => {
     contractCompanyName: '',
     password: '',
     confirmPassword: '',
-    departmentId: '',
-    roleId: 'RCV' // Default to Receiver
+    //departmentId: '',
+    //roleId: 'RCV' // Default to Receiver
   });
 
   // Update document title when component mounts
@@ -38,7 +38,7 @@ const SignUpPage = () => {
   }, []);
 
   // Fetch roles and departments on component mount
-  useEffect(() => {
+ /* useEffect(() => {
     const fetchData = async () => {
       try {
         const [rolesData, departmentsData] = await Promise.all([
@@ -65,7 +65,7 @@ const SignUpPage = () => {
     };
 
     fetchData();
-  }, []);
+  }, []);    */
 
   // Handle email change to auto-fill company name and handle role restrictions
   const handleEmailChange = (email) => {
@@ -74,9 +74,7 @@ const SignUpPage = () => {
     setFormData(prev => ({
       ...prev,
       email: email,
-      contractCompanyName: isInternalUser ? 'MPS Ghana' : '',
-      roleId: isInternalUser ? prev.roleId : 'RCV', // Reset to Receiver for external users
-      departmentId: isInternalUser ? prev.departmentId : '' // Clear department for external users
+      contractCompanyName: isInternalUser ? 'MPS Ghana' : ''
     }));
   };
 
@@ -109,7 +107,10 @@ const SignUpPage = () => {
         </CardHeader>
         <CardContent>
           <p className="text-green-700 text-base mt-2">
-            Redirecting to Sign In page in {countdown} seconds...
+            Your account has been created and is pending activation. You will be redirected to the Sign In page in {countdown} seconds...
+          </p>
+          <p className="text-gray-600 text-sm mt-2">
+            Note: An administrator will need to activate your account before you can sign in.
           </p>
         </CardContent>
       </Card>
@@ -138,38 +139,26 @@ const SignUpPage = () => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-
-    // Validate passwords match
+  
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       setIsLoading(false);
       return;
     }
-
-    // Log the data being sent
-    console.log('Sending registration data:', {
-      ...formData,
-      password: '[HIDDEN]',
-      confirmPassword: '[HIDDEN]',
-    });
-
+  
     try {
       const data = await api.register({
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
         password: formData.password,
-        contractCompanyName: formData.contractCompanyName,
-        departmentId: formData.departmentId,
-        departmentName: departments.find(dept => dept.DepartmentID === formData.departmentId)?.DepartmentName,
-        roleId: formData.roleId
+        contractCompanyName: formData.contractCompanyName
       });
-
+  
       console.log('Registration successful:', data);
       setShowSuccessCard(true);
-      setShouldRedirect(true); // Trigger the countdown effect
+      setShouldRedirect(true);
     } catch (err) {
-      // Handle specific error messages if they exist
       const errorMessage = err.message || 'Network error or server is not responding';
       setError(errorMessage);
       console.error('Registration error:', err);
@@ -181,7 +170,7 @@ const SignUpPage = () => {
   const isInternalUser = formData.email.endsWith('@mps-gh.com');
 
   // Define available roles based on user type
-  const getRoleOptions = () => {
+  /* const getRoleOptions = () => {
     if (!roles.length) {
       return [{ RoleID: 'RCV', RoleName: 'Permit Receiver' }];
     }
@@ -192,7 +181,7 @@ const SignUpPage = () => {
       // For external users, only return Permit Receiver role
       return roles.filter(role => role.RoleID === 'RCV');
     }
-  };
+  };  */
 
   return (
     <div
@@ -245,7 +234,7 @@ const SignUpPage = () => {
                     name="firstName"
                     value={formData.firstName}
                     onChange={handleChange}
-                    className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                    className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     placeholder="John"
                     required
                   />
@@ -271,7 +260,7 @@ const SignUpPage = () => {
                     name="lastName"
                     value={formData.lastName}
                     onChange={handleChange}
-                    className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                    className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     placeholder="Doe"
                     required
                   />
@@ -297,7 +286,7 @@ const SignUpPage = () => {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="your.email@example.com"
                 required
               />
@@ -322,7 +311,7 @@ const SignUpPage = () => {
                 value={formData.contractCompanyName}
                 onChange={handleChange}
                 readOnly={isInternalUser}
-                className={`pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${
+                className={`pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                   isInternalUser ? 'bg-gray-100' : ''
                 }`}
                 placeholder="Your Company Name"
@@ -331,7 +320,7 @@ const SignUpPage = () => {
             </div>
           </div>
 
-          {/* Role Selection */}
+          {/* Role Selection 
           <div className="space-y-1">
             <label htmlFor="roleId" className="block text-sm font-medium text-gray-700">
               Role
@@ -366,9 +355,9 @@ const SignUpPage = () => {
                 ))}
               </select>
             </div>
-          </div>
+          </div>   */}
 
-          {/* Department selection - only for internal users */}
+          {/* Department selection - only for internal users 
           {isInternalUser && (
             <div className="space-y-1">
               <label htmlFor="departmentId" className="block text-sm font-medium text-gray-700">
@@ -402,7 +391,7 @@ const SignUpPage = () => {
                 </select>
               </div>
             </div>
-          )}
+          )}   */}
 
           {/* Password input */}
           <div className="space-y-1">
@@ -421,7 +410,7 @@ const SignUpPage = () => {
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="••••••••"
                 required
               />
@@ -473,7 +462,7 @@ const SignUpPage = () => {
                 name="confirmPassword"
                 value={formData.confirmPassword}
                 onChange={handleChange}
-                className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                className="pl-10 block w-full px-3 py-1.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="••••••••"
                 required
               />
