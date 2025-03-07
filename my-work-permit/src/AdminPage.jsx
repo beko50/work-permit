@@ -123,12 +123,13 @@ const ToggleSwitch = ({ isActive, onChange }) => {
 };
 
 // Custom Select Component
-const CustomSelect = ({ value, onChange, options, placeholder, id, name }) => {
+const CustomSelect = ({ value, onChange, options, placeholder, id, name, width = "160px" }) => {
   return (
     <select
       id={id}
       name={name}
-      className="block w-full pl-3 pr-10 py-1 text-sm border border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md"
+      className="block pl-3 pr-10 py-1 text-sm border border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md"
+      style={{ width }}
       value={value || ''}
       onChange={onChange}
     >
@@ -632,7 +633,7 @@ const handleAddAdmin = async (adminData) => {
       <header className="bg-white shadow-sm border-b fixed w-full z-20 h-20">
   <div className="flex flex-col items-center justify-center px-4 py-2">
     <div className="text-lg font-semibold text-gray-800">MPS Work Permit System</div>
-    <div className="text-base text-gray-600">Admin Dashboard</div>
+    <div className="text-base text-gray-600">Admin Dashboard - User Management</div>
   </div>
   <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
     <UserProfileDropdown isAdmin={true}/>
@@ -699,17 +700,17 @@ const handleAddAdmin = async (adminData) => {
           
           <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Info</th>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Contract Company</th>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Department</th>
-                    <th scope="col" className="px-2 sm:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Info</th>
+                  <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Contract Company</th>
+                  <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                  <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Department</th>
+                  <th scope="col" className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {currentUsers.map((user) => {
                     const internal = isInternalUser(user.Email);
