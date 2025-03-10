@@ -32,6 +32,125 @@ const SubmittedPTW = () => {
         });
   };
 
+ const printStyles = `
+  @media print {
+    body * {
+      visibility: hidden;
+    }
+    
+    .permit-content, .permit-content * {
+      visibility: visible;
+    }
+    
+    .permit-content {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+    }
+
+    /* Force grid layout to maintain during print */
+    .md\\:grid-cols-2 {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 1rem !important;
+    }
+
+    /* Hide specific elements during print */
+    .no-print {
+      display: none !important;
+    }
+
+    /* Make status badge bold when printing */
+    .rounded-full {
+      font-weight: bold !important;
+    }
+    
+    /* Fix Job Completion Details alignment */
+    /* Completion Details Headers */
+    .font-medium {
+      font-weight: 600 !important;
+      display: block !important;
+      margin-bottom: 0.5rem !important;
+      border-bottom: 1px solid #eee !important;
+      padding-bottom: 0.25rem !important;
+    }
+    
+    /* Label alignment for completion details */
+    .text-gray-600 {
+      width: 120px !important;
+      display: inline-block !important;
+      font-weight: 500 !important;
+      vertical-align: top !important;
+    }
+    
+    /* Value alignment for completion details */
+    .text-gray-600 + p {
+      display: inline-block !important;
+      vertical-align: top !important;
+    }
+    
+    /* Ensure good spacing in completion details section */
+    .space-y-4 > div {
+      margin-bottom: 1rem !important;
+      page-break-inside: avoid !important;
+    }
+    
+    /* Comments box in completion details */
+    .bg-gray-50.p-2.rounded.mt-1 {
+      margin-top: 0.25rem !important;
+      border: 1px solid #eee !important;
+    }
+
+    /* Revocation Section Print Styles */
+    /* Make revocation section more compact */
+    .revocation-section {
+      page-break-inside: avoid !important; 
+      margin-bottom: 1rem !important;
+    }
+    
+    /* Adjust revocation fields to display inline */
+    .revocation-section .grid-cols-2 {
+      display: block !important;
+    }
+    
+    /* Style for revocation initiated field - display inline */
+    .revocation-section .grid-cols-2 > div:first-child,
+    .revocation-section .grid-cols-2 > div:nth-child(2) {
+      display: inline-block !important;
+      width: 50% !important;
+      margin-bottom: 0.5rem !important;
+      vertical-align: top !important;
+    }
+    
+    /* Make reason take full width */
+    .revocation-section .col-span-2 {
+      margin-top: 0.5rem !important;
+    }
+    
+    /* Approved section more compact */
+    .revocation-section .mt-4 .grid-cols-2 > div:first-child,
+    .revocation-section .mt-4 .grid-cols-2 > div:nth-child(2) {
+      display: inline-block !important;
+      width: 50% !important;
+      vertical-align: top !important;
+    }
+
+    /* Hide approval circles and connecting line */
+    .absolute.left-3.top-0.bottom-0.w-0\\.5 {
+      display: none !important;
+    }
+
+    .absolute.left-0.rounded-full {
+      display: none !important;
+    }
+
+    .relative.pl-10 {
+      padding-left: 0 !important;
+    }
+  }
+`;
+
   const getStatusBadge = (status, completionStatus) => {
     // First check completion status
     if (completionStatus === 'Job Completed') {
@@ -100,7 +219,7 @@ const SubmittedPTW = () => {
             ...response.data.permit,
             jobPermit: response.data.jobPermit,
             Status: response.data.permit.Status,
-  CompletionStatus: response.data.permit.CompletionStatus
+            CompletionStatus: response.data.permit.CompletionStatus
           });
 
         // Set completion details if job is completed
@@ -184,26 +303,49 @@ const SubmittedPTW = () => {
   const workersList = ptw.jobPermit.WorkersNames?.split(',').map(name => name.trim()) || [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white z-10 border-b pb-2 pt-2">
-          <div className="flex items-center">
-            <div className="ml-8">
-              <img 
-                src={logo}
-                alt="Company Logo" 
-                className="h-[80px] w-[80px]" 
-              />
-            </div>
-            <h2 className="text-xl font-semibold text-center flex-grow -ml-16">ISSUANCE OF PERMIT TO WORK</h2>
-            <Button 
-              variant="ghost" 
-              onClick={() => navigate(-1)} 
-              className="absolute top-2 right-2 hover:bg-gray-100"
+    <>
+      <style>{printStyles}</style>
+      <div className="permit-content container mx-auto p-4 max-w-6xl">
+        {/* Print Button */}
+        <div className="flex justify-end gap-2 mb-6 no-print">
+          <Button 
+            onClick={() => window.print()}
+            variant="outline"
+            className="flex items-center gap-2 bg-white text-gray-700 hover:bg-gray-100 border-2 border-gray-300 rounded-lg px-4 py-2 transition-all duration-200 hover:shadow-md"
+          >
+            <svg 
+              className="w-5 h-5" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
             >
-              <X className="h-5 w-5" />
-            </Button>
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" 
+              />
+            </svg>
+            Print Document
+          </Button>
+        </div>
+        
+        {/* Header */}
+        <div className="bg-white border-b pb-2 pt-2 flex items-center mb-4">
+          <div className="ml-8">
+            <img 
+              src={logo}
+              alt="Company Logo" 
+              className="h-[80px] w-[80px]" 
+            />
           </div>
+          <h2 className="text-xl font-semibold text-center flex-grow -ml-16">ISSUANCE OF PERMIT TO WORK</h2>
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate(-1)} 
+            className="absolute top-2 right-2 hover:bg-gray-100"
+          >
+          </Button>
         </div>
 
         <div className="p-4 space-y-4">
@@ -227,7 +369,7 @@ const SubmittedPTW = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">
-                  <span className="font-bold">Status:</span> {getStatusBadge(ptw.Status, ptw.CompletionStatus)}
+                    <span className="font-bold">Status:</span> {getStatusBadge(ptw.Status, ptw.CompletionStatus)}
                   </p>
                 </div>
               </div>
@@ -287,20 +429,8 @@ const SubmittedPTW = () => {
             </CardContent>
           </Card>
 
-          {revocationData && (
-            <PermitRevocation 
-              permitId={permitToWorkId}
-              revocationData={revocationData}
-              onRevocationProcessed={() => {
-                // Refresh the PTW details after revocation is processed
-                fetchPTWDetails();
-              }}
-              isQHSSEUser={currentUser?.roleId === 'QA'} // Pass the current user's role
-            />
-          )}
-
           <Card className="shadow-sm">
-            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Approval Status</div>
+            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Permit To Work Approvals</div>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -340,64 +470,66 @@ const SubmittedPTW = () => {
             </div>
           )}
 
+          {revocationData && (
+            <PermitRevocation 
+              permitId={permitToWorkId}
+              revocationData={revocationData}
+              onRevocationProcessed={() => {
+                // Refresh the PTW details after revocation is processed
+                fetchPTWDetails();
+              }}
+              isQHSSEUser={currentUser?.roleId === 'QA'} // Pass the current user's role
+            />
+          )}
+
           {/* Add completion details section if job is completed */}
-        {completionDetails && (
-          <Card className="shadow-sm mt-4">
-            <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Completion Details</div>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-medium mb-2">Permit Issuer Completion</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-gray-600">Completed By:</p>
-                      <p>{completionDetails.issuerCompletion.completer}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Completion Date:</p>
-                      <p>{formatDate(completionDetails.issuerCompletion.completionDate)}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="font-medium mb-2">QHSSE Final Completion</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-gray-600">Completed By:</p>
-                      <p>{completionDetails.qhsseCompletion.completer}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Completion Date:</p>
-                      <p>{formatDate(completionDetails.qhsseCompletion.completionDate)}</p>
-                    </div>
-                    {completionDetails.qhsseCompletion.comments && (
-                      <div className="col-span-2">
-                        <p className="text-gray-600">Comments:</p>
-                        <p className="bg-gray-50 p-2 rounded mt-1">
-                          {completionDetails.qhsseCompletion.comments}
-                        </p>
+          {completionDetails && (
+            <Card className="shadow-sm mt-4">
+              <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Completion Details</div>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium mb-2">Permit Issuer Completion</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Completed By:</p>
+                        <p>{completionDetails.issuerCompletion.completer}</p>
                       </div>
-                    )}
+                      <div>
+                        <p className="text-gray-600">Completion Date:</p>
+                        <p>{formatDate(completionDetails.issuerCompletion.completionDate)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-2">QHSSE Final Completion</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Completed By:</p>
+                        <p>{completionDetails.qhsseCompletion.completer}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Completion Date:</p>
+                        <p>{formatDate(completionDetails.qhsseCompletion.completionDate)}</p>
+                      </div>
+                      {completionDetails.qhsseCompletion.comments && (
+                        <div className="col-span-2">
+                          <p className="text-gray-600">Comments:</p>
+                          <p className="bg-gray-50 p-2 rounded mt-1">
+                            {completionDetails.qhsseCompletion.comments}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-          <div className="flex justify-end mt-4 gap-4">
-            <Button 
-              onClick={() => window.print()}
-              variant="secondary"
-              className="bg-gray-600 text-white hover:bg-gray-700"
-            >
-              Print
-            </Button>
-          </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

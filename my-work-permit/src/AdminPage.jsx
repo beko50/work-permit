@@ -816,7 +816,7 @@ const handleAddAdmin = async (adminData) => {
                               />
                             )
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-gray-100 text-black-800">
                               Permit Receiver
                             </span>
                           )}

@@ -30,7 +30,12 @@ class NotificationService {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS
         },
-        debug: true
+        debug: true,
+        // Add these options to handle self-signed certificates
+        tls: {
+          rejectUnauthorized: false, // Allow self-signed certificates
+          minVersion: 'TLSv1.2'
+        }
       });
     } else {
       this.transporter = nodemailer.createTransport({
@@ -121,10 +126,10 @@ class NotificationService {
         `
       },
       permitToWorkStatusUpdate: {
-        subject: 'Permit to Work Status Updated - PTW-#{permitId}',
+        subject: 'Permit to Work Updated - PTW-#{permitId}',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #2c3e50;">Permit to Work Status Update</h2>
+            <h2 style="color: #2c3e50;">Permit to Work Update</h2>
             <div style="padding: 20px; background-color: #f8f9fa; border-radius: 5px;">
               <p><strong>Permit to Work ID:</strong> PTW-#{permitId}</p>
               <p><strong>Main Job Permit Documentation:</strong> JP-#{jobPermitId}</p>
@@ -143,13 +148,39 @@ class NotificationService {
           </div>
         `
       },
+      permitToWorkCompletionInitiated: {
+        subject: 'Permit to Work Completion Initiated - PTW-#{permitId}',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2c3e50;">Work Completion Initiated</h2>
+            <div style="padding: 20px; background-color: #f8f9fa; border-radius: 5px;">
+              <p><strong>Permit to Work ID:</strong> PTW-#{permitId}</p>
+              <p><strong>Main Job Permit Documentation:</strong> JP-#{jobPermitId}</p>
+              <p><strong>Initiated By:</strong> #{initiatedBy} (#{userRole}) of #{departmentName} Department</p>
+              <p><strong>Status:</strong> Completion Initiated</p>
+              #{remarksSection}
+              <div style="margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 5px;">
+                <p><strong>Next Steps:</strong></p>
+                <p>QHSSE Approver review required to complete and close this permit.</p>
+              </div>
+              <div style="margin-top: 20px;">
+                <a href="#{frontendUrl}/permits/ptw/#{permitId}" 
+                   style="background-color: #007bff; color: white; padding: 10px 20px; 
+                          text-decoration: none; border-radius: 5px;">
+                  View Completion Details
+                </a>
+              </div>
+            </div>
+          </div>
+        `
+      },
       permitToWorkCompleted: {
-        subject: 'Permit to Work Completed - #{permitId}',
+        subject: 'Permit to Work Completed - PTW-#{permitId}',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #28a745;">Work Completion Update</h2>
             <div style="padding: 20px; background-color: #f8f9fa; border-radius: 5px;">
-              <p><strong>Permit to Work ID:</strong> #{permitId}</p>
+              <p><strong>Permit to Work ID:</strong> PTW- #{permitId}</p>
               <p><strong>Completed By:</strong> #{completedBy} (#{userRole})</p>
               <p><strong>Stage:</strong> #{stage}</p>
               #{remarksSection}
@@ -164,20 +195,46 @@ class NotificationService {
           </div>
         `
       },
+      permitToWorkRevocationInitiated: {
+        subject: 'Permit to Work Revocation Initiated - PTW-#{permitId}',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #dc3545;">Permit Revocation Initiated</h2>
+            <div style="padding: 20px; background-color: #f8f9fa; border-radius: 5px;">
+              <p><strong>Permit to Work ID:</strong> PTW-#{permitId}</p>
+              <p><strong>Main Job Permit Documentation:</strong> JP-#{jobPermitId}</p>
+              <p><strong>Status:</strong> <span style="color: #dc3545;">#{status}</span></p>
+              <p><strong>Initiated By:</strong> #{initiatedBy} (#{userRole}) of #{departmentName}</p>
+              <p><strong>Reason for Revocation:</strong> #{revocationReason}</p>
+              <div style="margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 5px;">
+                <p><strong>Next Steps:</strong></p>
+                <p>This revocation request requires QHSSE review and approval. The permit remains active until QHSSE approval.</p>
+              </div>
+              <div style="margin-top: 20px;">
+                <a href="#{frontendUrl}/#{permitUrlPath}/#{permitId}" 
+                   style="background-color: #dc3545; color: white; padding: 10px 20px; 
+                          text-decoration: none; border-radius: 5px;">
+                  View Revocation Details
+                </a>
+              </div>
+            </div>
+          </div>
+        `
+      },
       permitRevoked: {
-        subject: 'Permit Revocation #{status} - #{permitId}',
+        subject: '#{permitType} Revoked - PTW-#{permitId}',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #dc3545;">Permit Revocation Notice</h2>
             <div style="padding: 20px; background-color: #f8f9fa; border-radius: 5px;">
-              <p><strong>Permit ID:</strong> #{permitId}</p>
-              <p><strong>Permit Type:</strong> #{permitType}</p>
+              <p><strong>Permit ID:</strong> PTW #{permitId}</p>
               <p><strong>Status:</strong> <span style="color: #dc3545;">#{status}</span></p>
-              <p><strong>Approved By:</strong> #{approvedBy} (#{userRole})</p>
-              #{commentsSection}
+              <p><strong>Action By:</strong> #{initiatedBy} (#{userRole}) of #{departmentName}</p>
+              <p><strong>Reason for Revocation:</strong> #{revocationReason}</p>
+              #{remarksSection}
               <div style="margin-top: 20px;">
-                <a href="#{frontendUrl}/permits/#{permitUrlPath}/#{permitId}" 
-                   style="background-color: #007bff; color: white; padding: 10px 20px; 
+                <a href="#{frontendUrl}/#{permitUrlPath}/#{permitId}" 
+                   style="background-color: #dc3545; color: white; padding: 10px 20px; 
                           text-decoration: none; border-radius: 5px;">
                   View Permit Details
                 </a>
@@ -198,7 +255,7 @@ class NotificationService {
     }
   }
 
-  async getUsersToNotify({ department, permitType, createdByEmail, stage }) {
+  async getUsersToNotify({ department, permitType, createdByEmail, stage, permitToWorkId }) {
     try {
       const pool = await poolPromise;
       const transaction = await pool.transaction();
@@ -216,6 +273,32 @@ class NotificationService {
         .query(deptQuery);
   
       const departmentName = deptResult.recordset[0]?.DepartmentName;
+
+      // For completion stages, get permit details to include receiver
+      let permitReceiver = null;
+      if (stage === 'ISS_COMPLETE' || stage === 'QA_COMPLETE') {
+        const permitQuery = `
+          SELECT 
+            ptw.PermitToWorkID,
+            jp.PermitReceiver,
+            u.Email as ReceiverEmail,
+            u.FirstName + ' ' + u.LastName as ReceiverName,
+            u.DepartmentID as ReceiverDepartment
+          FROM PermitToWork ptw
+          JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+          LEFT JOIN Users u ON u.FirstName + ' ' + u.LastName = jp.PermitReceiver
+          WHERE ptw.PermitToWorkID = @permitToWorkId
+        `;
+
+        const permitResult = await transaction.request()
+          .input('permitToWorkId', sql.Int, permitToWorkId)
+          .query(permitQuery);
+
+        if (permitResult.recordset.length > 0) {
+          permitReceiver = permitResult.recordset[0];
+          createdByEmail = permitResult.recordset[0].CreatorEmail; // Update createdByEmail
+        }
+      }
   
       // Build query to get the right users to notify
       let query = `
@@ -233,6 +316,246 @@ class NotificationService {
         LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
         WHERE (
       `;
+
+      // Handle completion stages
+      if (stage === 'ISS_COMPLETE') {
+        // First get the permit details to know which department's HOD to notify
+        const permitQuery = `
+          SELECT 
+            ptw.PermitToWorkID,
+            jp.Department,
+            jp.JobPermitID
+          FROM PermitToWork ptw
+          JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+          WHERE ptw.PermitToWorkID = @permitToWorkId
+        `;
+      
+        const permitResult = await transaction.request()
+          .input('permitToWorkId', sql.Int, permitToWorkId)
+          .query(permitQuery);
+      
+        if (!permitResult.recordset.length) {
+          console.error('No permit found for ID:', permitToWorkId);
+          return [];
+        }
+      
+        const permitDepartment = permitResult.recordset[0].Department;
+      
+        // Now get QA users and the department's HOD
+        query = `
+          SELECT DISTINCT 
+            u.Email,
+            u.RoleID,
+            u.FirstName + ' ' + u.LastName as FullName,
+            u.DepartmentID,
+            d.DepartmentName,
+            'Approver' as UserType
+          FROM Users u
+          LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
+          WHERE u.IsActive = 1
+          AND (
+            u.RoleID = 'QA'
+            OR (u.RoleID = 'HOD' AND (
+              u.DepartmentID IN (
+                SELECT DepartmentID 
+                FROM Departments 
+                WHERE DepartmentName = @department
+              )
+            ))
+          )
+          AND u.Email IS NOT NULL;
+        `;
+      
+        // Execute with proper parameters
+        const result = await transaction.request()
+          .input('department', sql.VarChar(50), permitDepartment)
+          .query(query);
+      
+        // Add the issuer to the notification list if they have an email
+        const issuerQuery = `
+          SELECT 
+            u.Email,
+            u.RoleID,
+            u.FirstName + ' ' + u.LastName as FullName,
+            u.DepartmentID,
+            d.DepartmentName
+          FROM PermitToWork ptw
+          JOIN Users u ON ptw.IssuerApprovedBy = u.UserID
+          LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
+          WHERE ptw.PermitToWorkID = @permitToWorkId
+        `;
+      
+        const issuerResult = await transaction.request()
+          .input('permitToWorkId', sql.Int, permitToWorkId)
+          .query(issuerQuery);
+      
+        if (issuerResult.recordset.length > 0) {
+          result.recordset.push({
+            ...issuerResult.recordset[0],
+            UserType: 'ISS'
+          });
+        }
+      
+        // Log the users being notified for debugging
+        console.log('Notifying users for ISS_COMPLETE:', result.recordset.map(u => ({
+          Email: u.Email,
+          Role: u.RoleID,
+          Department: u.DepartmentName
+        })));
+      
+        return result.recordset;
+      }
+      else if (stage === 'QA_COMPLETE') {
+        // When QA completes, notify ISS and the permit receiver
+        query += `
+          (u.RoleID = 'ISS' AND (
+            u.DepartmentID = @department OR 
+            u.DepartmentID IN (
+              SELECT DepartmentID 
+              FROM Departments 
+              WHERE DepartmentName = @department
+            )
+          )) OR
+        `;
+      }
+
+      else if (stage === 'ISS_REVOKE' || stage === 'QA_REVOKE') {
+        // First get the permit details to know which department's users to notify
+        const permitQuery = `
+          SELECT 
+            ptw.PermitToWorkID,
+            jp.Department,
+            jp.JobPermitID,
+            jp.PermitReceiver,
+            receiver.Email as ReceiverEmail,
+            receiver.FirstName + ' ' + receiver.LastName as ReceiverName,
+            issuer.Email as IssuerEmail,
+            issuer.FirstName + ' ' + issuer.LastName as IssuerName,
+            issuer.DepartmentID as IssuerDepartment,
+            hod.Email as HODEmail,
+            hod.FirstName + ' ' + hod.LastName as HODName
+          FROM PermitToWork ptw
+          JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+          LEFT JOIN Users receiver ON receiver.FirstName + ' ' + receiver.LastName = jp.PermitReceiver
+          LEFT JOIN Users issuer ON ptw.IssuerApprovedBy = issuer.UserID
+          LEFT JOIN Users hod ON ptw.HODApprovedBy = hod.UserID
+          WHERE ptw.PermitToWorkID = @permitToWorkId
+        `;
+      
+        const permitResult = await transaction.request()
+          .input('permitToWorkId', sql.Int, permitToWorkId)
+          .query(permitQuery);
+      
+        if (!permitResult.recordset.length) {
+          console.error('No permit found for ID:', permitToWorkId);
+          return [];
+        }
+      
+        const permitInfo = permitResult.recordset[0];
+      
+        // For ISS initiated revocation, notify QA users and department HOD
+        if (stage === 'ISS_REVOKE') {
+          query = `
+            SELECT DISTINCT 
+              u.Email,
+              u.RoleID,
+              u.FirstName + ' ' + u.LastName as FullName,
+              u.DepartmentID,
+              d.DepartmentName,
+              'Approver' as UserType
+            FROM Users u
+            LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
+            WHERE u.IsActive = 1
+            AND (
+              (u.RoleID = 'QA')
+              OR (u.RoleID = 'HOD' AND u.DepartmentID IN (
+                SELECT DepartmentID 
+                FROM Departments 
+                WHERE DepartmentName = @department
+              ))
+            )
+            AND u.Email IS NOT NULL
+          `;
+      
+          const result = await transaction.request()
+            .input('department', sql.VarChar(50), permitInfo.Department)
+            .query(query);
+      
+          // Add the issuer to the notification list if they have an email
+          if (permitInfo.IssuerEmail) {
+            result.recordset.push({
+              Email: permitInfo.IssuerEmail,
+              RoleID: 'ISS',
+              FullName: permitInfo.IssuerName,
+              DepartmentID: permitInfo.IssuerDepartment,
+              DepartmentName: this.getDepartmentFullName(permitInfo.IssuerDepartment),
+              UserType: 'Issuer'
+            });
+          }
+      
+          return result.recordset;
+        }
+        // For QA initiated revocation (immediate revocation)
+        else if (stage === 'QA_REVOKE') {
+          query = `
+            SELECT DISTINCT 
+              u.Email,
+              u.RoleID,
+              u.FirstName + ' ' + u.LastName as FullName,
+              u.DepartmentID,
+              d.DepartmentName,
+              'Notified' as UserType
+            FROM Users u
+            LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
+            WHERE u.IsActive = 1
+            AND (
+              (u.RoleID = 'ISS' AND u.DepartmentID IN (
+                SELECT DepartmentID 
+                FROM Departments 
+                WHERE DepartmentName = @department
+              ))
+              OR (u.RoleID = 'HOD' AND u.DepartmentID IN (
+                SELECT DepartmentID 
+                FROM Departments 
+                WHERE DepartmentName = @department
+              ))
+            )
+            AND u.Email IS NOT NULL
+          `;
+      
+          const result = await transaction.request()
+            .input('department', sql.VarChar(50), permitInfo.Department)
+            .query(query);
+      
+          let usersToNotify = result.recordset;
+      
+          // Add permit receiver if available
+          if (permitInfo.ReceiverEmail) {
+            usersToNotify.push({
+              Email: permitInfo.ReceiverEmail,
+              RoleID: 'RCV',
+              FullName: permitInfo.ReceiverName,
+              DepartmentID: permitInfo.Department,
+              DepartmentName: this.getDepartmentFullName(permitInfo.Department),
+              UserType: 'Receiver'
+            });
+          }
+      
+          // Add the issuer if not already included
+          if (permitInfo.IssuerEmail && !usersToNotify.some(u => u.Email === permitInfo.IssuerEmail)) {
+            usersToNotify.push({
+              Email: permitInfo.IssuerEmail,
+              RoleID: 'ISS',
+              FullName: permitInfo.IssuerName,
+              DepartmentID: permitInfo.IssuerDepartment,
+              DepartmentName: this.getDepartmentFullName(permitInfo.IssuerDepartment),
+              UserType: 'Issuer'
+            });
+          }
+      
+          return usersToNotify;
+        }
+      }
   
       // For initial creation, notify department issuers
       if (!stage) {
@@ -336,11 +659,27 @@ class NotificationService {
   
       await transaction.commit();
   
-      // Process department names
-      return result.recordset.map(user => ({
+      // Process users and add permit receiver for completion stages
+      let users = result.recordset.map(user => ({
         ...user,
         DepartmentName: this.getDepartmentFullName(user.DepartmentID)
       }));
+
+      // Add permit receiver for QA completion if available
+      if (stage === 'QA_COMPLETE' && permitReceiver?.ReceiverEmail) {
+        users.push({
+          Email: permitReceiver.ReceiverEmail,
+          RoleID: 'RECEIVER',
+          FullName: permitReceiver.ReceiverName,
+          DepartmentID: permitReceiver.ReceiverDepartment,
+          DepartmentName: this.getDepartmentFullName(permitReceiver.ReceiverDepartment),
+          UserType: 'Receiver'
+        });
+      }
+
+      // Remove duplicates based on email
+      return [...new Map(users.map(user => [user.Email, user])).values()];
+
     } catch (error) {
       console.error('Error getting users to notify:', error);
       return [];
@@ -555,51 +894,46 @@ getNextStageMessage(status, assignedTo, isJobPermit = true) {
   if (status === 'Approved') {
     if (isJobPermit) {
       if (assignedTo === 'QA') {
-        return `<p style="color: #28a745;"><strong>Next Stage:</strong> Job Permit Documentation fully approved - Please proceed to request a Permit to Work</p>`;
+        return `<p style="color: #28a745;"><strong>Next Stage:</strong> Job Permit Documentation fully approved - Permit Receiver can proceed to request a Permit to Work</p>`;
       } else if (assignedTo === 'ISS') {
         return `<p><strong>Next Stage:</strong> Awaiting HOD Review of Job Permit Documentation</p>`;
       } else if (assignedTo === 'HOD') {
-        return `<p><strong>Next Stage:</strong> Awaiting QHSSE Review of Job Permit Documentation</p>`;
+        return `<p><strong>Next Stage:</strong> Awaiting QHSSE Approver</p>`;
       }
     } else {
       // Permit to Work specific messages
       if (assignedTo === 'QA') {
-        return `<p style="color: #28a745;"><strong>Next Stage:</strong> Permit to Work fully approved - Work can commence</p>`;
+        return `<p style="color: #28a745;"><strong>Next Stage:</strong> Permit to Work fully approved - Permit Receiver can commence Work</p>`;
       } else if (assignedTo === 'ISS') {
         return `<p><strong>Next Stage:</strong> Awaiting HOD Review of Permit to Work</p>`;
       } else if (assignedTo === 'HOD') {
-        return `<p><strong>Next Stage:</strong> Awaiting QHSSE Review of Permit to Work</p>`;
+        return `<p><strong>Next Stage:</strong> Awaiting QHSSE Approver</p>`;
       }
     }
   }
   return '';
 }
 
-getNextStepsMessage(status, assignedTo, isJobPermit = true) {
+getNextStepsMessage(status, stage, isJobPermit = true) {
   if (status === 'Approved') {
-    if (isJobPermit) {
-      if (assignedTo === 'QA') {
-        return `<p>Your Job Permit Documentation has been fully approved by QHSSE. Permit Receiver must now submit a Permit to Work request to begin the work phase.</p>`;
-      } else if (assignedTo === 'ISS') {
-        return `<p>Your Job Permit Documentation is now under review by HOD (Head of Department). You will be notified once they complete their review.</p>`;
-      } else if (assignedTo === 'HOD') {
-        return `<p>Your Job Permit Documentation is now under review by QHSSE. You will be notified once they complete their review.</p>`;
-      }
-    } else {
-      if (assignedTo === 'QA') {
-        return `<p>Your Permit to Work has been fully approved. Work can now commence following all safety protocols.</p>`;
-      } else if (assignedTo === 'ISS') {
-        return `<p>Your Permit to Work is now under review by HOD. You will be notified of any updates.</p>`;
-      } else if (assignedTo === 'HOD') {
-        return `<p>Your Permit to Work is now under review by QHSSE. You will be notified of any updates.</p>`;
-      }
+    const permitType = isJobPermit ? 'Job Permit Documentation' : 'Permit to Work';
+    
+    if (stage === 'QA') {
+      return isJobPermit
+        ? `<p style="color: #28a745;"><strong>Next Stage:</strong> Job Permit Documentation fully approved - Permit Receiver can proceed to request a Permit to Work</p>`
+        : `<p style="color: #28a745;"><strong>Next Stage:</strong> Permit to Work fully approved - Permit Receiver can commence work</p>`;
+    } else if (stage === 'ISS') {
+      return `<p>Your ${permitType} is now under review by HOD (Head of Department). You will be notified once they complete their review.</p>`;
+    } else if (stage === 'HOD') {
+      return `<p>Your ${permitType} is now under review by QHSSE. You will be notified once they complete their review.</p>`;
     }
   } else if (status === 'Rejected') {
-    return isJobPermit
-      ? `<p>Your Job Permit Documentation requires revision. Please review the comments above and make the necessary corrections before resubmitting.</p>`
-      : `<p>Your Permit to Work requires revision. Please review the comments above and make the necessary corrections before resubmitting.</p>`;
+    const permitType = isJobPermit ? 'Job Permit Documentation' : 'Permit to Work';
+    return `<p>Your ${permitType} requires revision. Please review the comments above and make the necessary corrections before resubmitting.</p>`;
   }
-  return '';
+  
+  const permitType = isJobPermit ? 'Job Permit Documentation' : 'Permit to Work';
+  return `Your ${permitType} is pending review. You will be notified of any updates.`;
 }
 
   getActionButton(status, assignedTo, permitId, isJobPermit = true) {
@@ -658,40 +992,38 @@ getNextStepsMessage(status, assignedTo, isJobPermit = true) {
     return processed;
   }
 
-  getNextStepsMessage(status, stage) {
-    if (status === 'Approved') {
-      if (stage === 'ISS') {
-        return 'Your Permit to Work has been approved by the Issuer and is now under review by the HOD. You will be notified once they complete their review.';
-      } else if (stage === 'HOD') {
-        return 'Your Permit to Work has been approved by the HOD and is now under review by QHSSE. You will be notified once they complete their review.';
-      } else if (stage === 'QA') {
-        return 'Your Permit to Work has been fully approved. You may now proceed with the work according to the conditions outlined in the permit.';
-      }
-    } else if (status === 'Rejected') {
-      return 'Your Permit to Work has been rejected. Please review the comments, make the necessary corrections, and resubmit.';
-    } else {
-      return 'Your Permit to Work is pending review. You will be notified of any updates.';
-    }
-  }
-
   async sendNotification(recipients, templateName, data) {
     try {
+      // Extensive logging for debugging
+      console.log('------- SEND NOTIFICATION START -------');
+      console.log('Template Name:', templateName);
+      console.log('Recipients (before processing):', recipients);
+      
       // If recipients is an array of objects, extract just the emails
       const emailAddresses = Array.isArray(recipients) && typeof recipients[0] === 'object' 
         ? recipients.map(r => r.Email).filter(email => email) 
         : recipients;
       
+      console.log('Processed Email Addresses:', emailAddresses);
+      
       if (!emailAddresses || emailAddresses.length === 0) {
-        console.log('No valid recipients for notification');
+        console.error('NO VALID RECIPIENTS FOUND');
         return;
       }
       
       // Get the template
       const template = this.templates[templateName];
       if (!template) {
-        console.error('Email template not found:', templateName);
+        console.error('EMAIL TEMPLATE NOT FOUND:', templateName);
         return;
       }
+      
+      // Detailed data logging (be careful with sensitive information)
+      console.log('Notification Data:', JSON.stringify({
+        ...data,
+        // Redact sensitive fields if needed
+        comments: data.comments ? '[REDACTED]' : undefined
+      }, null, 2));
       
       // Process template variables
       let subject = template.subject;
@@ -710,17 +1042,17 @@ getNextStepsMessage(status, assignedTo, isJobPermit = true) {
         displayStatus: data.status || 'Pending',
         frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
         
-        // Add these for permit to work
-        nextStepsMessage: this.getNextStepsMessage(data.status, data.stage || data.currentApproverRole),
-        commentsSection: data.comments ? 
-          `<div style="margin-top: 15px; padding: 10px; background-color: #f0f0f0; border-left: 4px solid #007bff; border-radius: 3px;">
-            <p><strong>Comments:</strong> ${data.comments}</p>
-          </div>` : '',
+        /// Update this line to ensure isJobPermit is correctly determined
+      nextStepsMessage: this.getNextStepsMessage(
+        data.status, 
+        data.stage || data.currentApproverRole,
+        data.permitType !== 'PermitToWork' // true for Job Permit, false for Permit to Work
+      ),
         
         // For permit status updates
         nextStageInfo: '',
         actionButton: `
-          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/permits/ptw/${data.permitId}" 
+          <a href="${process.env.FRONTEND_URL}" 
              style="background-color: #007bff; color: white; padding: 10px 20px; 
                     text-decoration: none; border-radius: 5px; display: inline-block;">
             View Permit Details
@@ -735,7 +1067,7 @@ getNextStepsMessage(status, assignedTo, isJobPermit = true) {
       if (data.status === 'Approved') {
         const stageMap = {
           'ISS': 'HOD',
-          'HOD': 'QHSSE',
+          'HOD': 'QHSSE Approver',
           'QA': 'Complete'
         };
         const currentStage = data.stage || data.currentApproverRole;
@@ -743,9 +1075,7 @@ getNextStepsMessage(status, assignedTo, isJobPermit = true) {
         
         if (nextStage !== 'Complete') {
           data_with_defaults.nextStageInfo = `
-            <p><strong>Next Stage:</strong> Awaiting ${nextStage} Review of ${
-              data.permitType === 'PermitToWork' ? 'Permit to Work' : 'Job Permit Documentation'
-            }</p>
+            <p><strong>Next Stage:</strong> Awaiting ${nextStage} Review </p>
           `;
         } else {
           data_with_defaults.nextStageInfo = `
@@ -774,12 +1104,34 @@ getNextStepsMessage(status, assignedTo, isJobPermit = true) {
         html: html
       };
       
+      console.log('Mail Options (Sender/Recipient):', {
+        from: mailOptions.from,
+        to: mailOptions.to,
+        subject: mailOptions.subject
+      });
+      
       const info = await this.transporter.sendMail(mailOptions);
-      console.log('Email sent:', info.messageId);
+      console.log('Email sent successfully:', {
+        messageId: info.messageId,
+        accepted: info.accepted,
+        rejected: info.rejected
+      });
+      
+      console.log('------- SEND NOTIFICATION END -------');
       
       return info;
     } catch (error) {
-      console.error('Error sending notification:', error);
+      console.error('------- EMAIL SENDING ERROR -------');
+      console.error('Detailed Error:', error);
+      
+      // Log specific error details
+      if (error.responseCode) {
+        console.error('SMTP Response Code:', error.responseCode);
+      }
+      if (error.response) {
+        console.error('SMTP Full Response:', error.response);
+      }
+      
       throw error;
     }
   }
@@ -839,7 +1191,10 @@ getNextStepsMessage(status, assignedTo, isJobPermit = true) {
   async handlePermitStatusUpdate(permitData) {
     try {
       console.log('Handling permit status update notification for permit ID:', permitData.permitId);
-  
+      
+      // Determine if this is a Job Permit or Permit to Work based on the ID format
+      const isJobPermit = !permitData.permitId.toString().startsWith('PTW-');
+
       // Get users to notify based on the current stage
       const usersToNotify = await this.getUsersToNotify({
         department: permitData.department,
@@ -868,16 +1223,18 @@ getNextStepsMessage(status, assignedTo, isJobPermit = true) {
       // Send notifications to relevant users
       await this.sendNotification(
         emailAddresses,
-        'permitStatusUpdate',
+        isJobPermit ? 'permitStatusUpdate' : 'permitToWorkStatusUpdate',
         {
           permitId: permitData.permitId,
+          jobPermitId: permitData.jobPermitId,
           status: permitData.status,
           updatedBy: permitData.updatedBy,
           userRole: permitData.userRole,
           departmentName: this.getDepartmentFullName(permitData.department),
           comments: permitData.comments,
-          assignedTo: nextAssignedTo,
-          permitType: permitData.permitType || 'JobPermit'
+          stage: permitData.currentApproverRole,
+          isJobPermit: isJobPermit,
+          permitType: isJobPermit ? 'JobPermit' : 'PermitToWork' // Make sure this is set correctly
         }
       );
     } catch (error) {
@@ -1012,7 +1369,7 @@ getNextStepsMessage(status, assignedTo, isJobPermit = true) {
       // Prepare notification data with correct JobPermitID and department
       const notificationData = {
         permitId: permitData.permitId,
-        jobPermitId: jobPermitId || permitData.jobPermitId, // Use the cleaned job permit ID
+        jobPermitId: jobPermitId, // Use the cleaned job permit ID
         createdBy: permitData.createdBy || 'System User',
         permitReceiver: permitDetails?.PermitReceiver || 'Not specified',
         department: jobPermitDepartment, // Use the JobPermit department
@@ -1058,6 +1415,31 @@ getNextStepsMessage(status, assignedTo, isJobPermit = true) {
     } catch (error) {
       console.error('Error handling permit to work creation notification:', error);
       console.error('Permit data:', permitData);
+      throw error;
+    }
+  }
+
+  async sendTestEmail(to, subject = 'Test Email', text = 'This is a test email') {
+    try {
+      console.log('Sending test email to:', to);
+      
+      const info = await this.transporter.sendMail({
+        from: `"MPS Permit System" <${process.env.MAIL_FROM || process.env.EMAIL_USER}>`,
+        to: to,
+        subject: subject,
+        text: text,
+        html: `<p>${text}</p>`
+      });
+  
+      console.log('Test Email sent successfully:', {
+        messageId: info.messageId,
+        accepted: info.accepted,
+        rejected: info.rejected
+      });
+  
+      return info;
+    } catch (error) {
+      console.error('Test Email Sending Error:', error);
       throw error;
     }
   }

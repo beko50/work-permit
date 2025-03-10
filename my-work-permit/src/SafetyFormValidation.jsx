@@ -219,16 +219,18 @@ const SafetyFormValidation = Yup.object().shape({
   .when('hazardousEnergies', {
     is: (energies) => energies?.includes('Electricity'),
     then: () => Yup.array()
-      .min(1, 'At least one A.C/D.C Voltage must be selected when Electricity is checked')
+      .min(1, 'At least one A.C Voltage must be selected when Electricity is checked')
+      .max(1, 'Only one A.C Voltage can be selected')
       .required('A.C Voltage is required when Electricity is checked'),
     otherwise: () => Yup.array().notRequired(),
   }),
 
-dcVoltageDe: Yup.array()
+  dcVoltageDe: Yup.array()
   .when('hazardousEnergies', {
     is: (energies) => energies?.includes('Electricity'),
     then: () => Yup.array()
-      .min(1, 'At least one A.C/D.C Voltage must be selected when Electricity is checked')
+      .min(1, 'At least one D.C Voltage must be selected when Electricity is checked')
+      .max(1, 'Only one D.C Voltage can be selected')
       .required('D.C Voltage is required when Electricity is checked'),
     otherwise: () => Yup.array().notRequired(),
   }),

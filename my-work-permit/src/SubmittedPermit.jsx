@@ -23,28 +23,102 @@ const sectionNameMapping = {
 };
 
 const printStyles = `
-  @media print {
-    body * {
-      visibility: hidden;
-    }
-    .print-modal, .print-modal * {
-      visibility: visible;
-    }
-    .print-modal {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: auto;
-      overflow: visible;
-    }
-    .no-print {
-      display: none !important;
-    }
-    .page-break {
-      page-break-before: always;
-    }
+ @media print {
+  /* Previous print styles remain the same */
+  body * {
+    visibility: hidden;
   }
+  
+  .permit-content, .permit-content * {
+    visibility: visible;
+  }
+  
+  .permit-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* Force grid layout to maintain during print */
+  .md\\:grid-cols-2 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 1rem !important;
+  }
+
+  /* Ensure text alignment stays correct */
+  .text-gray-600 {
+    text-align: right !important;
+  }
+
+  /* Comments specific styling */
+  /* This is the key fix - it forces comments to appear below by changing the layout structure */
+  .mt-2, p:has(span:contains("Comments")) {
+    display: block !important;
+    grid-column: 1 !important;
+    text-align: left !important;
+    margin-top: 8px !important;
+  }
+  
+  p:has(span:contains("Comments")) + p {
+    grid-column: 1 !important;
+    text-align: left !important;
+    margin-top: 4px !important;
+  }
+
+  /* Hide approval circles and connecting line */
+  .absolute.left-3.top-0.bottom-0.w-0\\.5 {
+    display: none !important;
+  }
+
+  /* Hide the circle indicators */
+  .absolute.left-0.rounded-full {
+    display: none !important;
+  }
+
+  /* Remove the left padding since we're hiding the circles */
+  .relative.pl-10 {
+    padding-left: 0 !important;
+  }
+
+  /* Make approval status bold - targeting the status badge returned by getStatusBadge function */
+  .inline-flex.items-center.px-2.py-1.text-xs.rounded {
+    font-weight: 900 !important;
+    padding: 4px 8px !important;
+    border: 1.5px solid currentColor !important;
+  }
+  
+  /* Specifically target the status text inside badges */
+  .inline-flex.items-center.px-2.py-1.text-xs.rounded span {
+    font-weight: 900 !important;
+  }
+
+  /* Other existing print styles remain the same */
+  .inline-flex {
+    display: inline-flex !important;
+  }
+
+  .p-3 {
+    padding: 0.75rem !important;
+  }
+
+  .mb-2 {
+    margin-bottom: 0.5rem !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .border {
+    border: 1px solid #ddd !important;
+  }
+
+  .rounded-md {
+    border-radius: 0.375rem !important;
+  }
+}
 `;
 
 const SubmittedPermit = () => {
@@ -73,6 +147,31 @@ const SubmittedPermit = () => {
       hour12: true
     });
   };
+
+  const PrintButton = () => (
+    <div className="flex justify-end gap-2 mb-6 no-print">
+      <Button 
+        onClick={() => window.print()}
+        variant="outline"
+        className="flex items-center gap-2 bg-white text-gray-700 hover:bg-gray-100 border-2 border-gray-300 rounded-lg px-4 py-2 transition-all duration-200 hover:shadow-md"
+      >
+        <svg 
+          className="w-5 h-5" 
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          <path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={2} 
+            d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" 
+          />
+        </svg>
+        Print Document
+      </Button>
+    </div>
+  );
 
   const getStatusBadge = (status) => {
     switch (status?.toLowerCase()) {
@@ -171,9 +270,10 @@ const SubmittedPermit = () => {
   return (
     <>
       <style>{printStyles}</style>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print-modal">
-        <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
-          <div className="sticky top-0 bg-white z-10 border-b pb-2 pt-2 flex items-center">
+        <div className="permit-content container mx-auto p-4 max-w-6xl">           
+        <PrintButton />
+            {/* Header */}
+            <div className="bg-white border-b pb-2 pt-2 flex items-center mb-4">
             <div className="ml-8">
               <img 
                 src={logo}
@@ -190,44 +290,63 @@ const SubmittedPermit = () => {
           <div className="p-4 space-y-4">
             {/* Job Details & Location */}
             <Card className="shadow-sm">
+              <CardHeader className="font-bold text-lg">Job Details & Location</CardHeader>
               <CardContent className="p-5">
                 <div className="grid grid-cols-2 gap-6 items-start">
                   <div>
-                    <h2 className="font-bold text-l border-b pb-2 mb-3">Job Details</h2>
-                    <p className="text-base text-gray-700"><span className="font-bold">Job Permit Document ID:</span> JP-{String(permit.JobPermitID).padStart(4, '0')}</p>
-                    <p className="text-base text-gray-700"><span className="font-bold">Start Date:</span> {formatDate(permit.StartDate)}</p>
-                    <p className="text-base text-gray-700"><span className="font-bold">End Date:</span> {formatDate(permit.EndDate)}</p>
+                    <h3 className="font-medium text-sm border-b pb-1 mb-3">Job Details</h3>
+                    <div className="space-y-1">
+                      <p className="text-sm text-gray-700">
+                        <span className="font-medium">Job Permit Document ID:</span> JP-{String(permit.JobPermitID).padStart(4, '0')}
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        <span className="font-medium">Start Date:</span> {formatDate(permit.StartDate)}
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        <span className="font-medium">End Date:</span> {formatDate(permit.EndDate)}
+                      </p>
+                    </div>
                   </div>
                   <div>
-                    <h2 className="font-bold text-l border-b pb-2 mb-3">Job Location</h2>
-                    <p className="text-base text-gray-700"><span className="font-bold">Department:</span> {permit.Department}</p>
-                    <p className="text-base text-gray-700"><span className="font-bold">Job Location:</span> {permit.JobLocation}</p>
-                    <p className="text-base text-gray-700"><span className="font-bold">Sub Location:</span> {permit.SubLocation}</p>
-                    <p className="text-base text-gray-700"><span className="font-bold">Location Detail:</span> {permit.LocationDetail}</p>
+                    <h3 className="font-medium text-sm border-b pb-1 mb-3">Job Location</h3>
+                    <div className="space-y-1">
+                      <p className="text-sm text-gray-700">
+                        <span className="font-medium">Department:</span> {permit.Department}
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        <span className="font-medium">Job Location:</span> {permit.JobLocation}
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        <span className="font-medium">Sub Location:</span> {permit.SubLocation}
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        <span className="font-medium">Location Detail:</span> {permit.LocationDetail}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Job Description */}
-            <Card className="shadow-sm">
+           {/* Job Description */}
+            <div className="mb-4">
               <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Job Description</div>
-              <CardContent className="p-4">
+              <div className="p-4">
                 <p className="text-sm text-gray-700">{permit.JobDescription}</p>
-              </CardContent>
-            </Card>
-
+              </div>
+            </div>
+              
             {/* Workers List */}
-            <Card className="shadow-sm">
+            <div className="mb-4">
               <div className="font-bold px-4 py-1 text-sm border-b bg-gray-50">Workers ({permit.NumberOfWorkers})</div>
-              <CardContent className="p-4">
+              <div className="p-4">
                 <ul className="list-disc pl-6 text-sm text-gray-700">
                   {permit.WorkersNames?.split(',').map((worker, index) => (
                     <li key={index}>{worker.trim()}</li>
                   )) || <li>No workers assigned</li>}
                 </ul>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Risk Assessment Document */}
             {documents && documents.length > 0 && (
@@ -237,40 +356,37 @@ const SubmittedPermit = () => {
               </div>
             )}
 
-            {/* Safety Checklist Card */}
-            <div className="page-break"> {/* Add page break here */}
-              <Card>
-                <CardHeader className="font-bold text-lg">Safety Checklist</CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
-                    {groupedCheckboxes.map((section) => (
-                      <div key={section.sectionId} className="space-y-2">
-                        <h3 className="font-medium text-base border-b pb-2">
-                          {sectionNameMapping[section.sectionName] || section.sectionName}
-                        </h3>
-                        <div className="space-y-2 pl-4">
-                          {section.items.map((item) => (
-                            <div key={item.sectionItemId} className="flex items-start gap-2">
-                              <div className="mt-1">
-                                <CheckSquare className="h-4 w-4 text-green-600" />
-                              </div>
-                              <div>
-                                <p>{item.itemLabel}</p>
-                                {item.textInput && (
-                                  <p className="text-sm text-gray-600 mt-1">
-                                    Additional Info: {item.textInput}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Safety Checklist - Optimized for first page */}
+          <Card className="shadow-sm print-card">
+            <CardHeader className="font-bold text-lg">Safety Checklist</CardHeader>
+            <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+  {groupedCheckboxes.map((section) => (
+    <div key={section.sectionId} className="space-y-1">
+      <h3 className="font-medium text-sm border-b pb-1">
+        {sectionNameMapping[section.sectionName] || section.sectionName}
+      </h3>
+      <div className="space-y-1">
+        {section.items.map((item) => (
+          <div key={item.sectionItemId} className="flex items-start gap-1 text-sm">
+            <CheckSquare className="h-3 w-3 text-green-600 mt-1" />
+            <span className="text-gray-700">
+              {item.itemLabel}
+              {/* Add the text input if it exists */}
+              {item.textInput && (
+                <span className="ml-1 text-gray-600">
+                  : {item.textInput}
+                </span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  ))}
+</div>
+            </CardContent>
+          </Card>
 
             {/* Revocation Section */}
             {revocationData && (
@@ -279,68 +395,56 @@ const SubmittedPermit = () => {
 
             {/* Approvals Section */}
             <Card>
-              <CardHeader className="font-bold text-l">Permit Documentation Approvals</CardHeader>
-              <CardContent>
-                <div className="relative">
-                  <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
-                  {approvals.map((approval, index) => (
-                    <div key={index} className="relative pl-10 pb-4">
-                      <div 
-                        className={`absolute left-0 rounded-full border-2 w-5 h-5 transition-all duration-300
-                          ${approval.status === 'Approved' ? 'bg-green-500 border-green-500' : 
-                            approval.status === 'Rejected' ? 'bg-red-500 border-red-500' :
-                            'bg-gray-200 border-gray-300'}`}
-                      />
-                      <div className="border rounded-md p-3">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
-                          {/* Left column: Title and Status */}
-                          <div>
-                            <h4 className="font-medium text-base mb-1">{approval.title}</h4>
-                            {getStatusBadge(approval.status)}
-                          </div>
-                          
-                          {/* Right column: Approver and Date */}
-                          <div className="text-sm text-gray-600">
-                            <p>
-                              <span className="font-medium">Approver:</span> {approval.approverName || 'Not yet approved'}
-                            </p>
-                            {approval.approvedDate && (
-                              <p>
-                                <span className="font-medium">Date:</span> {formatDate(approval.approvedDate)}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                          
-                        {/* Comments section below both columns */}
-                        {approval.comments && (
-                          <div className="mt-2">
-                            <p className="text-sm text-gray-600 mb-1">
-                              <span className="font-medium">Comments:</span>
-                            </p>
-                            <p className="bg-gray-50 p-2 rounded text-sm">{approval.comments}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
+             <CardHeader className="font-bold text-l">Permit Documentation Approvals</CardHeader>
+             <CardContent>
+               <div className="relative">
+                 <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
+                 {approvals.map((approval, index) => (
+                   <div key={index} className="relative pl-10 pb-4">
+                     <div 
+                       className={`absolute left-0 rounded-full border-2 w-5 h-5 transition-all duration-300
+                         ${approval.status === 'Approved' ? 'bg-green-500 border-green-500' : 
+                           approval.status === 'Rejected' ? 'bg-red-500 border-red-500' :
+                           'bg-gray-200 border-gray-300'}`}
+                     />
+                     <div className="border rounded-md p-3">
+                       <div className="relative mb-4">
+                         {/* Title and status */}
+                         <div className="mb-1">
+                           <h4 className="font-medium text-base">{approval.title}</h4>
+                           {getStatusBadge(approval.status)}
+                         </div>
+                        
+                         {/* Approver and date positioned absolutely */}
+                         <div className="absolute text-sm" style={{ top: 0, right: '27%' }}>
+                           <p>
+                             <span className="font-medium">Approver:</span> {approval.approverName || 'Not yet approved'}
+                           </p>
+                           {approval.approvedDate && (
+                             <p>
+                               <span className="font-medium">Date:</span> {formatDate(approval.approvedDate)}
+                             </p>
+                           )}
+                         </div>
+                       </div>
+                         
+                       {/* Comments section after a divider */}
+                       {approval.comments && (
+                         <div className="border-t pt-2 mt-2">
+                           <p className="text-sm mb-1">
+                             <span className="font-medium">Comments:</span>
+                           </p>
+                           <p className="bg-gray-50 p-2 rounded text-sm">{approval.comments}</p>
+                         </div>
+                       )}
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             </CardContent>
             </Card>
-
-            {/* Print Button */}
-            <div className="flex justify-end mt-6 no-print">
-              <Button 
-                onClick={handlePrint}
-                variant="secondary"
-                className="bg-gray-600 text-white hover:bg-gray-700"
-              >
-                Print
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+          </div>  
+      </div>    
     </>
   );
 };

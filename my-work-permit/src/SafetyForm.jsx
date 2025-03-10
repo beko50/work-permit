@@ -340,13 +340,23 @@ const SafetyForm = () => {
           // Debug log 3: Log all validation errors
           console.log('All Validation Errors:', errors);
       
-          // Set touched fields
-          const touchedFields = fieldsToValidate.reduce((acc, field) => {
-            acc[field] = true;
-            return acc;
-          }, {});
-          
-          setTouched(touchedFields, true);
+          // Set touched state for all text inputs when their corresponding checkboxes are selected
+    const touchedFields = {
+      ...fieldsToValidate.reduce((acc, field) => {
+        acc[field] = true;
+        return acc;
+      }, {}),
+      // Add touched state for text inputs based on checkbox selections
+      ...(currentValues.hazardIdentification?.includes('Other (Specify)') ? { otherHazardText: true } : {}),
+      ...(currentValues.jobRequirement?.includes('List other gases detected') ? { otherGasesText: true } : {}),
+      ...(currentValues.ppeRequirement?.includes('Other (Specify)') ? { otherPPEText: true } : {}),
+      ...(currentValues.precaution?.includes('Additional Controls (Specify)') ? { otherControlsText: true } : {}),
+      ...(currentValues.hazardousEnergies?.includes('Dangerous goods/chemicals (Specify)') ? { otherDangerousGoodsText: true } : {}),
+      ...(currentValues.hazardousEnergies?.includes('Other (Specify)') ? { otherHazardousEnergyText: true } : {}),
+      ...(currentValues.breakPreparation?.includes('Other (Specify)') ? { otherBreakPreparationText: true } : {})
+    };
+    
+    setTouched(touchedFields, true);
       
           // Debug log 4: Log touched fields
           console.log('Touched Fields:', touchedFields);
@@ -519,106 +529,150 @@ const SafetyForm = () => {
   };
 
   const handleCheckboxChange = (option, checked) => {
-    const updatedValues = checked
-      ? [...currentValues, option.label]
-      : currentValues.filter(v => v !== option.label);
+    // Special handling for AC and DC voltage sections
+    if (sectionKey === 'acVoltageDe' || sectionKey === 'dcVoltageDe') {
+      // If checking a box, clear other selections and only select the current one
+      const updatedValues = checked ? [option.label] : [];
+      setFormData(prev => ({
+        ...prev,
+        [sectionKey]: updatedValues
+      }));
+      setFieldValue(sectionKey, updatedValues);
+    } else {
+      // Original handling for other sections
+      const updatedValues = checked
+        ? [...currentValues, option.label]
+        : currentValues.filter(v => v !== option.label);
+      
+      setFormData(prev => ({
+        ...prev,
+        [sectionKey]: updatedValues
+      }));
+      setFieldValue(sectionKey, updatedValues);
     
-    setFormData(prev => ({
-      ...prev,
-      [sectionKey]: updatedValues
-    }));
-    setFieldValue(sectionKey, updatedValues);
-  
-    if (!checked) {
-      const sectionLabels = otherOptionLabels[sectionKey] || [];
-      if (sectionLabels.includes(option.label)) {
-        if (sectionKey === 'hazardousEnergies') {
-          if (option.label === sectionLabels[0]) {
-            textStateSetters.hazardousEnergies.otherDangerousGoods('');
-            setFieldValue('otherDangerousGoodsText', '');
-            setFieldTouched('otherDangerousGoodsText', false);
-          } else if (option.label === sectionLabels[1]) {
-            textStateSetters.hazardousEnergies.otherHazardousEnergy('');
-            setFieldValue('otherHazardousEnergyText', '');
-            setFieldTouched('otherHazardousEnergyText', false);
-          }
-        } else {
-          const setter = textStateSetters[sectionKey];
-          if (typeof setter === 'function') {
-            setter('');
-            const fieldName = sectionKey === 'precaution' ? 'otherControlsText' : `other${sectionKey}Text`;
-            setFieldValue(fieldName, '');
-            setFieldTouched(fieldName, true);
-            setFieldError(fieldName, undefined);
-          }
+      // Handle text input fields when checkbox is changed
+    const handleSpecifyOption = (fieldName, setterFunction) => {
+      if (checked) {
+        // When checking the box, immediately set touched and empty value
+        setterFunction('');
+        setFieldValue(fieldName, '');
+        setFieldTouched(fieldName, true, true); // Set touched and trigger validation
+        setFieldError(fieldName, 'This field is required');
+      } else {
+        // When unchecking, reset everything
+        setterFunction('');
+        setFieldValue(fieldName, '');
+        setFieldTouched(fieldName, false);
+        setFieldError(fieldName, undefined);
+      }
+    };
+
+    // Handle each specific case
+    if (sectionKey === 'hazardIdentification' && option.label === 'Other (Specify)') {
+      handleSpecifyOption('otherHazardText', setOtherHazardText);
+    }
+    else if (sectionKey === 'jobRequirement' && option.label === 'List other gases detected') {
+      handleSpecifyOption('otherGasesText', setOtherGasesText);
+    }
+    else if (sectionKey === 'ppeRequirement' && option.label === 'Other (Specify)') {
+      handleSpecifyOption('otherPPEText', setOtherPPEText);
+    }
+    else if (sectionKey === 'precaution' && option.label === 'Additional Controls (Specify)') {
+      handleSpecifyOption('otherControlsText', setOtherControlsText);
+    }
+    else if (sectionKey === 'hazardousEnergies') {
+      if (option.label === 'Dangerous goods/chemicals (Specify)') {
+        handleSpecifyOption('otherDangerousGoodsText', textStateSetters.hazardousEnergies.otherDangerousGoods);
+      }
+      else if (option.label === 'Other (Specify)') {
+        handleSpecifyOption('otherHazardousEnergyText', textStateSetters.hazardousEnergies.otherHazardousEnergy);
+      }
+      else if (option.label === 'Electricity') {
+        if (!checked) {
+          setFieldValue('acVoltageDe', []);
+          setFieldValue('dcVoltageDe', []);
         }
       }
-  
-      if (sectionKey === 'hazardousEnergies' && option.label === 'Electricity') {
-        setFieldValue('acVoltageDe', []);
-        setFieldValue('dcVoltageDe', []);
-      }
     }
-  };
-
-  const handleTextChange = (e, option) => {
-    const text = e.target.value;
-
-    // Add a specific handler for Break Preparation
-  if (sectionKey === 'breakPreparation' && option.label === 'Other (Specify)') {
-    setOtherBreakPreparationText(text);
-    setFieldValue('otherBreakPreparationText', text);
-    setFieldTouched('otherBreakPreparationText', true);
+    else if (sectionKey === 'breakPreparation' && option.label === 'Other (Specify)') {
+      handleSpecifyOption('otherBreakPreparationText', setOtherBreakPreparationText);
+    }
   }
-    
-    if (sectionKey === 'hazardousEnergies') {
-      const sectionLabels = otherOptionLabels[sectionKey];
-      if (option.label === sectionLabels[0]) {
-        textStateSetters.hazardousEnergies.otherDangerousGoods(text);
-        setFieldValue('otherDangerousGoodsText', text);
-        setFieldTouched('otherDangerousGoodsText', true);
-      } else if (option.label === sectionLabels[1]) {
-        textStateSetters.hazardousEnergies.otherHazardousEnergy(text);
-        setFieldValue('otherHazardousEnergyText', text);
-        setFieldTouched('otherHazardousEnergyText', true);
-      }
-    } else if (sectionKey === 'precaution' && option.label === 'Additional Controls (Specify)') {
-      setOtherControlsText(text);
-      setFieldValue('otherControlsText', text);
-      setFieldTouched('otherControlsText', true);
-    } else if (sectionKey === 'hazardIdentification' && option.label === 'Other (Specify)') {
-      setOtherHazardText(text);
-      setFieldValue('otherHazardText', text);
-      setFieldTouched('otherHazardText', true);
-    } else if (sectionKey === 'jobRequirement' && option.label === 'List other gases detected') {
-      setOtherGasesText(text);
-      setFieldValue('otherGasesText', text);
-      setFieldTouched('otherGasesText', true);
-    } else if (sectionKey === 'ppeRequirement' && option.label === 'Other (Specify)') {
-      setOtherPPEText(text);
-      setFieldValue('otherPPEText', text);
-      setFieldTouched('otherPPEText', true);
-    }
-    
-    setFormData(prev => ({
-      ...prev,
-      [sectionKey === 'precaution' ? 'otherControlsText' : `other${sectionKey}Text`]: text
-    }));
   };
+
+  // Update handleTextChange to properly handle validation
+const handleTextChange = (e, option) => {
+  const text = e.target.value;
+  
+  const validateAndUpdateField = (fieldName, setter) => {
+    setter(text);
+    setFieldValue(fieldName, text);
+    setFieldTouched(fieldName, true, true); // Trigger validation immediately
+    if (!text.trim()) {
+      setFieldError(fieldName, 'This field is required');
+    } else {
+      setFieldError(fieldName, undefined);
+    }
+  };
+
+  if (sectionKey === 'breakPreparation' && option.label === 'Other (Specify)') {
+    validateAndUpdateField('otherBreakPreparationText', setOtherBreakPreparationText);
+  }
+  else if (sectionKey === 'hazardousEnergies') {
+    const sectionLabels = otherOptionLabels[sectionKey];
+    if (option.label === sectionLabels[0]) {
+      validateAndUpdateField('otherDangerousGoodsText', textStateSetters.hazardousEnergies.otherDangerousGoods);
+    } else if (option.label === sectionLabels[1]) {
+      validateAndUpdateField('otherHazardousEnergyText', textStateSetters.hazardousEnergies.otherHazardousEnergy);
+    }
+  }
+  else if (sectionKey === 'precaution' && option.label === 'Additional Controls (Specify)') {
+    validateAndUpdateField('otherControlsText', setOtherControlsText);
+  }
+  else if (sectionKey === 'hazardIdentification' && option.label === 'Other (Specify)') {
+    validateAndUpdateField('otherHazardText', setOtherHazardText);
+  }
+  else if (sectionKey === 'jobRequirement' && option.label === 'List other gases detected') {
+    validateAndUpdateField('otherGasesText', setOtherGasesText);
+  }
+  else if (sectionKey === 'ppeRequirement' && option.label === 'Other (Specify)') {
+    validateAndUpdateField('otherPPEText', setOtherPPEText);
+  }
+};
 
   const getTextFieldError = (sectionKey, option) => {
-    const sectionLabels = otherOptionLabels[sectionKey] || [];
+    // Get the error and touched state based on the section and option
     if (sectionKey === 'hazardousEnergies') {
-      if (option.label === sectionLabels[0]) {
+      const sectionLabels = otherOptionLabels[sectionKey];
+      if (option.label === sectionLabels[0]) { // Dangerous goods/chemicals
         return errors.otherDangerousGoodsText && touched.otherDangerousGoodsText;
-      } else if (option.label === sectionLabels[1]) {
+      } else if (option.label === sectionLabels[1]) { // Other hazardous energies
         return errors.otherHazardousEnergyText && touched.otherHazardousEnergyText;
       }
-    } else if (sectionKey === 'precaution' && option.label === 'Additional Controls (Specify)') {
-      return errors.otherControlsText && touched.otherControlsText;
     } else {
-      const errorKey = `other${sectionKey}Text`;
-      return errors[errorKey] && touched[errorKey];
+      // Handle all other sections with text inputs
+      const errorKeyMap = {
+        'hazardIdentification': {
+          'Other (Specify)': 'otherHazardText'
+        },
+        'jobRequirement': {
+          'List other gases detected': 'otherGasesText'
+        },
+        'ppeRequirement': {
+          'Other (Specify)': 'otherPPEText'
+        },
+        'precaution': {
+          'Additional Controls (Specify)': 'otherControlsText'
+        },
+        'breakPreparation': {
+          'Other (Specify)': 'otherBreakPreparationText'
+        }
+      };
+  
+      const errorKey = errorKeyMap[sectionKey]?.[option.label];
+      if (errorKey) {
+        return errors[errorKey] && touched[errorKey];
+      }
     }
     return false;
   };

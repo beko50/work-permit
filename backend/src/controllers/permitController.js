@@ -1,4 +1,4 @@
-const { poolPromise } = require('../db');
+const { poolPromise,sql } = require('../db');
 const permitModel = require('../models/permitModel');
 const notificationService = require('../services/emailService');
 
@@ -683,34 +683,37 @@ async approvePermitToWork(req, res) {
 
     await transaction.begin();
 
-    const permitResult = await permitModel.getPermitToWorkById(permitToWorkId);
+    // Get permit details with related job permit information
+    const query = `
+      SELECT 
+        ptw.*,
+        jp.JobPermitID,
+        jp.PermitReceiver,
+        jp.Creator as JobPermitCreator,
+        creator.Email as JobPermitCreatorEmail,
+        approver.FirstName as ApproverFirstName,
+        approver.LastName as ApproverLastName,
+        approver.Email as ApproverEmail,
+        approver.DepartmentID as ApproverDepartment
+      FROM PermitToWork ptw
+      JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+      LEFT JOIN Users creator ON jp.Creator = creator.UserID
+      LEFT JOIN Users approver ON approver.UserID = @userId
+      WHERE ptw.PermitToWorkID = @permitToWorkId
+    `;
 
-    if (!permitResult || !permitResult.permit) { // Check for permitResult.permit
+    const permitResult = await transaction.request()
+      .input('permitToWorkId', sql.Int, permitToWorkId)
+      .input('userId', sql.Int, req.user.userId)
+      .query(query);
+
+    if (!permitResult.recordset || permitResult.recordset.length === 0) {
       await transaction.rollback();
-      return res.status(404).json({ 
-        message: 'Permit to Work not found' 
-      });
+      return res.status(404).json({ message: 'Permit to Work not found' });
     }
-
-    // Get the associated JobPermitID from permitResult
-    const { JobPermitID } = permitResult.permit;
-
-    // Get creator email - this is the missing part
-    const creatorEmail = await permitModel.getCreatorEmail(permitResult.permit.Creator);
-
-    // Get user details including department
-    const userDetails = await notificationService.handleStatusUpdate(
-      permitToWorkId,
-      status,
-      {
-        ...req.user,
-        name: `${req.user.firstName} ${req.user.lastName}`.trim() // Ensure we have the full name
-      },
-      comments
-    );
-
-    // Get AssignedTo from the nested permit object
-    const { AssignedTo } = permitResult.permit;
+    const permitDetails = permitResult.recordset[0];
+    const { AssignedTo, JobPermitID, JobPermitCreatorEmail } = permitDetails;
+    const approverName = `${permitDetails.ApproverFirstName} ${permitDetails.ApproverLastName}`;
 
     const userRole = req.user.role.trim();
     if (
@@ -743,88 +746,78 @@ async approvePermitToWork(req, res) {
     await transaction.commit();
 
     try {
-      let usersToNotify = [];
+      let usersToNotify;
       
       if (AssignedTo === 'QA' && status === 'Approved') {
-        // Get all the approval users
-        const approvalUsers = await notificationService.getPermitApprovalUsers(permitToWorkId);
-        
-        // Also get the users via the regular method to ensure we don't miss anyone
-        const regularUsers = await notificationService.getUsersToNotify({
-          department: req.user.departmentId,
-          permitType: 'PermitToWork',
-          createdByEmail: creatorEmail,
-          stage: AssignedTo
-        });
-        
-        // Combine both lists and remove duplicates by email
-        const emailMap = new Map();
-        [...approvalUsers, ...regularUsers].forEach(user => {
-          if (user && user.Email) {
-            emailMap.set(user.Email, user);
-          }
-        });
-        
-        // Make sure the creator/receiver is explicitly included
-        if (creatorEmail) {
-          if (!emailMap.has(creatorEmail)) {
-            emailMap.set(creatorEmail, { 
-              Email: creatorEmail,
-              RoleID: 'RCV',
-              FullName: 'Permit Receiver',
-              UserType: 'Creator'
-            });
-          }
-        }
-        
-        usersToNotify = Array.from(emailMap.values());
+        // For final approval, get all stakeholders
+        const query = `
+          SELECT DISTINCT 
+            u.Email,
+            u.RoleID,
+            u.FirstName + ' ' + u.LastName as FullName,
+            u.DepartmentID,
+            CASE 
+              WHEN u.Email = @creatorEmail THEN 'Creator'
+              ELSE u.RoleID
+            END as UserType
+          FROM Users u
+          WHERE u.RoleID IN ('ISS', 'HOD', 'QA')
+          AND u.DepartmentID = @department
+          AND u.IsActive = 1
+          
+          UNION
+          
+          SELECT 
+            @creatorEmail as Email,
+            'RCV' as RoleID,
+            'Permit Creator' as FullName,
+            @department as DepartmentID,
+            'Creator' as UserType
+          WHERE @creatorEmail IS NOT NULL
+        `;
+
+        const result = await pool.request()
+          .input('department', sql.VarChar(50), permitDetails.ApproverDepartment)
+          .input('creatorEmail', sql.VarChar(100), JobPermitCreatorEmail)
+          .query(query);
+
+        usersToNotify = result.recordset;
       } else {
-        // Use the existing method for other approval stages
+        // For other stages, use regular notification logic
         usersToNotify = await notificationService.getUsersToNotify({
-          department: req.user.departmentId,
+          department: permitDetails.ApproverDepartment,
           permitType: 'PermitToWork',
-          createdByEmail: creatorEmail,
+          createdByEmail: JobPermitCreatorEmail,
           stage: AssignedTo
         });
       }
-      
-      // Extract just email addresses
-      let emailAddresses = usersToNotify.map(user => user.Email).filter(email => email);
-      
-      console.log('Email addresses before ensuring creator inclusion:', emailAddresses);
 
-      // IMPORTANT: Always explicitly ensure creator/receiver email is included
-      if (creatorEmail && !emailAddresses.includes(creatorEmail)) {
-        emailAddresses.push(creatorEmail);
-        console.log('Added creator email to notification list:', creatorEmail);
+      // Always ensure the job permit creator is included
+      if (JobPermitCreatorEmail && !usersToNotify.some(u => u.Email === JobPermitCreatorEmail)) {
+        usersToNotify.push({
+          Email: JobPermitCreatorEmail,
+          RoleID: 'RCV',
+          FullName: 'Permit Creator',
+          UserType: 'Creator'
+        });
       }
 
-      console.log('Final email recipient list:', emailAddresses);
-      
-      if (emailAddresses && emailAddresses.length > 0) {
-        // Fix: ensure user name is properly included
-        const updatedBy = userDetails.updatedBy || req.user.name;
-        
-        await notificationService.sendNotification(
-          emailAddresses,
-          'permitToWorkStatusUpdate',
-          {
-            permitId: permitToWorkId,
-            jobPermitId: JobPermitID,
-            status: status,
-            updatedBy: updatedBy,
-            userRole: req.user.role,
-            departmentName: req.user.departmentName || notificationService.getDepartmentFullName(req.user.departmentId),
-            comments: comments,
-            currentApproverRole: AssignedTo,
-            stage: AssignedTo,
-            permitType: 'PermitToWork',
-            creatorEmail: creatorEmail // Include creator email for reference
-          }
-        );
-      } else {
-        console.log('No users to notify for permit to work status update');
-      }
+      await notificationService.sendNotification(
+        usersToNotify,
+        'permitToWorkStatusUpdate',
+        {
+          permitId: permitToWorkId,
+          jobPermitId: JobPermitID,
+          status: status,
+          updatedBy: approverName,
+          userRole: userRole,
+          departmentName: permitDetails.ApproverDepartment,
+          comments: comments,
+          currentApproverRole: AssignedTo,
+          permitType: 'PermitToWork',
+          commentsSection: comments ? `<p><strong>Comments:</strong> ${comments}</p>` : ''
+        }
+      );
     } catch (notificationError) {
       console.error('Failed to send notification:', notificationError);
     }
@@ -962,127 +955,247 @@ async approvePermitToWork(req, res) {
     const { stage, remarks } = req.body;
 
     try {
-      if (!permitToWorkId || !stage) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Permit ID and completion stage are required' 
-        });
-      }
-
-      // Add authentication check
-      if (!req.user || !req.user.userId) {
-        return res.status(401).json({ 
-          success: false,
-          message: 'User not authenticated' 
-        });
-      }
-
-      const pool = await poolPromise;
-      const transaction = await pool.transaction();
-      
-      try {
-        await transaction.begin();
-
-        // Verify permit status using the model
-        const permit = await permitModel.verifyPermitStatus(permitToWorkId, transaction);
-
-        if (!permit) {
-          throw new Error('Permit not found');
+        if (!permitToWorkId || !stage) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Permit ID and completion stage are required' 
+            });
         }
 
-        if (permit.IsRevoked) {
-          throw new Error('Cannot complete a revoked permit');
+        // Add authentication check
+        if (!req.user || !req.user.userId) {
+            return res.status(401).json({ 
+                success: false,
+                message: 'User not authenticated' 
+            });
         }
 
-        // Validate based on completion stage
-        if (stage === 'ISS') {
-          if (permit.Status !== 'Approved') {
-            throw new Error('Permit must be fully approved before completion');
-          }
-          
-          if (permit.IssuerCompletionStatus === 'Completed') {
-            throw new Error('Issuer has already completed this permit');
-          }
-
-          // Check if user has Issuer role
-          if (req.user.role !== 'ISS') {
-            throw new Error('Only Issuers can complete this stage');
-          }
-        } else if (stage === 'QA') {
-          if (permit.IssuerCompletionStatus !== 'Completed') {
-            throw new Error('Issuer must complete the permit first');
-          }
-          
-          if (permit.QHSSECompletionStatus === 'Completed') {
-            throw new Error('QHSSE has already completed this permit');
-          }
-
-          if (!remarks) {
-            throw new Error('Completion comments are required for QHSSE completion');
-          }
-
-          // Check if user has QA role
-          if (req.user.role !== 'QA') {
-            throw new Error('Only QHSSE can complete this stage');
-          }
-        } else {
-          throw new Error('Invalid completion stage');
-        }
-
-        // Process the completion
-        await permitModel.completePermitToWork(
-          permitToWorkId,
-          { stage, remarks },
-          req.user.userId, // Pass the authenticated user's ID
-          transaction
-        );
-
-        await transaction.commit();
-
+        const pool = await poolPromise;
+        const transaction = await pool.transaction();
+        
         try {
-          const permitDetails = await permitModel.getPermitToWorkById(permitToWorkId);
-          await notificationService.sendNotification(
-            await notificationService.getUsersToNotify({
-              department: permitDetails.permit.Department,
-              permitType: 'PermitToWork'
-            }),
-            'permitToWorkCompleted',
-            {
-              permitId: permitToWorkId,
-              completedBy: req.user.name,
-              stage: stage,
-              remarks: remarks || 'No remarks provided',
-              remarksSection: remarks ? `<p><strong>Remarks:</strong> ${remarks}</p>` : ''
+            await transaction.begin();
+            
+            // Verify permit status using the model
+            const permit = await permitModel.verifyPermitStatus(permitToWorkId, transaction);
+
+            if (!permit) {
+                throw new Error('Permit not found');
             }
-          );
-        } catch (notificationError) {
-          console.error('Failed to send PTW completion notification:', {
-            permitId: permitToWorkId,
-            error: notificationError.message
-          });
+
+            if (permit.IsRevoked) {
+                throw new Error('Cannot complete a revoked permit');
+            }
+
+            // Validate based on completion stage
+            if (stage === 'ISS') {
+                if (permit.Status !== 'Approved') {
+                    throw new Error('Permit must be fully approved before completion');
+                }
+                
+                if (permit.IssuerCompletionStatus === 'Completed') {
+                    throw new Error('Issuer has already completed this permit');
+                }
+
+                // Check if user has Issuer role
+                if (req.user.role !== 'ISS') {
+                    throw new Error('Only Issuers can complete this stage');
+                }
+            } else if (stage === 'QA') {
+                if (permit.IssuerCompletionStatus !== 'Completed') {
+                    throw new Error('Issuer must complete the permit first');
+                }
+                
+                if (permit.QHSSECompletionStatus === 'Completed') {
+                    throw new Error('QHSSE has already completed this permit');
+                }
+
+                if (!remarks) {
+                    throw new Error('Completion comments are required for QHSSE completion');
+                }
+
+                // Check if user has QA role
+                if (req.user.role !== 'QA') {
+                    throw new Error('Only QHSSE can complete this stage');
+                }
+            } else {
+                throw new Error('Invalid completion stage');
+            }
+
+            // Process the completion
+            await permitModel.completePermitToWork(
+                permitToWorkId,
+                { stage, remarks },
+                req.user.userId,
+                transaction
+            );
+            
+            await transaction.commit();
+            
+            // Handle notifications
+            if (stage === 'ISS') {
+                // Get the issuer's full details
+                const issuerQuery = `
+                    SELECT 
+                        u.UserID,
+                        u.Email,
+                        u.FirstName + ' ' + u.LastName as FullName,
+                        u.RoleID,
+                        u.DepartmentID,
+                        d.DepartmentName
+                    FROM Users u
+                    LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
+                    WHERE u.UserID = @userId
+                `;
+            
+                const issuerResult = await pool.request()
+                    .input('userId', sql.Int, req.user.userId)
+                    .query(issuerQuery);
+            
+                const issuerDetails = issuerResult.recordset[0];
+                const permitDetails = await permitModel.getPermitToWorkById(permitToWorkId);
+            
+                // Get QA users and department HOD to notify
+                const usersToNotify = await notificationService.getUsersToNotify({
+                    department: permitDetails.permit.Department,
+                    permitType: 'PermitToWork',
+                    stage: 'ISS_COMPLETE',
+                    permitToWorkId: parseInt(permitToWorkId)
+                });
+            
+                if (issuerDetails?.Email && !usersToNotify.some(user => user.Email === issuerDetails.Email)) {
+                    usersToNotify.push({
+                        Email: issuerDetails.Email,
+                        RoleID: issuerDetails.RoleID,
+                        FullName: issuerDetails.FullName,
+                        DepartmentID: issuerDetails.DepartmentID,
+                        DepartmentName: issuerDetails.DepartmentName,
+                        UserType: 'ISS'
+                    });
+                }
+            
+                if (usersToNotify.length > 0) {
+                    await notificationService.sendNotification(
+                        usersToNotify,
+                        'permitToWorkCompletionInitiated',
+                        {
+                            permitId: permitToWorkId,
+                            jobPermitId: permitDetails.permit.JobPermitID,
+                            initiatedBy: issuerDetails.FullName,
+                            userRole: issuerDetails.RoleID,
+                            departmentName: issuerDetails.DepartmentName,
+                            remarksSection: remarks ? `<p><strong>Remarks:</strong> ${remarks}</p>` : '',
+                            frontendUrl: process.env.FRONTEND_URL
+                        }
+                    );
+                }
+            } else if (stage === 'QA') {
+                // Your existing QA notification code here
+                const notifyQuery = `
+                    SELECT DISTINCT
+                        ptw.PermitToWorkID,
+                        jp.Department,
+                        jp.PermitReceiver,
+                        qa.Email as QAEmail,
+                        qa.FirstName + ' ' + qa.LastName as QAName,
+                        qa.DepartmentID as QADepartment,
+                        qaDept.DepartmentName as QADepartmentName,
+                        creator.Email as CreatorEmail,
+                        creator.FirstName + ' ' + creator.LastName as CreatorName,
+                        issuer.Email as IssuerEmail,
+                        issuer.FirstName + ' ' + issuer.LastName as IssuerName,
+                        hod.Email as HODEmail,
+                        hod.FirstName + ' ' + hod.LastName as HODName,
+                        receiver.Email as ReceiverEmail
+                    FROM PermitToWork ptw
+                    JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+                    LEFT JOIN Users qa ON qa.UserID = @currentUserId
+                    LEFT JOIN Departments qaDept ON qa.DepartmentID = qaDept.DepartmentID
+                    LEFT JOIN Users creator ON jp.Creator = creator.UserID
+                    LEFT JOIN Users issuer ON ptw.IssuerApprovedBy = issuer.UserID
+                    LEFT JOIN Users hod ON ptw.HODApprovedBy = hod.UserID
+                    LEFT JOIN Users receiver ON receiver.FirstName + ' ' + receiver.LastName = jp.PermitReceiver
+                    WHERE ptw.PermitToWorkID = @permitToWorkId
+                `;
+                
+                const notifyResult = await pool.request()
+                    .input('permitToWorkId', sql.Int, permitToWorkId)
+                    .input('currentUserId', sql.Int, req.user.userId)
+                    .query(notifyQuery);
+                
+                const permitInfo = notifyResult.recordset[0];
+                const completionRecipients = [];
+                
+                if (permitInfo?.IssuerEmail) {
+                    completionRecipients.push({
+                        Email: permitInfo.IssuerEmail,
+                        FullName: permitInfo.IssuerName,
+                        UserType: 'Issuer'
+                    });
+                }
+                
+                if (permitInfo?.HODEmail) {
+                    completionRecipients.push({
+                        Email: permitInfo.HODEmail,
+                        FullName: permitInfo.HODName,
+                        UserType: 'HOD'
+                    });
+                }
+                
+                if (permitInfo?.ReceiverEmail) {
+                    completionRecipients.push({
+                        Email: permitInfo.ReceiverEmail,
+                        FullName: permitInfo.PermitReceiver,
+                        UserType: 'Receiver'
+                    });
+                }
+                
+                if (permitInfo?.CreatorEmail && permitInfo.CreatorEmail !== permitInfo.ReceiverEmail) {
+                    completionRecipients.push({
+                        Email: permitInfo.CreatorEmail,
+                        FullName: permitInfo.CreatorName,
+                        UserType: 'Creator'
+                    });
+                }
+                
+                if (completionRecipients.length > 0) {
+                    await notificationService.sendNotification(
+                        completionRecipients,
+                        'permitToWorkCompleted',
+                        {
+                            permitId: permitToWorkId,
+                            completedBy: permitInfo.QAName,
+                            userRole: `QA of ${permitInfo.QADepartmentName} Department`,
+                            stage: 'Final Completion',
+                            remarks: remarks || 'No remarks provided',
+                            remarksSection: remarks ? `<p><strong>Remarks:</strong> ${remarks}</p>` : '',
+                            frontendUrl: process.env.FRONTEND_URL
+                        }
+                    );
+                }
+            }
+
+            res.json({
+                success: true,
+                message: stage === 'ISS' ? 
+                    'Completion initiated successfully. Awaiting QA review.' :
+                    'Permit has been completed successfully.'
+            });
+
+        } catch (error) {
+            if (transaction._begun) {
+                await transaction.rollback();
+            }
+            throw error;
         }
-
-        res.json({
-          success: true,
-          message: `Permit successfully completed by ${stage === 'ISS' ? 'Issuer' : 'QHSSE'}`
-        });
-
-      } catch (error) {
-        if (transaction._begun) {
-          await transaction.rollback();
-        }
-        throw error;
-      }
-
     } catch (error) {
-      console.error('Error in completePermitToWork:', error);
-      res.status(400).json({
-        success: false,
-        message: error.message || 'Failed to complete permit'
-      });
+        console.error('Error in completePermitToWork:', error);
+        res.status(400).json({
+            success: false,
+            message: error.message || 'Failed to complete permit'
+        });
     }
 },
-
 
 
 //PERMIT REVOCATION PHASE
@@ -1148,51 +1261,120 @@ async initiateRevocation(req, res) {
     await transaction.commit();
 
     // Send revocation notifications after commit
-    try {
-      for (const permit of permits) {
-        await notificationService.sendNotification(
-          await notificationService.getUsersToNotify({
-            department: req.user.departmentId,
-            permitType: permit.type === 'job' ? 'JobPermit' : 'PermitToWork'
-          }),
-          'permitStatusUpdate',
-          {
-            permitId: permit.id,
-            status: 'Revocation Initiated',
-            updatedBy: req.user.name,
-            comments: reason
-          }
-        );
-      }
-    } catch (notificationError) {
-      console.error('Failed to send revocation notification:', {
-        permits: permits.map(p => ({ id: p.id, type: p.type })),
-        error: notificationError.message,
-        stack: notificationError.stack,
-        userData: {
-          name: req.user.name,
-          department: req.user.departmentId
-        }
-      });
+    // Inside initiateRevocation method, update the notification section:
+
+try {
+  for (const permit of permits) {
+    // First get the complete initiator details
+    const initiatorQuery = `
+      SELECT 
+        u.UserID,
+        u.FirstName + ' ' + u.LastName as FullName,
+        u.Email,
+        u.RoleID,
+        d.DepartmentName,
+        d.DepartmentID
+      FROM Users u
+      LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
+      WHERE u.UserID = @userId
+    `;
+
+    const initiatorResult = await pool.request()
+      .input('userId', sql.Int, req.user.userId)
+      .query(initiatorQuery);
+
+    const initiator = initiatorResult.recordset[0];
+
+    // Get permit details
+    const permitQuery = `
+      SELECT 
+        ptw.PermitToWorkID,
+        jp.JobPermitID,
+        jp.Department,
+        jp.PermitReceiver,
+        creator.Email as CreatorEmail
+      FROM PermitToWork ptw
+      JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+      LEFT JOIN Users creator ON jp.Creator = creator.UserID
+      WHERE ptw.PermitToWorkID = @permitId
+    `;
+
+    const permitResult = await pool.request()
+      .input('permitId', sql.Int, permit.id)
+      .query(permitQuery);
+
+    if (!permitResult.recordset[0]) {
+      console.error('Permit details not found:', permit.id);
+      continue;
     }
 
+    const permitInfo = permitResult.recordset[0];
     const isQHSSE = req.user.role === 'QA';
-    res.json({
-      message: isQHSSE ? 
-        'Selected permits have been revoked' : 
-        'Revocation request has been initiated and pending QHSSE approval'
+    const stage = isQHSSE ? 'QA_REVOKE' : 'ISS_REVOKE';
+    const templateName = isQHSSE ? 'permitRevoked' : 'permitToWorkRevocationInitiated';
+
+    // Get users to notify
+    const usersToNotify = await notificationService.getUsersToNotify({
+      department: permitInfo.Department,
+      permitType: 'PermitToWork',
+      stage: stage,
+      permitToWorkId: permit.id
     });
 
-  } catch (error) {
-    if (transaction._begun) {
-      await transaction.rollback();
-    }
-    console.error('Error initiating revocation:', error);
-    res.status(500).json({
-      message: 'Error initiating revocation',
-      error: error.message
-    });
+    console.log('Notification recipients:', usersToNotify);
+    console.log('Initiator details:', initiator);
+
+    // Prepare notification data with complete initiator details
+    const notificationData = {
+      permitId: permit.id,
+      jobPermitId: permitInfo.JobPermitID,
+      permitType: 'Permit to Work',
+      status: isQHSSE ? 'Revoked' : 'Revocation Initiated',
+      initiatedBy: initiator.FullName,
+      userRole: initiator.RoleID,
+      departmentName: initiator.DepartmentName,
+      revocationReason: reason,
+      remarksSection: reason ? `<p><strong>Remarks:</strong> ${reason}</p>` : '',
+      permitUrlPath: 'permits/ptw',
+      frontendUrl: process.env.FRONTEND_URL
+    };
+
+    console.log('Sending notification with data:', notificationData);
+
+    // Send the notification
+    await notificationService.sendNotification(
+      usersToNotify,
+      templateName,
+      notificationData
+    );
   }
+} catch (notificationError) {
+  console.error('Failed to send revocation notification:', {
+    error: notificationError.message,
+    stack: notificationError.stack,
+    permits: permits.map(p => ({ id: p.id, type: p.type }))
+  });
+}
+
+const isQHSSE = req.user.role === 'QA';
+
+// Your existing response
+res.json({
+  message: isQHSSE ? 
+    'Selected permits have been revoked' : 
+    'Revocation request has been initiated and pending QHSSE approval'
+});
+
+} catch (error) {
+  if (transaction._begun) {
+    await transaction.rollback();
+  }
+  console.error('Error initiating revocation:', error);
+  res.status(500).json({
+    message: 'Error initiating revocation',
+    error: error.message
+  });
+}
 },
 
 async getPendingRevocations(req, res) {
@@ -1275,6 +1457,27 @@ async approveRevocation(req, res) {
     await transaction.begin();
 
     try {
+      // First get the QA approver's details
+      const approverQuery = `
+        SELECT 
+          u.UserID,
+          u.FirstName + ' ' + u.LastName as FullName,
+          u.Email,
+          u.RoleID,
+          d.DepartmentName,
+          d.DepartmentID
+        FROM Users u
+        LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
+        WHERE u.UserID = @userId
+      `;
+
+      const approverResult = await pool.request()
+        .input('userId', sql.Int, req.user.userId)
+        .query(approverQuery);
+
+      const approver = approverResult.recordset[0];
+
+      // Process each permit
       await Promise.all(permits.map(async permit => {
         return permitModel.approveRevocation(
           permit.id,
@@ -1288,32 +1491,86 @@ async approveRevocation(req, res) {
 
       await transaction.commit();
 
+      // Send notifications after successful commit
       try {
         await Promise.all(permits.map(async permit => {
-          const permitDetails = permit.type === 'job' 
-            ? await permitModel.getPermitById(permit.id)
-            : await permitModel.getPermitToWorkById(permit.id);
-            
+          // Get complete permit details
+          const permitQuery = `
+            SELECT 
+              ptw.PermitToWorkID,
+              jp.JobPermitID,
+              jp.Department,
+              jp.PermitReceiver,
+              creator.Email as CreatorEmail,
+              issuer.Email as IssuerEmail,
+              issuer.FirstName + ' ' + issuer.LastName as IssuerName,
+              hod.Email as HODEmail,
+              receiver.Email as ReceiverEmail,
+              receiver.FirstName + ' ' + receiver.LastName as ReceiverName
+            FROM PermitToWork ptw
+            JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+            LEFT JOIN Users creator ON jp.Creator = creator.UserID
+            LEFT JOIN Users issuer ON ptw.IssuerApprovedBy = issuer.UserID
+            LEFT JOIN Users hod ON ptw.HODApprovedBy = hod.UserID
+            LEFT JOIN Users receiver ON receiver.FirstName + ' ' + receiver.LastName = jp.PermitReceiver
+            WHERE ptw.PermitToWorkID = @permitId
+          `;
+
+          const permitResult = await pool.request()
+            .input('permitId', sql.Int, permit.id)
+            .query(permitQuery);
+
+          const permitInfo = permitResult.recordset[0];
+
+          // Get users to notify
+          const usersToNotify = await notificationService.getUsersToNotify({
+            department: permitInfo.Department,
+            permitType: permit.type === 'job' ? 'JobPermit' : 'PermitToWork',
+            stage: 'QA_REVOKE',
+            permitToWorkId: permit.id
+          });
+
+          // Ensure all relevant parties are included in notifications
+          const additionalRecipients = [
+            { email: permitInfo.CreatorEmail, type: 'Creator' },
+            { email: permitInfo.IssuerEmail, type: 'Issuer' },
+            { email: permitInfo.HODEmail, type: 'HOD' },
+            { email: permitInfo.ReceiverEmail, type: 'Receiver' }
+          ].filter(r => r.email && !usersToNotify.some(u => u.Email === r.email));
+
+          additionalRecipients.forEach(recipient => {
+            usersToNotify.push({
+              Email: recipient.email,
+              UserType: recipient.type
+            });
+          });
+
+          // Prepare notification data
+          const notificationData = {
+            permitId: permit.id,
+            jobPermitId: permitInfo.JobPermitID,
+            permitType: permit.type === 'job' ? 'Job Permit' : 'Permit to Work',
+            status: status === 'Approved' ? 'Revoked' : 'Revocation Rejected',
+            initiatedBy: approver.FullName,
+            userRole: approver.RoleID,
+            departmentName: approver.DepartmentName,
+            revocationReason: comments,
+            remarksSection: comments ? `<p><strong>Remarks:</strong> ${comments}</p>` : '',
+            permitUrlPath: permit.type === 'job' ? 'permits' : 'permits/ptw',
+            frontendUrl: process.env.FRONTEND_URL
+          };
+
+          // Send notification using appropriate template
           await notificationService.sendNotification(
-            await notificationService.getUsersToNotify({
-              department: permitDetails.Department,
-              permitType: permit.type === 'job' ? 'JobPermit' : 'PermitToWork'
-            }),
-            'permitRevoked',
-            {
-              permitId: permit.id,
-              permitType: permit.type === 'job' ? 'Job Permit' : 'Permit to Work',
-              status: status,
-              approvedBy: req.user.name,
-              comments: comments,
-              permitUrlPath: permit.type === 'job' ? 'permits' : 'permits/ptw'
-            }
+            usersToNotify,
+            status === 'Approved' ? 'permitRevoked' : 'permitStatusUpdate',
+            notificationData
           );
         }));
       } catch (notificationError) {
         console.error('Failed to send revocation notification:', {
-          permits: permits.map(p => ({ id: p.id, type: p.type })),
-          error: notificationError.message
+          error: notificationError.message,
+          permits: permits.map(p => ({ id: p.id, type: p.type }))
         });
       }
 
@@ -1340,7 +1597,7 @@ async approveRevocation(req, res) {
         });
       }
 
-      throw error; // Re-throw other errors to be caught by outer catch block
+      throw error;
     }
 
   } catch (error) {

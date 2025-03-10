@@ -203,7 +203,7 @@ export const api = {
   async logout() {
     try {
       window.localStorage.clear()
-      window.location.href = '/'
+      // window.location.href = '/'
     } catch (error) {
       throw error;
     }
