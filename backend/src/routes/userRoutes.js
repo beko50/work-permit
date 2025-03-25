@@ -6,6 +6,8 @@ const authMiddleware = require('../middleware/authMiddleware');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const userModel = require('../models/userModel');
+const notificationService = require('../services/emailService');
+require('dotenv').config();
 
 // Define admin middleware inline to avoid the casing issue
 const adminMiddleware = (req, res, next) => {
@@ -119,6 +121,75 @@ router.put('/admin/users/:userId/activate', authMiddleware, adminMiddleware, asy
   } catch (error) {
     console.error('Error updating user activation status:', error);
     res.status(500).json({ message: 'Error updating user status' });
+  }
+});
+
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Check if user exists
+    const user = await userModel.findByEmail(email);
+    if (!user) {
+      return res.status(404).json({ 
+        message: 'If this email exists in our system, you will receive a password reset link.' 
+      });
+    }
+
+    // Generate reset token
+    const resetToken = jwt.sign(
+      { userId: user.UserID },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    // Save reset token and expiry in database
+    await userModel.saveResetToken(user.UserID, resetToken);
+
+    // Send reset email
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    await notificationService.sendNotification(
+      email,
+      'passwordReset',
+      {
+        firstName: user.FirstName,
+        lastName: user.LastName,
+        resetLink: resetLink
+      }
+    );
+
+    res.json({ 
+      message: 'If this email exists in our system, you will receive a password reset link.' 
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ message: 'Error processing password reset request' });
+  }
+});
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if token is valid and not expired in database
+    const isValidToken = await userModel.validateResetToken(decoded.userId, token);
+    if (!isValidToken) {
+      return res.status(400).json({ message: 'Invalid or expired reset token' });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear reset token
+    await userModel.updatePassword(decoded.userId, hashedPassword);
+
+    res.json({ message: 'Password has been reset successfully' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(400).json({ message: 'Invalid or expired reset token' });
   }
 });
 

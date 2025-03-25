@@ -1,4 +1,5 @@
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'http://172.20.20.221:5000/api';
+//const API_URL = 'http://localhost:5000/api';
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
   return {
@@ -205,6 +206,53 @@ export const api = {
       window.localStorage.clear()
       // window.location.href = '/'
     } catch (error) {
+      throw error;
+    }
+  },
+
+  forgotPassword: async (email) => {
+    try {
+      const response = await fetch(`${API_URL}/users/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email })
+      });
+  
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to send reset email');
+      }
+  
+      return await response.json();
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      throw error;
+    }
+  },
+  
+  resetPassword: async (token, newPassword) => {
+    try {
+      const response = await fetch(`${API_URL}/users/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          token,
+          newPassword
+        })
+      });
+  
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to reset password');
+      }
+  
+      return await response.json();
+    } catch (error) {
+      console.error('Reset password error:', error);
       throw error;
     }
   },
@@ -830,6 +878,12 @@ export const api = {
         }
 
         const data = await response.json();
+        
+        if (!response.ok) {
+            // Return the complete error message from the backend
+            throw new Error(data.message || 'Failed to initiate permit revocation');
+        }
+
         return {
             success: true,
             data,
@@ -837,7 +891,7 @@ export const api = {
         };
 
     } catch (error) {
-        console.error('Error in revokePermits:', error);
+        // Propagate the complete error message
         throw error;
     }
 },

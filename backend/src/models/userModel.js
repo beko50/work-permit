@@ -79,7 +79,8 @@ const userModel = {
   // Create new user with proper defaults
   async createUser(userData, transaction) {
     // Determine if user is internal based on email domain
-    const isInternalUser = userData.email.endsWith('@mps-gh.com');
+    const isInternalUser = userData.email.endsWith('@mps-gh.com') || 
+                        userData.email.endsWith('@mpsgh.onmicrosoft.com');
     
     const result = await transaction.request()
       .input('firstName', sql.VarChar, userData.firstName)
@@ -220,6 +221,51 @@ const userModel = {
         WHERE u.UserID = @userId
       `);
     return result.recordset[0];
+  },
+
+  async saveResetToken(userId, resetToken) {
+    const pool = await poolPromise;
+    await pool.request()
+      .input('userId', sql.Int, userId)
+      .input('resetToken', sql.VarChar, resetToken)
+      .input('resetTokenExpiry', sql.DateTime, new Date(Date.now() + 3600000)) // 1 hour from now
+      .query(`
+        UPDATE Users
+        SET ResetToken = @resetToken,
+            ResetTokenExpiry = @resetTokenExpiry
+        WHERE UserID = @userId
+      `);
+  },
+  
+  async validateResetToken(userId, resetToken) {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('userId', sql.Int, userId)
+      .input('resetToken', sql.VarChar, resetToken)
+      .input('now', sql.DateTime, new Date())
+      .query(`
+        SELECT 1
+        FROM Users
+        WHERE UserID = @userId
+          AND ResetToken = @resetToken
+          AND ResetTokenExpiry > @now
+      `);
+    return result.recordset.length > 0;
+  },
+  
+  async updatePassword(userId, hashedPassword) {
+    const pool = await poolPromise;
+    await pool.request()
+      .input('userId', sql.Int, userId)
+      .input('passwordHash', sql.VarChar, hashedPassword)
+      .query(`
+        UPDATE Users
+        SET PasswordHash = @passwordHash,
+            ResetToken = NULL,
+            ResetTokenExpiry = NULL,
+            Changed = GETDATE()
+        WHERE UserID = @userId
+      `);
   },
 
   async getRoles() {

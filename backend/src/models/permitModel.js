@@ -943,15 +943,15 @@ async getPermitToWorkByRole(user) {
   // Get user role info and trim whitespace
   const userRoleInfo = await this.getUserRole(user.userId);
   const userRoleId = userRoleInfo ? userRoleInfo.RoleID.trim() : null;
-  
   const userDepartmentId = user.departmentId ? user.departmentId.trim() : null;
   
   console.log(`Determined role for user ${user.userId}: '${userRoleId}', Department: ${userDepartmentId}`);
   
   // For QA role (QHS Approver) - can see ALL permits to work regardless of department
-  if (userRoleId === 'QA') {
-    // No additional filtering needed - QA sees all permits
-    console.log(`QA role detected for user ${user.userId}. No department filtering applied.`);
+   // For QA role and QHSSE Issuers - can see ALL permits to work
+   if (userRoleId === 'QA' || (userDepartmentId === 'QHSSE' && userRoleId === 'ISS')) {
+    // No additional filtering needed - they see all permits
+    console.log(`QA role or QHSSE Issuer detected for user ${user.userId}. No department filtering applied.`);
   }
   // For ISS and HOD roles - they only see permits for their department
   else if (userRoleId === 'ISS' || userRoleId === 'HOD') {
@@ -1171,6 +1171,38 @@ async searchPTW(searchParams, user) {
       throw new Error('User ID is required for completion');
     }
 
+    // First, check if the user is a QHSSE Issuer and verify department
+    const userInfo = await transaction.request()
+    .input('userId', sql.Int, userId)
+    .input('permitToWorkId', sql.Int, permitToWorkId)  // Add this line to fix the error
+    .query(`
+      SELECT 
+        u.RoleID, 
+        u.DepartmentID, 
+        jp.Department as PermitDepartment
+      FROM Users u
+      CROSS APPLY (
+        SELECT jp.Department
+        FROM PermitToWork ptw
+        INNER JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+        WHERE ptw.PermitToWorkID = @permitToWorkId
+      ) jp
+      WHERE u.UserID = @userId
+    `);
+
+  if (!userInfo.recordset || userInfo.recordset.length === 0) {
+    throw new Error('Unable to verify user permissions or permit details');
+  }
+
+const userRole = userInfo.recordset[0]?.RoleID?.trim();
+const userDept = userInfo.recordset[0]?.DepartmentID?.trim();
+const permitDept = userInfo.recordset[0]?.PermitDepartment;
+
+// If user is QHSSE Issuer, they can only complete permits from their department
+if (userRole === 'ISS' && userDept === 'QHSSE' && permitDept !== 'QHSSE') {
+  throw new Error('QHSSE Issuers can only complete permits from their own department');
+}
+
     const columnMap = {
       'ISS': {
         status: 'IssuerCompletionStatus',
@@ -1261,37 +1293,49 @@ async checkUserPermissionForRevocation(userId, role) {
   },
   
   async initiatePermitToWorkRevocation(permitToWorkId, reason, userId, transaction) {
-    const result = await transaction.request()
-      .input('permitToWorkId', sql.Int, permitToWorkId)
-      .input('userId', sql.Int, userId)
-      .input('reason', sql.NVarChar(sql.MAX), reason)
-      .query(`
-        UPDATE PermitToWork
-        SET Status = CASE 
-              WHEN (SELECT RoleID FROM Users WHERE UserID = @userId) = 'QA' 
-              THEN 'Revoked'
-              ELSE 'Revocation Pending'
-            END,
-            RevocationInitiatedBy = @userId,
-            RevocationInitiatedDate = GETDATE(),
-            RevocationReason = @reason,
-            RevocationApprovedBy = CASE 
-              WHEN (SELECT RoleID FROM Users WHERE UserID = @userId) = 'QA' 
-              THEN @userId
-              ELSE NULL
-            END,
-            RevocationApprovedDate = CASE 
-              WHEN (SELECT RoleID FROM Users WHERE UserID = @userId) = 'QA' 
-              THEN GETDATE()
-              ELSE NULL
-            END,
-            Changed = GETDATE(),
-            Changer = @userId
-        WHERE PermitToWorkID = @permitToWorkId;
-      `);
-    
-    return result.rowsAffected[0];
-  },
+    // First check user role and permit department
+  const userCheck = await transaction.request()
+  .input('userId', sql.Int, userId)
+  .input('permitToWorkId', sql.Int, permitToWorkId)
+  .query(`
+    SELECT 
+      u.RoleID,
+      u.DepartmentID,
+      jp.Department as PermitDepartment
+    FROM Users u
+    INNER JOIN PermitToWork ptw ON ptw.PermitToWorkID = @permitToWorkId
+    INNER JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+    WHERE u.UserID = @userId
+  `);
+
+const userRole = userCheck.recordset[0]?.RoleID?.trim();
+const userDept = userCheck.recordset[0]?.DepartmentID?.trim();
+const permitDept = userCheck.recordset[0]?.PermitDepartment;
+
+// If user is QHSSE Issuer, they can only revoke permits from their department
+if (userRole === 'ISS' && userDept === 'QHSSE' && permitDept !== 'QHSSE') {
+  throw new Error('QHSSE Issuers can only revoke permits from their own department');
+}
+
+const result = await transaction.request()
+.input('permitToWorkId', sql.Int, permitToWorkId)
+.input('userId', sql.Int, userId)
+.input('reason', sql.NVarChar(sql.MAX), reason)
+.query(`
+    UPDATE PermitToWork
+    SET Status = 'Revoked',  -- Changed: Always set to Revoked for both ISS and QA
+        RevocationInitiatedBy = @userId,
+        RevocationInitiatedDate = GETDATE(),
+        RevocationReason = @reason,
+        RevocationApprovedBy = @userId,  -- Set approver as the same user
+        RevocationApprovedDate = GETDATE(),
+        Changed = GETDATE(),
+        Changer = @userId
+    WHERE PermitToWorkID = @permitToWorkId;
+`);
+
+return result.rowsAffected[0];
+},
 
   async initiateJobPermitRevocation(jobPermitId, reason, userId, transaction) {
     // First get the user's role

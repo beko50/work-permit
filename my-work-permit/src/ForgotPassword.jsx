@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import logo from './assets/mps_logo-Photoroom.png';
 import backgroundImage from './assets/background_1.jpg';
 import { useNavigate } from 'react-router-dom';
+import { api } from './services/api';
 
 const ForgotPasswordPage = () => {
   const navigate = useNavigate();
@@ -23,29 +24,21 @@ const ForgotPasswordPage = () => {
     e.preventDefault();
     setIsLoading(true);
     setMessage({ type: '', text: '' });
-
+  
     try {
-      // Here you would make an API call to your backend
-      // For demonstration purposes, we'll simulate a successful response
-      
-      // Simulating API call delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // On success:
+      await api.forgotPassword(email);
       setMessage({
         type: 'success',
-        text: 'Password reset link has been sent to your email address.'
+        text: 'If this email exists in our system, you will receive a password reset link.'
       });
       
-      // After some time, you might want to redirect back to sign in
       setTimeout(() => {
         navigate('/');
       }, 3000);
-      
     } catch (error) {
       setMessage({
         type: 'error',
-        text: 'Failed to send reset link. Please try again.'
+        text: 'An error occurred while processing your request. Please try again.'
       });
     } finally {
       setIsLoading(false);

@@ -6,6 +6,7 @@ import AdminSignInPage from './AdminSignInPage';
 import SignInPage from './SignInPage';
 import SignUpPage from './SignUpPage';
 import ForgotPasswordPage from './ForgotPassword';
+import ResetPassword from './ResetPassword';
 import Dashboard from './Sidebar';
 import Home from './Home';
 import { AuthProvider } from './context/AuthContext';
@@ -35,6 +36,7 @@ function App() {
           <Route path="/sign-in" element={<SignInPage />} />
           <Route path="/sign-up" element={<SignUpPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Admin routes */}
           <Route path="/admin" element={<Navigate to="/admin/sign-in" replace />} />

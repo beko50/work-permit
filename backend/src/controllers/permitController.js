@@ -1261,120 +1261,106 @@ async initiateRevocation(req, res) {
     await transaction.commit();
 
     // Send revocation notifications after commit
-    // Inside initiateRevocation method, update the notification section:
+    try {
+      for (const permit of permits) {
+        // Get the complete initiator details
+        const initiatorQuery = `
+          SELECT 
+            u.UserID,
+            u.FirstName + ' ' + u.LastName as FullName,
+            u.Email,
+            u.RoleID,
+            d.DepartmentName,
+            d.DepartmentID
+          FROM Users u
+          LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
+          WHERE u.UserID = @userId
+        `;
 
-try {
-  for (const permit of permits) {
-    // First get the complete initiator details
-    const initiatorQuery = `
-      SELECT 
-        u.UserID,
-        u.FirstName + ' ' + u.LastName as FullName,
-        u.Email,
-        u.RoleID,
-        d.DepartmentName,
-        d.DepartmentID
-      FROM Users u
-      LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
-      WHERE u.UserID = @userId
-    `;
+        const initiatorResult = await pool.request()
+          .input('userId', sql.Int, req.user.userId)
+          .query(initiatorQuery);
 
-    const initiatorResult = await pool.request()
-      .input('userId', sql.Int, req.user.userId)
-      .query(initiatorQuery);
+        const initiator = initiatorResult.recordset[0];
 
-    const initiator = initiatorResult.recordset[0];
+        // Get permit details
+        const permitQuery = `
+          SELECT 
+            ptw.PermitToWorkID,
+            jp.JobPermitID,
+            jp.Department,
+            jp.PermitReceiver,
+            creator.Email as CreatorEmail
+          FROM PermitToWork ptw
+          JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
+          LEFT JOIN Users creator ON jp.Creator = creator.UserID
+          WHERE ptw.PermitToWorkID = @permitId
+        `;
 
-    // Get permit details
-    const permitQuery = `
-      SELECT 
-        ptw.PermitToWorkID,
-        jp.JobPermitID,
-        jp.Department,
-        jp.PermitReceiver,
-        creator.Email as CreatorEmail
-      FROM PermitToWork ptw
-      JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
-      LEFT JOIN Users creator ON jp.Creator = creator.UserID
-      WHERE ptw.PermitToWorkID = @permitId
-    `;
+        const permitResult = await pool.request()
+          .input('permitId', sql.Int, permit.id)
+          .query(permitQuery);
 
-    const permitResult = await pool.request()
-      .input('permitId', sql.Int, permit.id)
-      .query(permitQuery);
+        if (!permitResult.recordset[0]) {
+          console.error('Permit details not found:', permit.id);
+          continue;
+        }
 
-    if (!permitResult.recordset[0]) {
-      console.error('Permit details not found:', permit.id);
-      continue;
+        const permitInfo = permitResult.recordset[0];
+
+        // Get users to notify
+        const usersToNotify = await notificationService.getUsersToNotify({
+          department: permitInfo.Department,
+          permitType: permit.type === 'job' ? 'JobPermit' : 'PermitToWork',
+          stage: 'REVOKED', // Changed: Always use REVOKED stage
+          permitToWorkId: permit.id
+        });
+
+        // Prepare notification data
+        const notificationData = {
+          permitId: permit.id,
+          jobPermitId: permitInfo.JobPermitID,
+          permitType: permit.type === 'job' ? 'Job Permit' : 'Permit to Work',
+          status: 'Revoked', // Changed: Always set to Revoked
+          initiatedBy: initiator.FullName,
+          userRole: initiator.RoleID,
+          departmentName: initiator.DepartmentName,
+          revocationReason: reason,
+          remarksSection: reason ? `<p><strong>Remarks:</strong> ${reason}</p>` : '',
+          permitUrlPath: permit.type === 'job' ? 'permits' : 'permits/ptw',
+          frontendUrl: process.env.FRONTEND_URL
+        };
+
+        // Send notification using permitRevoked template
+        await notificationService.sendNotification(
+          usersToNotify,
+          'permitRevoked', // Changed: Always use permitRevoked template
+          notificationData
+        );
+      }
+    } catch (notificationError) {
+      console.error('Failed to send revocation notification:', {
+        error: notificationError.message,
+        stack: notificationError.stack,
+        permits: permits.map(p => ({ id: p.id, type: p.type }))
+      });
     }
 
-    const permitInfo = permitResult.recordset[0];
-    const isQHSSE = req.user.role === 'QA';
-    const stage = isQHSSE ? 'QA_REVOKE' : 'ISS_REVOKE';
-    const templateName = isQHSSE ? 'permitRevoked' : 'permitToWorkRevocationInitiated';
-
-    // Get users to notify
-    const usersToNotify = await notificationService.getUsersToNotify({
-      department: permitInfo.Department,
-      permitType: 'PermitToWork',
-      stage: stage,
-      permitToWorkId: permit.id
+    // Return success response
+    res.json({
+      message: 'Selected permits have been revoked' // Changed: Always show revoked message
     });
 
-    console.log('Notification recipients:', usersToNotify);
-    console.log('Initiator details:', initiator);
-
-    // Prepare notification data with complete initiator details
-    const notificationData = {
-      permitId: permit.id,
-      jobPermitId: permitInfo.JobPermitID,
-      permitType: 'Permit to Work',
-      status: isQHSSE ? 'Revoked' : 'Revocation Initiated',
-      initiatedBy: initiator.FullName,
-      userRole: initiator.RoleID,
-      departmentName: initiator.DepartmentName,
-      revocationReason: reason,
-      remarksSection: reason ? `<p><strong>Remarks:</strong> ${reason}</p>` : '',
-      permitUrlPath: 'permits/ptw',
-      frontendUrl: process.env.FRONTEND_URL
-    };
-
-    console.log('Sending notification with data:', notificationData);
-
-    // Send the notification
-    await notificationService.sendNotification(
-      usersToNotify,
-      templateName,
-      notificationData
-    );
+  } catch (error) {
+    if (transaction._begun) {
+      await transaction.rollback();
+    }
+    console.error('Error initiating revocation:', error);
+    res.status(500).json({
+      message: 'Error initiating revocation',
+      error: error.message
+    });
   }
-} catch (notificationError) {
-  console.error('Failed to send revocation notification:', {
-    error: notificationError.message,
-    stack: notificationError.stack,
-    permits: permits.map(p => ({ id: p.id, type: p.type }))
-  });
-}
-
-const isQHSSE = req.user.role === 'QA';
-
-// Your existing response
-res.json({
-  message: isQHSSE ? 
-    'Selected permits have been revoked' : 
-    'Revocation request has been initiated and pending QHSSE approval'
-});
-
-} catch (error) {
-  if (transaction._begun) {
-    await transaction.rollback();
-  }
-  console.error('Error initiating revocation:', error);
-  res.status(500).json({
-    message: 'Error initiating revocation',
-    error: error.message
-  });
-}
 },
 
 async getPendingRevocations(req, res) {

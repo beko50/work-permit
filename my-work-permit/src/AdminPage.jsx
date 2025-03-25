@@ -331,7 +331,9 @@ const AddAdminModal = ({ isOpen, onClose, onConfirm, departments }) => {
 };
 
 // Helper functions moved outside the component
-const isInternalUser = (email) => email.endsWith('@mps-gh.com');
+const isInternalUser = (email) => {
+  return email.endsWith('@mps-gh.com') || email.endsWith('@mpsgh.onmicrosoft.com');
+};
 
 const AdminPage = () => {
   const navigate = useNavigate();

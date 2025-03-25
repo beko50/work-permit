@@ -148,6 +148,29 @@ class NotificationService {
           </div>
         `
       },
+      passwordReset: {
+        subject: 'Password Reset Request - MPS Work Permit System',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2c3e50;">Password Reset Request</h2>
+            <div style="padding: 20px; background-color: #f8f9fa; border-radius: 5px;">
+              <p>Hello #{firstName},</p>
+              <p>You recently requested to reset your password for your MPS Work Permit System account. Click the button below to reset it:</p>
+              <div style="margin: 30px 0; text-align: center;">
+                <a href="#{resetLink}" 
+                   style="background-color: #007bff; color: white; padding: 12px 24px; 
+                          text-decoration: none; border-radius: 5px; display: inline-block;">
+                  Reset Your Password
+                </a>
+              </div>
+              <p style="margin-top: 20px;">If the button above doesn't work, you can copy and paste this link into your browser:</p>
+              <p style="word-break: break-all; color: #007bff;">#{resetLink}</p>
+              <p style="margin-top: 20px; color: #666;">If you did not request a password reset, please ignore this email or contact support if you have concerns.</p>
+              <p style="color: #dc3545;">This password reset link is only valid for 1 hour.</p>
+            </div>
+          </div>
+        `
+      },
       permitToWorkCompletionInitiated: {
         subject: 'Permit to Work Completion Initiated - PTW-#{permitId}',
         html: `
@@ -288,6 +311,7 @@ class NotificationService {
           JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
           LEFT JOIN Users u ON u.FirstName + ' ' + u.LastName = jp.PermitReceiver
           WHERE ptw.PermitToWorkID = @permitToWorkId
+          AND (u.IsActive = 1 OR u.IsActive IS NULL)
         `;
 
         const permitResult = await transaction.request()
@@ -314,7 +338,7 @@ class NotificationService {
           END as UserType
         FROM Users u
         LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
-        WHERE (
+        WHERE u.IsActive = 1 AND (
       `;
 
       // Handle completion stages
@@ -383,6 +407,7 @@ class NotificationService {
           JOIN Users u ON ptw.IssuerApprovedBy = u.UserID
           LEFT JOIN Departments d ON u.DepartmentID = d.DepartmentID
           WHERE ptw.PermitToWorkID = @permitToWorkId
+          AND u.IsActive = 1
         `;
       
         const issuerResult = await transaction.request()
@@ -436,9 +461,9 @@ class NotificationService {
             hod.FirstName + ' ' + hod.LastName as HODName
           FROM PermitToWork ptw
           JOIN JobPermits jp ON ptw.JobPermitID = jp.JobPermitID
-          LEFT JOIN Users receiver ON receiver.FirstName + ' ' + receiver.LastName = jp.PermitReceiver
-          LEFT JOIN Users issuer ON ptw.IssuerApprovedBy = issuer.UserID
-          LEFT JOIN Users hod ON ptw.HODApprovedBy = hod.UserID
+         LEFT JOIN Users receiver ON receiver.FirstName + ' ' + receiver.LastName = jp.PermitReceiver AND receiver.IsActive = 1
+         LEFT JOIN Users issuer ON ptw.IssuerApprovedBy = issuer.UserID AND issuer.IsActive = 1
+         LEFT JOIN Users hod ON ptw.HODApprovedBy = hod.UserID AND hod.IsActive = 1
           WHERE ptw.PermitToWorkID = @permitToWorkId
         `;
       

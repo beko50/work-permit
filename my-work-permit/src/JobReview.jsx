@@ -8,6 +8,7 @@ import { api } from './services/api';
 import CompletionWorkflow from './CompleteWorkflow';
 import logo from './assets/mps_logo.jpg';
 import PermitRevocation from './components/ui/Revocation';
+import { toast } from 'sonner';
 
 const JobReview = () => {
   const { permitToWorkId } = useParams();
@@ -190,14 +191,23 @@ const JobReview = () => {
   }, [permitToWorkId]);
 
   const handleSubmitCompletion = async (completionData) => {
+    // If we received an error from the child component, just set it
+    if (completionData.error) {
+      setCompletionError(completionData.error);
+      return;
+    }
+  
     try {
-      // Update the UI with the new PTW data
-      const response = await api.getPermitToWorkById(permitToWorkId);
-      if (response.success && response.data?.permit) {
+      // Try to get updated data
+      const updatedResponse = await api.getPermitToWorkById(permitToWorkId);
+      if (updatedResponse.success && updatedResponse.data?.permit) {
         setPtw({
-          ...response.data.permit,
-          jobPermit: response.data.jobPermit
+          ...updatedResponse.data.permit,
+          jobPermit: updatedResponse.data.jobPermit
         });
+        
+        // Clear any existing errors
+        setCompletionError(null);
         
         // Navigate back only for QA completion
         if (currentUser?.roleId === 'QA') {
@@ -206,7 +216,8 @@ const JobReview = () => {
       }
     } catch (err) {
       console.error('Error updating PTW data:', err);
-      setCompletionError('Error updating job status. Please refresh the page.');
+      // Don't show another toast here since it's already shown in the child component
+      setCompletionError(err.message || 'Error updating permit data');
     }
   };
 
@@ -376,6 +387,7 @@ const JobReview = () => {
           )}
 
         {ptw.Status === 'Approved' && canComplete && (
+        <>
         <CompletionWorkflow
           ptw={ptw}
           currentUser={currentUser}
@@ -384,6 +396,7 @@ const JobReview = () => {
           setRemarks={setRemarks}
           completionError={completionError}
         />
+      </>
       )}
         </div>
       </div>

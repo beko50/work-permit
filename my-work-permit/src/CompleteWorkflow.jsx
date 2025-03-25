@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from './components/ui/card';
 import { Button } from './components/ui/button';
-import { Check, Clock, ClipboardCheck, CheckCircle2 } from 'lucide-react';
+import { Check, Clock, ClipboardCheck, CheckCircle2,AlertTriangle } from 'lucide-react';
 import { api } from './services/api';
+import { toast } from 'sonner';
 
 const CompletionWorkflow = ({ 
   ptw, 
@@ -72,28 +73,39 @@ const CompletionWorkflow = ({
   };
 
   const handleMarkAsCompleted = async () => {
-      setIsSubmitting(true);
-      try {
-        const permitId = ptw.PermitToWorkID;
-        
-        const completionData = {
-          stage: currentUser.roleId,
-          remarks: currentUser.roleId === 'QA' ? remarks : undefined
-        };
-    
-        const response = await api.completePermitToWork(permitId, completionData);
-    
-        if (response.success) {
-          await onSubmitCompletion(completionData);
-        } else {
-          console.error('Failed to complete permit:', response.message);
-        }
-      } catch (error) {
-        console.error('Error completing permit:', error);
-      } finally {
-        setIsSubmitting(false);
-        setShowConfirmation(false);
+    setIsSubmitting(true);
+    try {
+      const permitId = ptw.PermitToWorkID;
+      
+      const completionData = {
+        stage: currentUser.roleId,
+        remarks: currentUser.roleId === 'QA' ? remarks : undefined
+      };
+  
+      const response = await api.completePermitToWork(permitId, completionData);
+  
+      if (response.success) {
+        toast.success('Permit completed successfully');
+        await onSubmitCompletion(completionData);
       }
+    } catch (error) {
+      // Extract error message
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message || 
+                          error.message || 
+                          'Error completing permit';
+  
+      // Show toast notification
+      toast.error(errorMessage);
+      
+      // Call onSubmitCompletion with the error
+      if (onSubmitCompletion) {
+        onSubmitCompletion({ error: errorMessage });
+      }
+    } finally {
+      setIsSubmitting(false);
+      setShowConfirmation(false);
+    }
   };
 
   const canCompleteActions = ['ISS', 'QA'].includes(currentUser?.roleId);
@@ -137,7 +149,16 @@ const CompletionWorkflow = ({
       <CardContent className="p-6">
         <div className="relative">
           <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200" />
-          
+          {completionError && (
+            <div className="mb-4">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md" role="alert">
+                <div className="flex items-center">
+                  <AlertTriangle className="h-5 w-5 mr-2" />
+                  <span className="block sm:inline">{completionError}</span>
+                </div>
+              </div>
+            </div>
+          )}
           {completionStages.map((stage, index) => (
             <div key={index} className="relative pl-10 pb-6">
               <div 

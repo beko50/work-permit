@@ -5,8 +5,11 @@ const cookieParser = require('cookie-parser');
 const { poolPromise } = require('./db');  // Import the poolPromise from db.js
 const userRoutes = require('./routes/userRoutes');
 const permitRoutes = require('./routes/permitRoutes');
+const testEmailRoutes = require('./routes/testemailroute');
 
 const app = express();
+
+app.use('/api', testEmailRoutes);
 
 app.use(express.json({limit: '50mb'}));
 app.use(express.urlencoded({
@@ -17,7 +20,7 @@ app.use(express.urlencoded({
 
 // Middleware
 app.use(cors({
-    origin: 'http://localhost:3000', // frontend's URL
+    origin: ['http://localhost:3000', 'http://172.20.20.221:3000'], // frontend's URL
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed HTTP methods
     allowedHeaders: ['Content-Type', 'Authorization'], // Allowed headers

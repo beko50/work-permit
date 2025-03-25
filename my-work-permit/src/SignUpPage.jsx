@@ -69,7 +69,8 @@ const SignUpPage = () => {
 
   // Handle email change to auto-fill company name and handle role restrictions
   const handleEmailChange = (email) => {
-    const isInternalUser = email.endsWith('@mps-gh.com');
+    // Check for both MPS email domains
+    const isInternalUser = email.endsWith('@mps-gh.com') || email.endsWith('@mpsgh.onmicrosoft.com');
     
     setFormData(prev => ({
       ...prev,

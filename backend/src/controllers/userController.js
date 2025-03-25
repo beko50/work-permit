@@ -27,7 +27,7 @@ const userController = {
       }
   
       // Determine if user is internal based on email domain
-      const isInternalUser = email.endsWith('@mps-gh.com');
+      const isInternalUser = email.endsWith('@mps-gh.com') || email.endsWith('@mpsgh.onmicrosoft.com');
   
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -78,7 +78,7 @@ const userController = {
       }
 
       // Validate email domain
-      if (!email.endsWith('@mps-gh.com')) {
+      if (!email.endsWith('@mps-gh.com') && !email.endsWith('@mpsgh.onmicrosoft.com')) {
         return res.status(400).json({ message: 'Admin email must be an MPS Ghana email address' });
       }
 
@@ -150,7 +150,7 @@ const userController = {
       }
   
       // Check if user is internal
-      const isInternal = user.Email.endsWith('@mps-gh.com');
+      const isInternal = user.Email.endsWith('@mps-gh.com') || user.Email.endsWith('@mpsgh.onmicrosoft.com');
   
       // Validation rules
       if (!isInternal) {

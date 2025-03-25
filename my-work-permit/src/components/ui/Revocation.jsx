@@ -101,7 +101,7 @@ const PermitRevocation = ({ permitId, revocationData, onRevocationProcessed, isQ
           <div className="border rounded-md p-3 border-red-100">
             <div className="space-y-2">
               <div className="text-sm">
-                <span className="font-medium">Initiated by: </span>
+                <span className="font-medium">Revoked by: </span>
                 {revocationData.RevocationInitiatedBy}
               </div>
               {revocationData.RevocationInitiatedDate && (
@@ -121,7 +121,7 @@ const PermitRevocation = ({ permitId, revocationData, onRevocationProcessed, isQ
             </div>
           </div>
   
-          {/* QHSSE Review Section - Only show if not QHSSE initiated */}
+          {/* QHSSE Review Section - Only show if not QHSSE initiated
           {!isQHSSEInitiated && (
             <div className="border rounded-md p-3 border-red-100">
               <div className="space-y-2">
@@ -193,6 +193,7 @@ const PermitRevocation = ({ permitId, revocationData, onRevocationProcessed, isQ
               )}
             </div>
           )}
+             */}
         </div>
       </div>
     );

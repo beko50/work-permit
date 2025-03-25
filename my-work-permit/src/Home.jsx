@@ -58,7 +58,7 @@ const StatusCard = ({ title, data, icon: Icon }) => {
             <CardTitle className="text-lg font-semibold text-gray-900">
               {title}
             </CardTitle>
-            <p className="text-sm text-gray-500">Last 30 days</p>
+            <p className="text-sm text-gray-500">Last 90 days</p>
           </div>
         </div>
       </CardHeader>
@@ -156,17 +156,34 @@ const Home = () => {
       if (response.success && response.data) {
         let filteredPermits = response.data;
         
+        // Define department mappings
+        const departmentMappings = {
+          'ASM': ['Asset Maintenance', 'ASM'],
+          'OPS': ['Operations', 'OPS'],
+          'IT': ['IT'],
+          'QHSSE': ['QHSSE']
+        };
+  
+        // QA and QHSSE users see all permits
         if (currentUser.roleId !== 'QA' && currentUser.departmentId !== 'QHSSE') {
           if (['ISS', 'HOD'].includes(currentUser.roleId)) {
-            filteredPermits = filteredPermits.filter(permit => 
-              permit.Department === currentUser.departmentId ||
-              permit.AssignedTo === currentUser.roleId
-            );
+            // ISS and HOD users see permits from their department
+            filteredPermits = filteredPermits.filter(permit => {
+              const validDepartments = departmentMappings[currentUser.departmentId] || [];
+              return validDepartments.includes(permit.Department) ||
+                     permit.AssignedTo === currentUser.roleId;
+            });
+          } else {
+            // Regular users (including ASM and OPS) see permits from their department
+            filteredPermits = filteredPermits.filter(permit => {
+              const validDepartments = departmentMappings[currentUser.departmentId] || [];
+              return validDepartments.includes(permit.Department);
+            });
           }
         }
         
         setPtwPermits(filteredPermits);
-        setJobsData(filteredPermits); // Use the same data for jobs
+        setJobsData(filteredPermits);
       }
     } catch (error) {
       console.error('Error fetching permits and jobs:', error);
@@ -177,11 +194,11 @@ const Home = () => {
   useEffect(() => {
     if (!permits || !Array.isArray(permits)) return;
 
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
     const recentPermits = permits.filter(permit => 
-      new Date(permit.Created) >= thirtyDaysAgo
+      new Date(permit.Created) >= ninetyDaysAgo
     );
 
     const jobStats = {
@@ -209,11 +226,11 @@ const Home = () => {
   useEffect(() => {
     if (!ptwPermits || !Array.isArray(ptwPermits)) return;
 
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
     const recentPTWs = ptwPermits.filter(permit => 
-      new Date(permit.Created) >= thirtyDaysAgo
+      new Date(permit.Created) >= ninetyDaysAgo
     );
 
     const stats = {
@@ -238,38 +255,59 @@ const Home = () => {
   }, [ptwPermits]);
 
   // Calculate Jobs statistics
-  useEffect(() => {
-    if (!jobsData || !Array.isArray(jobsData)) return;
+  // Calculate Jobs statistics
+useEffect(() => {
+  if (!jobsData || !Array.isArray(jobsData)) return;
 
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const recentJobs = jobsData.filter(job => 
-      new Date(job.Created) >= thirtyDaysAgo
-    );
+  const recentJobs = jobsData.filter(job => 
+    new Date(job.Created) >= ninetyDaysAgo
+  );
 
-    const stats = {
-      Ongoing: 0,
-      Completed: 0,
-      Revoked: 0,
+  const stats = {
+    Ongoing: 0,
+    Completed: 0,
+    Revoked: 0,
+  };
+
+  recentJobs.forEach(job => {
+    // Check the job's department matches the user's department
+    const departmentMappings = {
+      'ASM': ['Asset Maintenance', 'ASM'],
+      'OPS': ['Operations', 'OPS'],
+      'IT': ['IT'],
+      'QHSSE': ['QHSSE']
     };
 
-    recentJobs.forEach(job => {
-      if (job.Status === 'Approved' && (!job.CompletionStatus || job.CompletionStatus === 'Pending Completion')) {
+    const userDepartments = departmentMappings[currentUser?.departmentId] || [];
+    const isUserDepartment = userDepartments.includes(job.Department);
+
+    // Only count if it's in the user's department or user is QA/QHSSE
+    if (isUserDepartment || currentUser?.roleId === 'QA' || currentUser?.departmentId === 'QHSSE') {
+      if (job.Status === 'Approved' && 
+          ['In Progress', 'Pending Completion'].includes(job.CompletionStatus) &&
+          job.Status !== 'Revoked' &&
+          job.Status.toLowerCase() !== 'revocation pending' &&
+          job.CompletionStatus !== 'Job Completed') {
         stats.Ongoing++;
-      } else if (job.CompletionStatus === 'Job Completed') {
+      }
+      else if (job.CompletionStatus === 'Job Completed') {
         stats.Completed++;
-      } else if (job.Status === 'Revoked') {
+      }
+      else if (job.Status === 'Revoked') {
         stats.Revoked++;
       }
-    });
+    }
+  });
 
-    setJobsStats([
-      { status: 'Ongoing', summary: stats.Ongoing },
-      { status: 'Completed', summary: stats.Completed },
-      { status: 'Revoked', summary: stats.Revoked },
-    ]);
-  }, [jobsData]);
+  setJobsStats([
+    { status: 'Ongoing', summary: stats.Ongoing },
+    { status: 'Completed', summary: stats.Completed },
+    { status: 'Revoked', summary: stats.Revoked },
+  ]);
+}, [jobsData, currentUser]); // Added currentUser to dependencies
 
   // Fetch data when currentUser changes
   useEffect(() => {
@@ -286,7 +324,7 @@ const Home = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Safety Management Dashboard</h1>
             <p className="text-gray-600 mt-1">
-              Overview of Job Permits, Permits To Work, and Jobs from the last 30 days
+              Overview of Job Permits, Permits To Work, and Jobs from the last 90 days
             </p>
           </div>
           <div className="flex items-center space-x-2 text-sm text-gray-600">
@@ -307,7 +345,7 @@ const Home = () => {
             icon={Activity}
           />
           <StatusCard 
-            title="Jobs" 
+            title="Jobs Monitoring" 
             data={jobsStats} 
             icon={Briefcase}
           />

@@ -7,7 +7,8 @@ import { api } from './services/api';
 import Checkbox  from './components/ui/checkbox';
 import logo from './assets/mps_logo.jpg';
 import { Input } from './components/ui/form';
-import { Eye,RefreshCw, PlusCircle, XCircle, ChevronDown,Filter,X } from 'lucide-react';
+import { Eye,RefreshCw, PlusCircle, XCircle, ChevronDown,Filter,X,AlertTriangle } from 'lucide-react';
+import { toast } from "sonner";
 
 
 const TabButton = ({ id, label, active, onClick }) => (
@@ -319,25 +320,34 @@ const JobsMonitoring = () => {
       setIsSubmitting(true);
       const permitsToRevoke = selectedPermits.map(permitId => ({
         id: permitId,
-        type: 'work' // Indicates Permit to Work
+        type: 'work'
       }));
-
+  
       const response = await api.revokePermits(permitsToRevoke, revokeReason);
       if (response.success) {
+        toast.success('Permit(s) revoked successfully');
         setShowRevokeModal(false);
         setShowConfirmation(false);
         setSelectedPermits([]);
         setRevokeReason('');
-        fetchPermits(); // Refresh the list
-      } else {
-        setError(response.error || 'Failed to revoke permits');
+        fetchPermits();
       }
     } catch (err) {
-      setError('Error revoking permits: ' + err.message);
+      setShowConfirmation(false);
+      // Clean up the error message
+      const cleanErrorMessage = err.message
+        .split('Error initiating revocation:')[1]?.trim()
+        .split('at Object')[0]?.trim()
+        .replace('Error:', '')
+        .trim() || 'QHSSE Issuers can only revoke permits from their own department';
+  
+      toast.error(cleanErrorMessage);
+      setError(cleanErrorMessage);
     } finally {
       setIsSubmitting(false);
     }
   };
+
 
   const isInUserDepartment = (permit) => {
     if (!currentUser?.departmentId && !currentUser?.departmentName) return false;
@@ -686,7 +696,7 @@ const resetToOriginalState = () => {
           </Button>
         </div>
         <div className="max-h-60 overflow-y-auto">
-          {['Pending Completion', 'In Progress', 'Revocation Pending'].map(status => (
+          {['Pending Completion', 'In Progress'].map(status => (
             <div 
               key={status}
               className="px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
@@ -1042,20 +1052,28 @@ const resetToOriginalState = () => {
             </div>
 
             <CardContent>
-              <div className="flex flex-col">
-                <label className="mb-2">Reason for Revocation</label>
-                <textarea
-                  value={revokeReason}
-                  onChange={(e) => {
-                    setRevokeReason(e.target.value);
-                    setError(null);
-                  }}
-                  placeholder="Enter detailed reason for revoking the permit(s)..."
-                  className="w-full min-h-[150px] p-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+              <div className="flex flex-col space-y-4">
                 {error && (
-                  <p className="text-sm text-red-500 mt-2">{error}</p>
+                  <div className="flex items-start space-x-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                    <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm text-red-500">{error}</p>
+                    </div>
+                  </div>
                 )}
+
+                <div className="flex flex-col">
+                  <label className="mb-2">Reason for Revocation</label>
+                  <textarea
+                    value={revokeReason}
+                    onChange={(e) => {
+                      setRevokeReason(e.target.value);
+                      setError(null);
+                    }}
+                    placeholder="Enter detailed reason for revoking the permit(s)..."
+                    className="w-full min-h-[150px] p-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
             </CardContent>
 
